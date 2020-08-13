@@ -34,8 +34,8 @@
 ; These rules don't need to cover symmetric cases because we combine 
 ; them with random search to get a global simplification procedure.
 ; For example, they simplify (2*3)*x to 6x, but they don't match 2*(3x).
-; However, during random search, we'll try swapping x*3 -> 3*x,
-; since multiplication is commutative, and then the rule applies.
+; However, during random search, we'll use multiplication's associativity
+; to turn 2*(3*x) into (2*3)*x, and then the rule applies.
 (define simpl-term-step
   (function
    ; Evaluate operation if both sides are numbers.
@@ -95,14 +95,14 @@
 ; (objective t) must give a number that will be *minimized* (e.g. term size).
 (define (optimize-term term objective)
   (letrec
-      ; p is the inverse of the probability of taking a random decision (see uses).
-      ; This wasn't tuned, just works for simple examples.
-      ([p 4]
-      ; (random-neighbor p t) finds a random equivalent neighbor of the term t
-      ; using probability 1/p to decide whether to apply a local rewrite.
-      ; Thus, small p means more randomness.
-       [random-neighbor
-        (function
+    ; p is the inverse of the probability of taking a random decision (see uses).
+    ; This wasn't tuned, just works for simple examples.
+    ([p 3]
+     ; (random-neighbor p t) finds a random equivalent neighbor of the term t
+     ; using probability 1/p to decide whether to apply a local rewrite.
+     ; Thus, small p means more randomness.
+     [random-neighbor
+       (function
          ; Commutative operator.
          [(BinOp op l r)
           #:if (and (is-commutative op) (= 0 (random p)))
@@ -111,48 +111,55 @@
          [(BinOp op (BinOp op2 a b) c)
           #:if (and (is-associative op) (eq? op op2) (= 0 (random p)))
           (BinOp
-           op
-           (random-neighbor a)
-           (BinOp op (random-neighbor b) (random-neighbor c)))]
-         ; Associative operator:  ((a op b) op c) --> (a op (b op c)).
+            op
+            (random-neighbor a)
+            (BinOp op (random-neighbor b) (random-neighbor c)))]
+         ; Associative operator:  (a op (b op c)) --> ((a op b) op c).
          [(BinOp op a (BinOp op2 b c))
           #:if (and (is-associative op) (eq? op op2) (= 0 (random p)))
           (BinOp
-           op
-           (BinOp op (random-neighbor a) (random-neighbor b))
-           (random-neighbor c))]
+            op
+            (BinOp op (random-neighbor a) (random-neighbor b))
+            (random-neighbor c))]
          ; Generic rule for binary operators.
          [(BinOp op l r)
-          #:if (= 0 (random p))
           (BinOp op (random-neighbor l) (random-neighbor r))]
          ; TODO: apply distributive laws.
          ; Base case: don't do any transformation.
          [t t])]
-       ; (random-step t p) finds a random neighbor of t. and returns either
-       ; that neighbor or just it unchanged.
-       [random-step (lambda (t)
-                      (let*
-                          ([tr (simpl-term-local (random-neighbor t))]
-                           [t-cost (objective t)]
-                           [tr-cost (objective tr)])
+     ; (random-step t p) finds a random neighbor of t. and returns a pair
+     ; (t' . b), where b is the best of the two terms according to the
+     ; objective function, and t' might be either t or t'.
+     [random-step (lambda (t)
+                    (let*
+                      ([tr (simpl-term-local (random-neighbor t))]
+                       [t-cost (objective t)]
+                       [tr-cost (objective tr)]
+                       [tr-better? (< tr-cost t-cost)])
                       ; If tr is smaller, always take it. Otherwise, take with
                       ; probability 1/p.
-                        (if (or (< tr-cost t-cost) (= 0 (random p)))
-                            tr
-                            t)))]
-       [random-search-optimize (lambda (t budget max-budget)
-                                 (if (= budget 0)
-                                     t ; No more budget - give up.
-                                     ; Otherwise, run a step and continue.
-                                     (let* ([tstep (random-step t)]
-                                            [progress (< (term-size tstep) (term-size t))])
-                                       ; If made progress, reset budget, else decrement it.
-                                       (random-search-optimize
-                                        tstep
-                                        (if progress max-budget (- budget 1))
-                                        max-budget))))]
-       )
-    (random-search-optimize term 100 100)))
+                      (if (or tr-better? (= 0 (random p)))
+                        (cons tr (if tr-better? tr t))
+                        (cons t t))))]
+     [random-search-optimize (lambda (t best budget max-budget)
+                               (if (= budget 0)
+                                 best ; No more budget - give up.
+                                 ; Otherwise, run a step and continue.
+                                 (let* ([step-result (random-step t)]
+                                        [tstep (car step-result)]
+                                        [tstep-best (cdr step-result)]
+                                        [next-best (if (< (objective tstep-best) 
+                                                          (objective best)) 
+                                                     tstep-best best)]
+                                        [progress (not (eq? next-best best))])
+                                   ; If made progress, reset budget, else decrement it.
+                                   (random-search-optimize
+                                     tstep
+                                     next-best
+                                     (if progress max-budget (- budget 1))
+                                     max-budget))))]
+     )
+    (random-search-optimize term term 50 50)))
 
 ; Format an operator.
 (define (format-op op)
@@ -194,6 +201,6 @@
                       (BinOp op+ (Variable 'x) (BinOp op+ (Variable 'y) (Variable 'x)))))
 (simpl-example (BinOp op+ (BinOp op+ (Number 2) (Variable 'x)) (Variable 'x)))
 (simpl-example (BinOp op* (Number 3) (BinOp op+ (Number 2) (Number 4))))
-(simpl-example (BinOp op+
+(time (simpl-example (BinOp op+
                       (BinOp op+ (Number 4) (Variable 'x))
-                      (BinOp op+ (Variable 'x) (Number 4))))
+                      (BinOp op+ (Variable 'x) (Number 4)))))
