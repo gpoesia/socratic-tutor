@@ -6,17 +6,7 @@
 (require rebellion/type/enum)
 
 (data Term (Number Variable UnOp BinOp AnyNumber))
-(define-enum-type BinaryOperator (op+ op- op*))
-
-(struct Fact (type terms) #:transparent)
-
-(define goal-matches?
-  (function*
-    [(x x) #t]
-    [(AnyNumber (Number x)) #t]
-    [((Fact 'Eq (a b)) (Fact 'Eq (c d))) (and (goal-matches? a c) (goal-matches? b d))] 
-    [_ #f]
-  ))
+(define-enum-type Operator (op+ op- op*))
 
 (define (compute-bin-op op a b)
   (match op
@@ -159,7 +149,7 @@
                                      (if progress max-budget (- budget 1))
                                      max-budget))))]
      )
-    (random-search-optimize term term 50 50)))
+    (random-search-optimize term term 100 100)))
 
 ; Format an operator.
 (define (format-op op)
@@ -172,6 +162,8 @@
 ; Compact form of printing a term.
 (define format-term
   (function
+   ; AnyNumber
+   [AnyNumber "??"]
    ; Number
    [(Number n) (format "~a" n)]
    ; Variable
@@ -192,15 +184,9 @@
 (define (simpl-example t)
   (printf "~a simplifies to ~a\n" (format-term t) (format-term (simpl-term t))))
 
-(define t (simpl-term (BinOp op+ (Number 2) (Number 4))))
-(simpl-example (BinOp op+ (Number 2) (Number 4)))
-(simpl-example (BinOp op+ (Number 2) (Variable 'x)))
-(simpl-example (BinOp op+ (Variable 'x) (Variable 'x)))
-(simpl-example (BinOp op+
-                      (BinOp op+ (Variable 'x) (Variable 'x))
-                      (BinOp op+ (Variable 'x) (BinOp op+ (Variable 'y) (Variable 'x)))))
-(simpl-example (BinOp op+ (BinOp op+ (Number 2) (Variable 'x)) (Variable 'x)))
-(simpl-example (BinOp op* (Number 3) (BinOp op+ (Number 2) (Number 4))))
-(time (simpl-example (BinOp op+
-                      (BinOp op+ (Number 4) (Variable 'x))
-                      (BinOp op+ (Variable 'x) (Number 4)))))
+(provide
+  simpl-term
+  simpl-example
+  format-term
+  Number Variable UnOp BinOp AnyNumber
+  op+ op* op-)
