@@ -6,7 +6,11 @@
 
 (require "terms.rkt")
 (require racket/match)
-(struct Fact (type terms) #:transparent)
+(struct Fact (type terms)
+        #:methods gen:custom-write
+        [(define (write-proc fact port mode)
+                 ((if mode print display) (format-fact fact) port))]
+        )
 
 (struct DerivedFact (fact tactic params))
 

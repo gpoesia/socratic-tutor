@@ -6,7 +6,7 @@
 (require rebellion/type/enum)
 
 (data Term (Number Variable UnOp BinOp AnyNumber))
-(define-enum-type Operator (op+ op- op*))
+(define-enum-type Operator (op+ op- op* op/))
 
 (define (compute-bin-op op a b)
   (match op
@@ -189,4 +189,4 @@
   simpl-example
   format-term
   Number Variable UnOp BinOp AnyNumber
-  op+ op* op-)
+  op+ op* op- op/)

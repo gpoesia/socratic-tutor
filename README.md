@@ -14,6 +14,31 @@ mathematical expressions. You can install it with:
 rako pkg install --auto algebraic
 ```
 
+## Prototype
+
+By running `racket tutor-example.rkt`, you'll interact with a preliminary version
+of the tutor. It still does not ask questions, or finds solutions.
+Rather, it verifies whether each step in the student's solution is correct.
+Here's an example dialogue:
+
+```
+$ racket tutor-example.rkt
+Let's solve a math problem! Given:
+(1): ((1 + 2) + 3) = (-9x + 10x)
+You need to meet:
+(G1): x = ??
+>>> 7 = x
+Hmm, I could not verify that. Try again?
+>>> 6 = x
+OK! Let's add that to what we know:
+(2): 6 = x
+>>> x = 6
+OK! Let's add that to what we know:
+(3): x = 6
+Great, this matches the goal x = ??
+You're done!
+```
+
 ## Current stage and next steps
 
 These are some clear short-term goals:

@@ -60,7 +60,7 @@
     (values met-goals unmet-goals)
     (let*-values ([(g rest) (values (car unmet-goals) (cdr unmet-goals))]
                   [(met-goals-r unmet-goals-r) (match-goals met-goals rest facts)])
-      ; If g metches any of the facts, add it to met goals. Otherwise,
+      ; If g matches any of the facts, add it to met goals. Otherwise,
       ; to unmet goals.
       (if (ormap (lambda (f) (goal-matches? g f)) facts)
         (values (cons g met-goals-r) unmet-goals-r)
