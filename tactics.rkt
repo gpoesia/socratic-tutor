@@ -1,9 +1,12 @@
 ; Axioms and tactics used by the solver.
-#lang racket
+#lang algebraic/racket/base
 
+(require algebraic/data)
+(require algebraic/function)
+(require algebraic/racket/base/forms)
+(require racket/function)
 (require racket/match)
 (require "terms.rkt")
-(require "facts.rkt")
 
 ; ==============================
 ; ========   Axioms  ===========
@@ -14,29 +17,29 @@
 (define a:premise 'Premise)
 
 ; Flip an equality.
-(define (a:flip-equality eq)
-  (match eq
-    [(Fact 'Eq (list t1 t2)) (Fact 'Eq (list t2 t1))]
-    [_ #f]))
+(define a:flip-equality
+  (function
+    [(Predicate 'Eq `(,t1 ,t2)) (Predicate 'Eq (list t2 t1))]
+    [t (begin (printf "[a:flip-equality] ~a did not match\n" t) #f)]))
 
 ; Add a term to both sides of an equation.
 (define (a:add-to-both-sides eq term)
-  (match eq
-    [(Fact 'Eq (list t1 t2))
-     (Fact 'Eq (list (BinOp op+ t1 term) (BinOp op+ t2 term)))]
-    [_ #f]))
+  ((function
+    [(Predicate 'Eq `(,t1 ,t2))
+     (Predicate 'Eq ((BinOp op+ t1 term) (BinOp op+ t2 term)))]
+    [t (begin (printf "[a:add-to-both-sides] ~a did not match\n" t) #f)]) eq))
 
 ; Use equality e1 := t1 = t2 to substitute all occurrences
 ; of the term t1 by the term t2 in equality e2.
 (define (a:substitute-both-sides eq term)
   #f)
 
-; Simplify both sides of an equation.
-(define (a:simpl-both-sides eq)
-  (match eq
-    [(Fact 'Eq (list t1 t2))
-     (Fact 'Eq (list (simpl-term t1) (simpl-term t2)))]
-    [_ #f]))
+; Simplify terms.
+(define a:simpl-both-sides
+  (function
+    [(Predicate 'Eq `(,t1 ,t2))
+     (Predicate 'Eq (list (simpl-term t1) (simpl-term t2)))]
+    [t (begin (printf "[a:simpl-both-sides] ~a did not match\n" t) #f)]))
 
 ; ==============================
 ; ========   Tactics ===========

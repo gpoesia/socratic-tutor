@@ -1,6 +1,8 @@
 #lang brag
 
-fact       : equality
+term       : predicate | expr
+
+predicate  : equality
 equality   : expr REL_EQ expr
 expr       : expr_l1
 

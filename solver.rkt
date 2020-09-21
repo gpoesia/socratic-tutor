@@ -7,7 +7,6 @@
 (require racket/set)
 
 (require "terms.rkt")
-(require "facts.rkt")
 (require "tactics.rkt")
 
 (struct SolverResult (facts met-goals unmet-goals) #:transparent)

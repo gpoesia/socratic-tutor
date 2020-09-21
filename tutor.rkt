@@ -3,17 +3,16 @@
 
 (require brag/support)
 (require "terms.rkt")
-(require "facts.rkt")
-(require "fact-parser.rkt")
+(require "term-parser.rkt")
 (require "solver.rkt")
 (require "tactics.rkt")
 
 ; Creates a goal to solve for the given variable.
 (define (solve-for variable)
-  (Fact 'Eq (list (Variable variable) AnyNumber)))
+  (Predicate 'Eq (list (Variable variable) AnyNumber)))
 
 (define (print-indexed-fact fact index [prefix ""])
-  (printf "(~a~a): ~a\n" prefix index fact))
+  (printf "(~a~a): ~a\n" prefix index (format-term fact)))
 
 (define (print-facts facts [index 1] [prefix ""])
   (if (empty? facts) 
@@ -51,7 +50,7 @@
            ; Read user input
            [l (read-line)]
            ; Parse it as a fact f.
-           [f (parse-fact l)]
+           [f (parse-term l)]
            ; Use solver to verify f.
            [sr (find-solution (list f) facts s:cycle 50)]
            ; Check whether we could verify it.
@@ -64,7 +63,7 @@
               (printf "OK! Let's add that to what we know:\n")
               (print-indexed-fact f (+ 1 (length facts)))
               (and matched-goal
-                   (printf "Great, this matches the goal ~a\n" matched-goal))
+                   (printf "Great, this matches the goal ~a\n" (format-term matched-goal)))
               (tutor-repl (append facts (list f)) goals))
             (begin
               (printf "Hmm, I could not verify that. Try again?\n")

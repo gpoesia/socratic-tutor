@@ -5,8 +5,11 @@
 (require racket/match)
 (require rebellion/type/enum)
 
-(data Term (Number Variable UnOp BinOp AnyNumber))
+(data Term (Number Variable UnOp BinOp AnyNumber Predicate))
 (define-enum-type Operator (op+ op- op* op/))
+
+(define Predicate-type (phi (Predicate type _) type))
+(define Predicate-terms (phi (Predicate _ terms) terms))
 
 (define (compute-bin-op op a b)
   (match op
@@ -14,6 +17,51 @@
     [(== op-) (- a b)]
     [(== op*) (* a b)]
     ))
+
+; Returns the size of the term `t` (also corresponding to the
+; number of subterms it has).
+(define (term-size t)
+  (function
+    [(Number n) 1]
+    [(Variable v) 1]
+    [(AnyNumber) 1]
+    [(UnOp op t1) (+ 1 (term-size t1))]
+    [(BinOp op t1 t2) (+ 1 (term-size t1) (term-size t2))]
+    [(Predicate type terms) (+ 1 (foldl + 0 (term-size terms)))]
+    ))
+
+; Returns a list with the direct subterms of `t`.
+(define (subterms t)
+  (function
+    [(UnOp _ t1) (list t1)]
+    [(BinOp _ t1 t2) (list t1 t2)]
+    [(Predicate _ terms) terms]
+    [t '()]))
+
+; Returns whether a pair of terms matches (i.e. equal everywhere except that
+; AnyNumber is considered equal to Number).
+; TODO: this doesn't capture recursive matches. The current goals we're using
+; don't need it, but we should generalize this at some point.
+(define term-matches? 
+  (function*
+    [(x x) #t]
+    [(AnyNumber (Number x)) #t]
+    [_ #f]
+  ))
+
+(define (goal-matches? a b)
+  (if (and (Predicate? a) (Predicate? b))
+    (and (eq? (Predicate-type a) (Predicate-type b))
+         (andmap goal-matches? (Predicate-terms a) (Predicate-terms b)))
+    (term-matches? a b)))
+
+; Locates the sub-term in `term` with index `index` and
+; replaces that sub-term with the term `new-subterm`.
+(define (rewrite-subterm term new-subterm index)
+  (if
+    (= index 0)
+    new-subterm
+    #f))
 
 ; Tells whether a binary operator is commutative: a op b = b op a
 (define (is-commutative op) (if (member op (list op+ op*)) #t #f))
@@ -70,15 +118,6 @@
     (if (equal? term sterm)
         term
         (simpl-term-local sterm))))
-
-; Computes the size of a term. Used during simplification.
-(define term-size
-  (function
-   [(Number _) 1]
-   [(AnyNumber _) 1]
-   [(Variable _) 1]
-   [(BinOp _ l r) (+ 1 (term-size l) (term-size r))]
-   ))
 
 ; Optimize a term using a black-box objective function using random search with a budget.
 ; Tries at most b random perturbations of the term (e.g. swapping addition order).
@@ -157,13 +196,15 @@
     [(== op+) "+"]
     [(== op-) "-"]
     [(== op*) "*"]
+    [(== op/) "/"]
     ))
 
 ; Compact form of printing a term.
 (define format-term
   (function
    ; AnyNumber
-   [AnyNumber "??"]
+   [AnyNumber "?"]
+   [(AnyNumber) "?"]
    ; Number
    [(Number n) (format "~a" n)]
    ; Variable
@@ -172,6 +213,10 @@
    [(BinOp op (Number n) (Variable v)) #:if (eq? op op*) (format "~a~a" n v)]
    ; Generic binary operation.
    [(BinOp op a b) (format "(~a ~a ~a)" (format-term a) (format-op op) (format-term b))]
+   ; Equality.
+   [(Predicate t (a b))
+    #:if (eq? t 'Eq)
+    (format "~a = ~a" (format-term a) (format-term b))]
    ))
 
 ; Simplify a term: optimize the number of characters we need to write it down.
@@ -188,5 +233,6 @@
   simpl-term
   simpl-example
   format-term
-  Number Variable UnOp BinOp AnyNumber
+  goal-matches?
+  Number Variable UnOp BinOp AnyNumber Predicate
   op+ op* op- op/)

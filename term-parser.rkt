@@ -3,37 +3,36 @@
 (require brag/support)
 (require br-parser-tools/lex)
 (require "terms.rkt")
-(require "facts.rkt")
 (require "grammar.rkt")
 
-(define (parse-fact s)
-  (let ([parse-tree (parse (tokenize (open-input-string s)))])
-    (parse-tree-to-terms (syntax->datum parse-tree))))
+(define (parse-term t)
+  (let ([parse-tree (parse (tokenize (open-input-string t)))])
+    (parse-tree-to-term (syntax->datum parse-tree))))
 
-(provide parse-fact)
+(provide parse-term)
 
-(define (parse-tree-to-terms t)
+(define (parse-tree-to-term t)
   (match t
-         [`(fact ,eq) (parse-tree-to-terms eq)]
-         [`(expr ,e) (parse-tree-to-terms e)]
-         [`(paren-expr ,_ ,e ,_) (parse-tree-to-terms e)]
-         [`(expr_l1 ,e) (parse-tree-to-terms e)]
-         [`(expr_l2 ,e) (parse-tree-to-terms e)]
-         [`(expr_l3 ,e) (parse-tree-to-terms e)]
+         [`(term ,t) (parse-tree-to-term t)]
+         [`(predicate ,eq) (parse-tree-to-term eq)]
+         [`(expr ,e) (parse-tree-to-term e)]
+         [`(paren-expr ,_ ,e ,_) (parse-tree-to-term e)]
+         [`(expr_l1 ,e) (parse-tree-to-term e)]
+         [`(expr_l2 ,e) (parse-tree-to-term e)]
+         [`(expr_l3 ,e) (parse-tree-to-term e)]
          [`(equality ,e1 ,_ ,e2)
-           (Fact 'Eq (list
-                       (parse-tree-to-terms e1)
-                       (parse-tree-to-terms e2)))]
+           (Predicate 
+             'Eq (list (parse-tree-to-term e1) (parse-tree-to-term e2)))]
          [`(sum ,e1 ,_ ,e2)
-           (BinOp op+ (parse-tree-to-terms e1) (parse-tree-to-terms e2))]
+           (BinOp op+ (parse-tree-to-term e1) (parse-tree-to-term e2))]
          [`(sub ,e1 ,_ ,e2)
-           (BinOp op- (parse-tree-to-terms e1) (parse-tree-to-terms e2))]
+           (BinOp op- (parse-tree-to-term e1) (parse-tree-to-term e2))]
          [`(prod ,e1 ,_ ,e2)
-           (BinOp op* (parse-tree-to-terms e1) (parse-tree-to-terms e2))]
+           (BinOp op* (parse-tree-to-term e1) (parse-tree-to-term e2))]
          [`(prod ,e1 ,e2)
-           (BinOp op* (parse-tree-to-terms e1) (parse-tree-to-terms e2))]
+           (BinOp op* (parse-tree-to-term e1) (parse-tree-to-term e2))]
          [`(div ,e1 ,_ ,e2)
-           (BinOp op/ (parse-tree-to-terms e1) (parse-tree-to-terms e2))]
+           (BinOp op/ (parse-tree-to-term e1) (parse-tree-to-term e2))]
          [`(number ,n)
            (Number n)]
          [`(any_number ,_)
