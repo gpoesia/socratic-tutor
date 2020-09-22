@@ -36,8 +36,9 @@
     (let*-values
       ([(next-tactic new-strategy-state)
           (strategy old-facts last-facts unmet-goals strategy-state)]
-       [(new-facts)
+       [(new-facts-unfiltered)
           (next-tactic met-goals unmet-goals old-facts last-facts)]
+       [(new-facts) (remq* (append old-facts last-facts) new-facts-unfiltered)]
        [(new-met-goals new-unmet-goals) 
           (match-goals met-goals unmet-goals new-facts)])
       (find-solution-loop
