@@ -204,7 +204,6 @@
   (function
    ; AnyNumber
    [AnyNumber "?"]
-   [(AnyNumber) "?"]
    ; Number
    [(Number n) (format "~a" n)]
    ; Variable
@@ -214,8 +213,7 @@
    ; Generic binary operation.
    [(BinOp op a b) (format "(~a ~a ~a)" (format-term a) (format-op op) (format-term b))]
    ; Equality.
-   [(Predicate t (a b))
-    #:if (eq? t 'Eq)
+   [(Predicate 'Eq (a b))
     (format "~a = ~a" (format-term a) (format-term b))]
    ))
 
