@@ -11,7 +11,7 @@ since Algebraic Data Types are especially useful for recursive structures like
 mathematical expressions. You can install it with:
 
 ```
-rako pkg install --auto algebraic
+raco pkg install --auto algebraic
 ```
 
 ## Prototype

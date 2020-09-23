@@ -4,6 +4,7 @@
 (require algebraic/racket/base/forms)
 (require racket/match)
 (require rebellion/type/enum)
+(require "debug.rkt")
 
 (data Term (Number Variable UnOp BinOp AnyNumber Predicate))
 (define-enum-type Operator (op+ op- op* op/))
@@ -16,36 +17,59 @@
     [(== op+) (+ a b)]
     [(== op-) (- a b)]
     [(== op*) (* a b)]
+    [(== op/) (/ a b)]
     ))
 
 ; Returns the size of the term `t` (also corresponding to the
 ; number of subterms it has).
-(define (term-size t)
+(define term-size
   (function
     [(Number n) 1]
     [(Variable v) 1]
     [(AnyNumber) 1]
     [(UnOp op t1) (+ 1 (term-size t1))]
     [(BinOp op t1 t2) (+ 1 (term-size t1) (term-size t2))]
-    [(Predicate type terms) (+ 1 (foldl + 0 (term-size terms)))]
+    [(Predicate type terms) (foldl + 1 (map term-size terms))]
     ))
 
 ; Returns a list with the direct subterms of `t`.
-(define (subterms t)
+(define subterms
   (function
     [(UnOp _ t1) (list t1)]
     [(BinOp _ t1 t2) (list t1 t2)]
     [(Predicate _ terms) terms]
     [t '()]))
 
-; Returns whether a pair of terms matches (i.e. equal everywhere except that
-; AnyNumber is considered equal to Number).
-; TODO: this doesn't capture recursive matches. The current goals we're using
-; don't need it, but we should generalize this at some point.
-(define term-matches? 
+; Takes a term `t` and a list of subterms `new-subterms`, and returns a copy of 
+; `t` where the subterms are replaced by `new-subterms`.
+(define replace-subterms
+  (function*
+    [((UnOp op _) `(,t)) (UnOp op t)]
+    [((BinOp op _ _) `(,t1 ,t2)) (BinOp op t1 t2)]
+    [((Predicate type _) terms) (Predicate type terms)]
+    [(t _) t]))
+
+; Returns a list of all indices of subterms of `t` for which `p` is true.
+(define (filter-subterms t p)
+  (car (filter-subterms-aux (list) t p 0)))
+
+; Returns (l . index)
+(define (filter-subterms-aux l t p index)
+  (let ([result (if (p t) (cons index l) l)])
+    (foldl
+      (lambda (st r)
+        (let ([(sts . idx) r])
+          (filter-subterms-aux sts st p idx)))
+      (cons result (+ 1 index))
+      (subterms t))))
+
+; Returns whether a pair of terms matches (i.e. are equal except that
+; AnyNumber is considered equal to Number). Does not recurse: only compares
+; the top level (which we might want to change at some point).
+(define term-matches?
   (function*
     [(x x) #t]
-    [(AnyNumber (Number x)) #t]
+    [((AnyNumber) (Number x)) #t]
     [_ #f]
   ))
 
@@ -55,18 +79,48 @@
          (andmap goal-matches? (Predicate-terms a) (Predicate-terms b)))
     (term-matches? a b)))
 
-; Locates the sub-term in `term` with index `index` and
-; replaces that sub-term with the term `new-subterm`.
-(define (rewrite-subterm term new-subterm index)
+; Locates the sub-term in `term` with index `index` and replaces that sub-term
+; with the return value of `transform` applied on it (or leaves it intact if
+; `transform` returns #f).
+(define (rewrite-subterm term transform index)
   (if
     (= index 0)
-    new-subterm
-    #f))
+    (or (transform term) term)
+    (replace-subterms 
+      term
+      (car (foldl
+             ; Finds the sub-term whose sub-tree contains the index we are
+             ; looking for. The accumulator `result` is a pair
+             ; (subterms . idx), where subterms is the list produced
+             ; so far with updated subterms (one of them will have had
+             ; a piece rewritten, by the end), and idx is the index
+             ; of the subterm we're looking for, disregarding what we already
+             ; looked at. idx will be set to #f when the term we wanted to
+             ; rewrite was already rewritten.
+             (lambda (st result)
+               (let ([(sts . idx) result])
+                 (if (not idx)
+                   (cons (append sts (list st)) #f)
+                   ; Calling term-size here makes the time complexity
+                   ; quadratic. But since terms are tiny, this might not be
+                   ; problematic. Linear-time solution would be to have
+                   ; rewrite-subterm recursively compute the term size along
+                   ; with the rewrite. Memoizing term-size also solves it.
+                   (let ([s (term-size st)])
+                     (if (< idx s)
+                       ; The term to rewrite is in st - rewrite.
+                       (cons (append sts 
+                                     (list (rewrite-subterm st transform idx)))
+                                     #f)
+                       ; The term to rewrite is not in st - update index.
+                       (cons (append sts (list st)) (- idx s)))))))
+             (cons (list) (- index 1))
+             (subterms term))))))
 
 ; Tells whether a binary operator is commutative: a op b = b op a
-(define (is-commutative op) (if (member op (list op+ op*)) #t #f))
+(define (is-commutative? op) (if (member op (list op+ op*)) #t #f))
 ; Tells whether a binary operator is associative: a op (b op c) = (a op b) op c
-(define (is-associative op) (if (member op (list op+ op*)) #t #f))
+(define (is-associative? op) (if (member op (list op+ op*)) #t #f))
 
 ; Locally simplify the term with simple rewrite rules.
 ; These rules don't need to cover symmetric cases because we combine 
@@ -134,18 +188,18 @@
        (function
          ; Commutative operator.
          [(BinOp op l r)
-          #:if (and (is-commutative op) (= 0 (random p)))
+          #:if (and (is-commutative? op) (= 0 (random p)))
           (BinOp op (random-neighbor r) (random-neighbor l))]
          ; Associative operator:  ((a op b) op c) --> (a op (b op c)).
          [(BinOp op (BinOp op2 a b) c)
-          #:if (and (is-associative op) (eq? op op2) (= 0 (random p)))
+          #:if (and (is-associative? op) (eq? op op2) (= 0 (random p)))
           (BinOp
             op
             (random-neighbor a)
             (BinOp op (random-neighbor b) (random-neighbor c)))]
          ; Associative operator:  (a op (b op c)) --> ((a op b) op c).
          [(BinOp op a (BinOp op2 b c))
-          #:if (and (is-associative op) (eq? op op2) (= 0 (random p)))
+          #:if (and (is-associative? op) (eq? op op2) (= 0 (random p)))
           (BinOp
             op
             (BinOp op (random-neighbor a) (random-neighbor b))
@@ -203,7 +257,7 @@
 (define format-term
   (function
    ; AnyNumber
-   [AnyNumber "?"]
+   [(AnyNumber) "?"]
    ; Number
    [(Number n) (format "~a" n)]
    ; Variable
@@ -216,6 +270,10 @@
    [(Predicate 'Eq (a b))
     (format "~a = ~a" (format-term a) (format-term b))]
    ))
+
+; Returns (format-term t) plus the raw representation of the term.
+(define (format-term-debug t)
+  (format "~a [~a]" (format-term t) t))
 
 ; Simplify a term: optimize the number of characters we need to write it down.
 ; This implicitly has many nice properties. Example: it prefers 2x instead of x*2,
@@ -230,7 +288,10 @@
 (provide
   simpl-term
   simpl-example
-  format-term
+  format-term format-term-debug
+  rewrite-subterm
+  filter-subterms
+  term-size
   goal-matches?
   Number Variable UnOp BinOp AnyNumber Predicate
-  op+ op* op- op/)
+  op+ op* op- op/ is-commutative? is-associative? compute-bin-op)

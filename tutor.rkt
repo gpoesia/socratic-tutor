@@ -9,7 +9,7 @@
 
 ; Creates a goal to solve for the given variable.
 (define (solve-for variable)
-  (Predicate 'Eq (list (Variable variable) AnyNumber)))
+  (Predicate 'Eq (list (Variable variable) (AnyNumber))))
 
 (define (print-indexed-fact fact index [prefix ""])
   (printf "(~a~a): ~a\n" prefix index (format-term fact)))
@@ -52,7 +52,7 @@
            ; Parse it as a fact f.
            [f (parse-term l)]
            ; Use solver to verify f.
-           [sr (find-solution (list f) facts s:cycle 50)]
+           [sr (find-solution (list f) facts s:all 20)]
            ; Check whether we could verify it.
            [verified (empty? (SolverResult-unmet-goals sr))]
            ; If verified, check whether it matches any goal.
