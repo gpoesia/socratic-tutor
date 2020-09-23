@@ -34,3 +34,4 @@
 (run-example (list "x = 1 + 2 + 3") (list "x = ?"))
 (run-example (list "-1 + x + 1 = 1 + 2 + 3") (list "x = ?"))
 (run-example (list "12 + 5*7 = 3 + (x + -3)") (list "x = ?"))
+(run-example (list "10x - 9x = 10") (list "x = ?"))

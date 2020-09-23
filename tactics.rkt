@@ -67,17 +67,19 @@
   (phi (BinOp op (Number n1) (Number n2))
        (Number (compute-bin-op op n1 n2))))
 
-; Simplifies addition to zero.
+; Simplifies adding/subtracting zero.
 (define a:add-zero?
   (function
     [(BinOp (op #:if (eq? op op+)) (Number 0) t) #t]
     [(BinOp (op #:if (eq? op op+)) t (Number 0)) #t]
+    [(BinOp (op #:if (eq? op op-)) t (Number 0)) #t]
     [t #f]))
 
 (define a:add-zero
   (function
     [(BinOp (op #:if (eq? op op+)) (Number 0) t) t]
     [(BinOp (op #:if (eq? op op+)) t (Number 0)) t]
+    [(BinOp (op #:if (eq? op op-)) t (Number 0)) t]
     [t #f]))
 
 ; Simplifies multiplication by zero.
@@ -93,17 +95,46 @@
     [(BinOp (op #:if (eq? op op*)) t (Number 0)) (Number 0)]
     [t #f]))
 
-; Simplifies multiplication by one.
+; Simplifies multiplication/division by one.
 (define a:mul-one?
   (function
     [(BinOp (op #:if (eq? op op*)) (Number 1) t) #t]
     [(BinOp (op #:if (eq? op op*)) t (Number 1)) #t]
+    [(BinOp (op #:if (eq? op op/)) t (Number 1)) #t]
     [t #f]))
 
 (define a:mul-one
   (function
     [(BinOp (op #:if (eq? op op*)) (Number 1) t) t]
     [(BinOp (op #:if (eq? op op*)) t (Number 1)) t]
+    [(BinOp (op #:if (eq? op op/)) t (Number 1)) t]
+    [t #f]))
+
+; Applies distributivity law.
+(define a:distributivity?
+  (function
+    [(BinOp op1 a (BinOp op2 b c))
+     #:if (is-distributive? op1 op2)
+     #t]
+    [(BinOp op2 (BinOp op1 a1 b) (BinOp op1 a2 c))
+     #:if (and (is-distributive? op1 op2) (equal? a1 a2))
+     #t]
+    [(BinOp op2 (BinOp op1 a b1) (BinOp op1 c b2))
+     #:if (and (is-distributive? op1 op2) (equal? b1 b2))
+     #t]
+    [t #f]))
+
+(define a:distributivity
+  (function
+    [(BinOp op1 a (BinOp op2 b c))
+     #:if (is-distributive? op1 op2)
+     (BinOp op2 (BinOp op1 a b) (BinOp op1 a c))]
+    [(BinOp (BinOp op1 a1 b) (BinOp op2 a2 c))
+     #:if (and (is-distributive? op1 op2) (equal? a1 a2))
+     (BinOp op1 a1 (BinOp op2 b c))]
+    [(BinOp op2 (BinOp op1 a b1) (BinOp op1 c b2))
+     #:if (and (is-distributive? op1 op2) (equal? b1 b2))
+     (BinOp op1 (BinOp op2 a c) b2)]
     [t #f]))
 
 ; ==============================
@@ -141,6 +172,9 @@
 ; Apply a:commutativity.
 (local-rewrite-tactic t:commutativity a:commutativity? a:commutativity)
 
+; Apply a:distributivity.
+(local-rewrite-tactic t:distributivity a:distributivity? a:distributivity)
+
 ; Apply a:add-zero.
 (local-rewrite-tactic t:add-zero a:add-zero? a:add-zero)
 
@@ -159,6 +193,7 @@
                 t:eval
                 t:associativity
                 t:commutativity
+                t:distributivity
                 t:add-zero
                 t:mul-zero
                 t:mul-one

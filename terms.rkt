@@ -121,6 +121,13 @@
 (define (is-commutative? op) (if (member op (list op+ op*)) #t #f))
 ; Tells whether a binary operator is associative: a op (b op c) = (a op b) op c
 (define (is-associative? op) (if (member op (list op+ op*)) #t #f))
+; Tells whether operator op1 distributes over op2: a op1 (b op2 c) = (a op1 b) op2 (a op1 c)
+(define (is-distributive? op1 op2) 
+  (or
+    (and (eq? op1 op*) (eq? op2 op+))
+    (and (eq? op1 op*) (eq? op2 op-))
+    (and (eq? op1 op/) (eq? op2 op+))
+    (and (eq? op1 op/) (eq? op2 op-))))
 
 ; Locally simplify the term with simple rewrite rules.
 ; These rules don't need to cover symmetric cases because we combine 
@@ -294,4 +301,4 @@
   term-size
   goal-matches?
   Number Variable UnOp BinOp AnyNumber Predicate
-  op+ op* op- op/ is-commutative? is-associative? compute-bin-op)
+  op+ op* op- op/ is-commutative? is-associative? is-distributive? compute-bin-op)
