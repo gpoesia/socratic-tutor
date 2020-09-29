@@ -9,6 +9,7 @@
 (require "terms.rkt")
 (require "tactics.rkt")
 (require "debug.rkt")
+(require "strategy.rkt")
 
 (struct SolverResult (facts met-goals unmet-goals) #:transparent)
 
@@ -21,6 +22,9 @@
 ; strategy-state - used by the strategy
 ; strategy - function that, given facts, unmet-goals and strategy-state
 ;            returns a tactic to apply plus modified state.
+; prune - function that, given a list of newly produced facts,
+;         will (possibly) reduce the list, pruning facts that will not
+;         be needed.
 ; depth - search depth.
 ; Returns a SolverResult value.
 (define (find-solution-loop
@@ -30,6 +34,7 @@
           unmet-goals
           strategy-state
           strategy 
+          prune
           depth)
   (log-debug "find-solution-loop depth ~a, ~a new facts: ~a\n"
              depth
@@ -44,7 +49,7 @@
        [(new-facts-unfiltered)
           (next-tactic met-goals unmet-goals old-facts last-facts)]
        [(next-old-facts) (append old-facts last-facts)]
-       [(new-facts) (remove* next-old-facts (remove-duplicates new-facts-unfiltered))]
+       [(new-facts) (prune (remove* next-old-facts (remove-duplicates new-facts-unfiltered)))]
        [(new-met-goals new-unmet-goals) 
           (match-goals met-goals unmet-goals new-facts)])
       (find-solution-loop
@@ -54,10 +59,11 @@
         new-unmet-goals
         new-strategy-state
         strategy
+        prune
         (- depth 1)))))
 
-(define (find-solution goals initial-facts strategy depth)
-  (find-solution-loop empty initial-facts empty goals #f strategy depth))
+(define (find-solution goals initial-facts strategy prune depth)
+  (find-solution-loop empty initial-facts empty goals #f strategy prune depth))
 
 ; Checks whether all goals in unmet-goals match any of the facts.
 ; Returns a pair (met-goals . unmet-goals).
@@ -76,10 +82,30 @@
 (define (goal-solution g sr)
   (findf (lambda (f) (goal-matches? g f)) (SolverResult-facts sr)))
 
+; Don't prune: keep all facts.
+(define prune:keep-all identity)
+
+; Returns a pruner function that sorts facts by term size and gets the k
+; smallest, with a random tie breaking.
+(define (prune:keep-smallest-k k)
+  (lambda (facts)
+    (take
+      (sort (shuffle facts)
+            (lambda (a b) (< (term-size a) (term-size b))))
+      (min k (length facts)))))
+
+; Returns a pruner function that samples k facts uniformly.
+(define (prune:keep-random-k k)
+  (lambda (facts)
+    (take (shuffle facts) (min k (length facts)))))
+
 (provide
   SolverResult
   SolverResult-facts
   SolverResult-met-goals
   SolverResult-unmet-goals
   find-solution
-  goal-solution)
+  goal-solution
+  prune:keep-all
+  prune:keep-smallest-k
+  prune:keep-random-k)

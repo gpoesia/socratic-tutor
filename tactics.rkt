@@ -4,6 +4,7 @@
 (require algebraic/data)
 (require algebraic/function)
 (require algebraic/racket/base/forms)
+(require racket/list)
 (require racket/function)
 (require racket/match)
 (require "terms.rkt")
@@ -47,20 +48,22 @@
 ; Rearranges an associative operation.
 (define a:associativity?
   (function
-    [(BinOp op a (BinOp op b c)) (is-associative? op)]
-    [(BinOp op (BinOp op a b) c) (is-associative? op)]
+    [(BinOp op1 a (BinOp op2 b c)) (is-associative? op1 op2)]
+    [(BinOp op1 (BinOp op2 a b) c) (is-associative? op2 op1)]
     [_ #f]))
 
 (define a:associativity
   (function
-    [(BinOp op a (BinOp op b c)) (BinOp op (BinOp op a b) c)]
-    [(BinOp op (BinOp op a b) c) (BinOp op a (BinOp op b c))]
+    [(BinOp op1 a (BinOp op2 b c)) (BinOp op2 (BinOp op1 a b) c)]
+    [(BinOp op1 (BinOp op2 a b) c) (BinOp op2 a (BinOp op1 b c))]
     [_ #f]))
 
 ; Evaluates a binary operation on numbers.
 (define a:binop-eval?
   (function
-    [(BinOp op (Number n1) (Number n2)) #t]
+    [(BinOp op (Number n1) (Number n2))
+     #:if (not (and (eq? op op/) (= n2 0)))
+     #t]
     [_ #f]))
 
 (define a:binop-eval
@@ -137,6 +140,13 @@
      (BinOp op1 (BinOp op2 a c) b2)]
     [t #f]))
 
+; Applies an operation op with term t to both sides of an equation.
+(define a:op-both-sides
+  (function*
+    [((Predicate 'Eq (a b)) t op)
+     (Predicate 'Eq (list (BinOp op a t) (BinOp op b t)))]
+    [(_ _ _) #f]))
+
 ; ==============================
 ; ========   Tactics ===========
 ; ==============================
@@ -149,7 +159,7 @@
 ; Meta-tactic that applies a simple term-level transform pair
 ; to all new facts, in all terms that satisfy the given predicate.
 (define-syntax-rule (local-rewrite-tactic name predicate transform)
-  (define (name mew-goals unmet-goals old-facts new-facts)
+  (define (name met-goals unmet-goals old-facts new-facts)
     (apply append
       (map (lambda (f)
              (let ([indices (filter-subterms f predicate)])
@@ -184,12 +194,26 @@
 ; Apply a:mul-one.
 (local-rewrite-tactic t:mul-one a:mul-one? a:mul-one)
 
+; Tactic that applies a:op-both-sides using terms from the equations.
+(define produce-new-equalities
+  (function
+    [(Predicate 'Eq (a b)) #:as p
+     (let ([all-terms (append (enumerate-subterms a) (enumerate-subterms b))])
+       (map
+         (lambda (t-op) (a:op-both-sides p (car t-op) (cadr t-op)))
+         (cartesian-product all-terms (list op- op/ op+))))
+     ]
+    [t (list)]))
+
+(define (t:apply-op-both-sides met-goals unmet-goals old-facts new-facts)
+  (apply append (map produce-new-equalities new-facts)))
+
 ; Applies all tactics.
 (define (t:all met-goals unmet-goals old-facts new-facts)
   (apply append
          (map (lambda (t) (t met-goals unmet-goals old-facts new-facts))
               (list
-                t:flip
+                ; t:flip
                 t:eval
                 t:associativity
                 t:commutativity
@@ -197,6 +221,7 @@
                 t:add-zero
                 t:mul-zero
                 t:mul-one
+                t:apply-op-both-sides
                 ))))
 
 ; ==============================

@@ -40,7 +40,11 @@
     [(Predicate _ terms) terms]
     [t '()]))
 
-; Takes a term `t` and a list of subterms `new-subterms`, and returns a copy of 
+; Returns a list with all subterms of `t`, found recursively.
+(define (enumerate-subterms t)
+  (cons t (apply append (map enumerate-subterms (subterms t)))))
+
+; Takes a term `t` and a list of subterms `new-subterms`, and returns a copy of
 ; `t` where the subterms are replaced by `new-subterms`.
 (define replace-subterms
   (function*
@@ -119,15 +123,15 @@
 
 ; Tells whether a binary operator is commutative: a op b = b op a
 (define (is-commutative? op) (if (member op (list op+ op*)) #t #f))
-; Tells whether a binary operator is associative: a op (b op c) = (a op b) op c
-(define (is-associative? op) (if (member op (list op+ op*)) #t #f))
+; Tells whether operator op1 is associative with over op2: a op1 (b op2 c) = (a op1 b) op2 c
+(define (is-associative? op1 op2)
+  (or
+    (and (eq? op1 op+) (or (eq? op2 op+) (eq? op2 op-)))
+    (and (eq? op1 op*) (or (eq? op2 op*) (eq? op2 op/)))))
 ; Tells whether operator op1 distributes over op2: a op1 (b op2 c) = (a op1 b) op2 (a op1 c)
 (define (is-distributive? op1 op2) 
-  (or
-    (and (eq? op1 op*) (eq? op2 op+))
-    (and (eq? op1 op*) (eq? op2 op-))
-    (and (eq? op1 op/) (eq? op2 op+))
-    (and (eq? op1 op/) (eq? op2 op-))))
+  (and (or (eq? op1 op*) (eq? op1 op/))
+       (or (eq? op2 op+) (eq? op2 op-))))
 
 ; Locally simplify the term with simple rewrite rules.
 ; These rules don't need to cover symmetric cases because we combine 
@@ -298,6 +302,7 @@
   format-term format-term-debug
   rewrite-subterm
   filter-subterms
+  enumerate-subterms
   term-size
   goal-matches?
   Number Variable UnOp BinOp AnyNumber Predicate
