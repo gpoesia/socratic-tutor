@@ -45,6 +45,15 @@
 (define a:commutativity
   (phi (BinOp op l r) (BinOp op r l)))
 
+; Commutes two subtractions in a row: a - b - c => a - c - b
+(define a:subtraction-commutativity?
+  (function
+    [(BinOp op (BinOp op a b) c) (eq? op op-)]
+    [_ #f]))
+
+(define a:subtraction-commutativity
+  (phi (BinOp op (BinOp op a b) c) (BinOp op (BinOp op a c) b)))
+
 ; Rearranges an associative operation.
 (define a:associativity?
   (function
@@ -182,6 +191,11 @@
 ; Apply a:commutativity.
 (local-rewrite-tactic t:commutativity a:commutativity? a:commutativity)
 
+; Apply a:subtraction-commutativity
+(local-rewrite-tactic t:subtraction-commutativity
+                      a:subtraction-commutativity?
+                      a:subtraction-commutativity)
+
 ; Apply a:distributivity.
 (local-rewrite-tactic t:distributivity a:distributivity? a:distributivity)
 
@@ -200,7 +214,13 @@
     [(Predicate 'Eq (a b)) #:as p
      (let ([all-terms (append (enumerate-subterms a) (enumerate-subterms b))])
        (map
-         (lambda (t-op) (a:op-both-sides p (car t-op) (cadr t-op)))
+         (lambda (t-op)
+           (let
+             ([np (a:op-both-sides p (car t-op) (cadr t-op))])
+             (log-debug "#(t:apply-op-both-sides) rewrote ~a => ~a\n"
+                        (format-term p)
+                        (format-term np))
+             np))
          (cartesian-product all-terms (list op- op/ op+))))
      ]
     [t (list)]))
@@ -217,6 +237,7 @@
                 t:eval
                 t:associativity
                 t:commutativity
+                t:subtraction-commutativity
                 t:distributivity
                 t:add-zero
                 t:mul-zero

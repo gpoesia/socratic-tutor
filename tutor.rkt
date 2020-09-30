@@ -52,7 +52,8 @@
            ; Parse it as a fact f.
            [f (parse-term l)]
            ; Use solver to verify f.
-           [sr (find-solution (list f) facts s:all 20)]
+           [sr (find-solution (list f) facts s:all
+                              (prune:keep-smallest-k 50) 20)]
            ; Check whether we could verify it.
            [verified (empty? (SolverResult-unmet-goals sr))]
            ; If verified, check whether it matches any goal.

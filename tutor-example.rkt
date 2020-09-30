@@ -5,5 +5,5 @@
 (require "tutor.rkt")
 
 (tutor
-  (list (parse-term "1 + 2 + 3 + 4*5 = -1 + x + 1"))
+  (list (parse-term "2x = 1 + 2 + 3"))
   (list (solve-for "x")))

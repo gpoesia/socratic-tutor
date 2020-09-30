@@ -4,7 +4,6 @@
 (require "terms.rkt")
 (require "term-parser.rkt")
 (require "solver.rkt")
-(require "prune.rkt")
 (require "tactics.rkt")
 (require "debug.rkt")
 
@@ -18,7 +17,7 @@
           (string-join (map format-term facts) "\n")
           (string-join (map format-term goals) ", "))
   (define sr (find-solution goals facts s:all
-                            (prune:keep-smallest-k 50) 30))
+                            (prune:keep-smallest-k 200) 30))
   (define succeeded? (empty? (SolverResult-unmet-goals sr)))
   (printf
     "Solver ~a:\n  Facts: ~a\n\n  Met goals: ~a\n\n  Unmet goals: ~a\n\n"
@@ -33,10 +32,10 @@
     (string-join (map format-term-debug (SolverResult-unmet-goals sr)) ", ")
     ))
 
+(run-example (list "7x - 15 = 6x + 1") (list "x = ?"))
 (run-example (list "3x - 3 - 2x = 3") (list "x = ?"))
 (run-example (list "3 + (x + -3) = 12 + 5*7") (list "x = ?"))
 (run-example (list "2x + 1 = 5") (list "x = ?"))
-(run-example (list "7x - 15 = 6x + 1") (list "x = ?"))
 (run-example (list "x + 1 - 1 = 2") (list "x = ?"))
 (run-example (list "x + 1 = 4") (list "x = ?"))
 (run-example (list "x = 1 + 2 + 3") (list "x = ?"))
