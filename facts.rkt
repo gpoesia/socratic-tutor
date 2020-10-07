@@ -7,6 +7,10 @@
 (require "terms.rkt")
 
 (struct FactProof (axiom parameters))
+
+; Used to tag FactProof parameters that refer to previous facts.
+(struct FactId (id))
+
 (struct Fact (id term proof))
 
 (define (new-fact term proof)
@@ -40,6 +44,7 @@
 (provide
   FactProof FactProof-axiom FactProof-parameters
   Fact Fact-id Fact-term Fact-proof
+  FactId FactId? FactId-id
   assumption
   fact
   format-fact

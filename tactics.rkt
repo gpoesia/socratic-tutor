@@ -174,7 +174,9 @@
                                    (format-term rewritten))
                         (if rewritten
                           (fact rewritten 
-                                (FactProof #(name) (list (Fact-id f) i)))
+                                (FactProof 
+                                  #(name) 
+                                  (list (FactId (Fact-id f)) i)))
                           #f
                           )))
                     indices)))
@@ -222,7 +224,7 @@
                            (format-term t)
                            (format-term np))
                 (fact np (FactProof #(a:op-both-sides)
-                                    (list id (car t-op) (cadr t-op))))))
+                                    (list (FactId id) (car t-op) (cadr t-op))))))
             (cartesian-product all-terms (list op- op/ op+))))
         ]
        [_ empty]
