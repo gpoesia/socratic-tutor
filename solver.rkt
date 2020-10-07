@@ -7,6 +7,7 @@
 (require racket/set)
 
 (require "terms.rkt")
+(require "facts.rkt")
 (require "tactics.rkt")
 (require "debug.rkt")
 (require "strategy.rkt")
@@ -39,7 +40,7 @@
   (log-debug "find-solution-loop depth ~a, ~a new facts: ~a\n"
              depth
              (length last-facts)
-             (string-join (map format-term last-facts) ", "))
+             (string-join (map format-fact last-facts) ", "))
   ; Base cases: either solved the problem or timed out.
   (if (or (= 0 depth) (empty? unmet-goals))
     (SolverResult (append old-facts last-facts) met-goals unmet-goals)
@@ -49,7 +50,11 @@
        [(new-facts-unfiltered)
           (next-tactic met-goals unmet-goals old-facts last-facts)]
        [(next-old-facts) (append old-facts last-facts)]
-       [(new-facts) (prune (remove* next-old-facts (remove-duplicates new-facts-unfiltered)))]
+       [(new-facts) (prune (remove* next-old-facts 
+                                    (remove-duplicates
+                                      new-facts-unfiltered
+                                      #:key Fact-term)
+                                    fact-terms-equal?))]
        [(new-met-goals new-unmet-goals) 
           (match-goals met-goals unmet-goals new-facts)])
       (find-solution-loop
@@ -74,13 +79,13 @@
                   [(met-goals-r unmet-goals-r) (match-goals met-goals rest facts)])
       ; If g matches any of the facts, add it to met goals. Otherwise,
       ; to unmet goals.
-      (if (ormap (lambda (f) (goal-matches? g f)) facts)
+      (if (ormap (lambda (f) (fact-solves-goal? f g)) facts)
         (values (cons g met-goals-r) unmet-goals-r)
         (values met-goals-r (cons g unmet-goals-r))))))
 
 ; Returns which of the facts in the SolverResult sr matches the goal g.
 (define (goal-solution g sr)
-  (findf (lambda (f) (goal-matches? g f)) (SolverResult-facts sr)))
+  (findf (lambda (f) (fact-solves-goal? f g)) (SolverResult-facts sr)))
 
 ; Don't prune: keep all facts.
 (define prune:keep-all identity)
@@ -91,7 +96,8 @@
   (lambda (facts)
     (take
       (sort (shuffle facts)
-            (lambda (a b) (< (term-size a) (term-size b))))
+            (lambda (a b) (< (term-size (Fact-term a)) 
+                             (term-size (Fact-term b)))))
       (min k (length facts)))))
 
 ; Returns a pruner function that samples k facts uniformly.

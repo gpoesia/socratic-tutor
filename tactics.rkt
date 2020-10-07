@@ -8,6 +8,7 @@
 (require racket/function)
 (require racket/match)
 (require "terms.rkt")
+(require "facts.rkt")
 (require "debug.rkt")
 
 ; ==============================
@@ -23,13 +24,6 @@
   (function
     [(Predicate 'Eq `(,t1 ,t2)) (Predicate 'Eq (list t2 t1))]
     [t #f]))
-
-; Add a term to both sides of an equation.
-(define (a:add-to-both-sides eq term)
-  ((function
-    [(Predicate 'Eq `(,t1 ,t2))
-     (Predicate 'Eq ((BinOp op+ t1 term) (BinOp op+ t2 term)))]
-    [t #f]) eq))
 
 ; Use equality e1 := t1 = t2 to substitute occurrences
 ; of the term t1 by the term t2 in equality e2.
@@ -171,14 +165,18 @@
   (define (name met-goals unmet-goals old-facts new-facts)
     (apply append
       (map (lambda (f)
-             (let ([indices (filter-subterms f predicate)])
+             (let ([indices (filter-subterms (Fact-term f) predicate)])
                (map (lambda (i)
-                        (let ([rewritten (rewrite-subterm f transform i)])
-                          (log-debug "~a rewrote ~a => ~a\n"
-                                     #(name)
-                                     (format-term f)
-                                     (format-term rewritten))
-                          rewritten))
+                      (let ([rewritten (rewrite-subterm (Fact-term f) transform i)])
+                        (log-debug "~a rewrote ~a => ~a\n"
+                                   #(name)
+                                   (format-term (Fact-term f))
+                                   (format-term rewritten))
+                        (if rewritten
+                          (fact rewritten 
+                                (FactProof #(name) (list (Fact-id f) i)))
+                          #f
+                          )))
                     indices)))
            new-facts))))
 
@@ -209,21 +207,27 @@
 (local-rewrite-tactic t:mul-one a:mul-one? a:mul-one)
 
 ; Tactic that applies a:op-both-sides using terms from the equations.
-(define produce-new-equalities
-  (function
-    [(Predicate 'Eq (a b)) #:as p
-     (let ([all-terms (append (enumerate-subterms a) (enumerate-subterms b))])
-       (map
-         (lambda (t-op)
-           (let
-             ([np (a:op-both-sides p (car t-op) (cadr t-op))])
-             (log-debug "#(t:apply-op-both-sides) rewrote ~a => ~a\n"
-                        (format-term p)
-                        (format-term np))
-             np))
-         (cartesian-product all-terms (list op- op/ op+))))
-     ]
-    [t (list)]))
+(define (produce-new-equalities f)
+  (match f
+    [(Fact id t proof)
+     ((function
+       [(Predicate 'Eq (a b))
+        (let (
+              [all-terms (append (enumerate-subterms a) (enumerate-subterms b))])
+          (map
+            (lambda (t-op)
+              (let
+                ([np (a:op-both-sides t (car t-op) (cadr t-op))])
+                (log-debug "#(t:apply-op-both-sides) rewrote ~a => ~a\n"
+                           (format-term t)
+                           (format-term np))
+                (fact np (FactProof #(a:op-both-sides)
+                                    (list id (car t-op) (cadr t-op))))))
+            (cartesian-product all-terms (list op- op/ op+))))
+        ]
+       [_ empty]
+       ) t)]
+    [_ empty]))
 
 (define (t:apply-op-both-sides met-goals unmet-goals old-facts new-facts)
   (apply append (map produce-new-equalities new-facts)))
