@@ -105,6 +105,40 @@
   (lambda (facts)
     (take (shuffle facts) (min k (length facts)))))
 
+; Returns a step-by-step solution from a SolverResult
+; only involving relevant facts.
+(define (get-step-by-step sr)
+  (let* ([solutions (map (lambda (g) (goal-solution g sr))
+                         (SolverResult-met-goals sr))]
+         [all-solution-steps (trace-facts (SolverResult-facts sr) 
+                                          solutions)]
+         [relevant-facts (filter (lambda (f) (member (Fact-id f)
+                                                     all-solution-steps))
+                                 (SolverResult-facts sr))])
+    relevant-facts))
+
+; Returns a list of the ids of all facts that appear in the proof
+; of any f in `facts` (including themselves).
+(define (trace-facts all-facts facts)
+  (if (empty? facts)
+    empty
+    (apply append
+      (map 
+        (lambda (f)
+          (let* ([proof-arguments (FactProof-parameters (Fact-proof f))]
+                 [used-facts (filter identity
+                                     (map (lambda (p)
+                                            (if (FactId? p) (FactId-id p) #f))
+                                          proof-arguments))])
+            (append (list (Fact-id f))
+                    used-facts
+                    (trace-facts all-facts
+                      (filter (lambda (f) (member (Fact-id f)
+                                                  used-facts))
+                              all-facts))))
+          )
+        facts))))
+
 (provide
   SolverResult
   SolverResult-facts
@@ -112,6 +146,7 @@
   SolverResult-unmet-goals
   find-solution
   goal-solution
+  get-step-by-step
   prune:keep-all
   prune:keep-smallest-k
   prune:keep-random-k)

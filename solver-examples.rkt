@@ -23,7 +23,8 @@
   (printf
     "Solver ~a:\n  Facts: ~a\n\n  Met goals: ~a\n\n  Unmet goals: ~a\n\n"
     (if succeeded? "succeeded" "failed")
-    (if succeeded? (length (SolverResult-facts sr))
+    (if succeeded?
+      (string-join (map format-fact-v (get-step-by-step sr)) "\n")
       (string-join (map format-fact
                         (SolverResult-facts sr)) "\n"))
     (string-join (map (lambda (g)

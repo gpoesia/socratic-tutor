@@ -6,10 +6,10 @@
 (require racket/format)
 (require "terms.rkt")
 
-(struct FactProof (axiom parameters))
+(struct FactProof (axiom parameters) #:transparent)
 
 ; Used to tag FactProof parameters that refer to previous facts.
-(struct FactId (id))
+(struct FactId (id) #:transparent)
 
 (struct Fact (id term proof))
 
@@ -27,13 +27,15 @@
           (FactProof-axiom fp)
           (string-join (map ~s (FactProof-parameters fp)))))
 
-(define (format-fact f [proof? #f])
-  (if proof?
-    (format "~a [~a]"
-            (format-term (Fact-term f))
-            (format-fact-proof (Fact-proof f)))
-    (format-term (Fact-term f))))
+(define (format-fact f [proof? #f] [id? #f])
+  (format "~a~a~a"
+    (if id? (format "(~a) " (Fact-id f)) "")
+    (format-term (Fact-term f))
+    (if proof? (format " [~a]"
+                       (format-fact-proof (Fact-proof f)))
+      "")))
 
+(define (format-fact-v f) (format-fact f #t #t))
 
 (define (fact-terms-equal? f1 f2)
   (equal? (Fact-term f1) (Fact-term f2)))
@@ -48,6 +50,7 @@
   assumption
   fact
   format-fact
+  format-fact-v
   format-fact-proof
   fact-terms-equal?
   fact-solves-goal?
