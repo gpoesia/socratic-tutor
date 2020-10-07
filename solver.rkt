@@ -115,7 +115,7 @@
          [relevant-facts (filter (lambda (f) (member (Fact-id f)
                                                      all-solution-steps))
                                  (SolverResult-facts sr))])
-    relevant-facts))
+    (renumber relevant-facts)))
 
 ; Returns a list of the ids of all facts that appear in the proof
 ; of any f in `facts` (including themselves).
@@ -139,6 +139,29 @@
           )
         facts))))
 
+; Given a list of facts, changes their IDs to be sequentially assigned
+; integers. Useful for human-friendly presentation.
+(define (renumber facts)
+  (for/fold ([new-id (hash)]
+             [new-facts (list)]
+             #:result (reverse new-facts))
+            ([f (in-list facts)]
+             [i (in-range 1 (+ 1 (length facts)))])
+    (let ([proof (Fact-proof f)])
+      (values
+        (hash-set new-id (Fact-id f) i)
+        (cons 
+          (Fact i ; New ID.
+                (Fact-term f) ; Same term.
+                (FactProof
+                  (FactProof-axiom proof) ; Same axiom.
+                  (map (lambda (p) ; Rewrite proof parameters.
+                         (if (FactId? p)
+                           (FactId (hash-ref new-id (FactId-id p)))
+                           p))
+                       (FactProof-parameters proof))))
+          new-facts)))))
+
 (provide
   SolverResult
   SolverResult-facts
@@ -147,6 +170,7 @@
   find-solution
   goal-solution
   get-step-by-step
+  renumber
   prune:keep-all
   prune:keep-smallest-k
   prune:keep-random-k)
