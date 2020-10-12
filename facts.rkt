@@ -44,8 +44,8 @@
   (goal-matches? g (Fact-term f)))
 
 (provide
-  FactProof FactProof-axiom FactProof-parameters
-  Fact Fact-id Fact-term Fact-proof
+  FactProof FactProof? FactProof-axiom FactProof-parameters
+  Fact Fact? Fact-id Fact-term Fact-proof
   FactId FactId? FactId-id
   assumption
   fact

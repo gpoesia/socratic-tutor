@@ -163,7 +163,7 @@
           new-facts)))))
 
 (provide
-  SolverResult
+  SolverResult SolverResult?
   SolverResult-facts
   SolverResult-met-goals
   SolverResult-unmet-goals

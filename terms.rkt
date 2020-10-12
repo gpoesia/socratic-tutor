@@ -9,6 +9,15 @@
 (data Term (Number Variable UnOp BinOp AnyNumber Predicate))
 (define-enum-type Operator (op+ op- op* op/))
 
+(define (Term? t)
+  (or
+    (Number? t)
+    (Variable? t)
+    (UnOp? t)
+    (BinOp? t)
+    (AnyNumber? t)
+    (Predicate? t)))
+
 (define Predicate-type (phi (Predicate type _) type))
 (define Predicate-terms (phi (Predicate _ terms) terms))
 
@@ -256,7 +265,7 @@
     (random-search-optimize term term 100 100)))
 
 ; Format an operator.
-(define (format-op op)
+(define (op->string op)
   (match op
     [(== op+) "+"]
     [(== op-) "-"]
@@ -276,7 +285,7 @@
    ; Variable with coefficient
    [(BinOp op (Number n) (Variable v)) #:if (eq? op op*) (format "~a~a" n v)]
    ; Generic binary operation.
-   [(BinOp op a b) (format "(~a ~a ~a)" (format-term a) (format-op op) (format-term b))]
+   [(BinOp op a b) (format "(~a ~a ~a)" (format-term a) (op->string op) (format-term b))]
    ; Equality.
    [(Predicate 'Eq (a b))
     (format "~a = ~a" (format-term a) (format-term b))]
@@ -305,5 +314,5 @@
   enumerate-subterms
   term-size
   goal-matches?
-  Number Variable UnOp BinOp AnyNumber Predicate
-  op+ op* op- op/ is-commutative? is-associative? is-distributive? compute-bin-op)
+  Term? Number Variable UnOp BinOp AnyNumber Predicate
+  Operator? op+ op* op- op/ is-commutative? is-associative? is-distributive? compute-bin-op op->string)

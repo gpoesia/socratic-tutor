@@ -150,6 +150,36 @@
      (Predicate 'Eq (list (BinOp op a t) (BinOp op b t)))]
     [(_ _ _) #f]))
 
+; Returns a unique string representing each axiom.
+(define (axiom->string a)
+  (match a
+    [(== 'Assumption) "Assumption"]
+    [(== a:flip-equality) "a:flip-equality"]
+    [(== a:commutativity) "a:commutativity"]
+    [(== a:subtraction-commutativity) "a:subtraction-commutativity"]
+    [(== a:associativity) "a:associativity"]
+    [(== a:binop-eval) "a:binop-eval"]
+    [(== a:add-zero) "a:add-zero"]
+    [(== a:mul-zero) "a:mul-zero"]
+    [(== a:mul-one) "a:mul-one"]
+    [(== a:distributivity) "a:distributivity"]
+    [(== a:op-both-sides) "a:op-both-sides"]))
+
+; Returns a unique string representing each axiom.
+(define (string->axiom s)
+  (match s
+    [(== "Assumption") 'Assumption]
+    [(== "a:flip-equality") a:flip-equality]
+    [(== "a:commutativity") a:commutativity]
+    [(== "a:subtraction-commutativity") a:subtraction-commutativity]
+    [(== "a:associativity") a:associativity]
+    [(== "a:binop-eval") a:binop-eval]
+    [(== "a:add-zero") a:add-zero]
+    [(== "a:mul-zero") a:mul-zero]
+    [(== "a:mul-one") a:mul-one]
+    [(== "a:distributivity") a:distributivity]
+    [(== "a:op-both-sides") a:op-both-sides]))
+
 ; ==============================
 ; ========   Tactics ===========
 ; ==============================
@@ -175,7 +205,7 @@
                         (if rewritten
                           (fact rewritten 
                                 (FactProof 
-                                  #(name) 
+                                  transform
                                   (list (FactId (Fact-id f)) i)))
                           #f
                           )))
@@ -223,7 +253,7 @@
                 (log-debug "#(t:apply-op-both-sides) rewrote ~a => ~a\n"
                            (format-term t)
                            (format-term np))
-                (fact np (FactProof #(a:op-both-sides)
+                (fact np (FactProof a:op-both-sides
                                     (list (FactId id) (car t-op) (cadr t-op))))))
             (cartesian-product all-terms (list op- op/ op+))))
         ]
@@ -262,4 +292,6 @@
 
 (provide
   a:premise
-  s:all)
+  s:all
+  axiom->string
+  string->axiom)
