@@ -8,10 +8,10 @@ solution to simple math problems, so that we can think about/play with asking qu
 The solver is implemented in Racket.
 We're using [Algebraic Racket](https://docs.racket-lang.org/algebraic/ref.html),
 since Algebraic Data Types are especially useful for recursive structures like
-mathematical expressions. You can install it with:
+mathematical expressions. You can install all dependencies with:
 
 ```
-raco pkg install --auto algebraic
+raco pkg install --auto --pkgs algebraic brag date rebellion
 ```
 
 ## Prototype
