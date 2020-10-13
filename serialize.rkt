@@ -3,6 +3,7 @@
 #lang algebraic/racket/base
 
 (require "terms.rkt")
+(require "term-parser.rkt")
 (require "tactics.rkt")
 (require "facts.rkt")
 (require "solver.rkt")
@@ -26,12 +27,9 @@
             'parameters (map to-jsexpr (FactProof-parameters obj)))]
     [(Fact? obj)
      (hash 'type "Fact"
+           'id (to-jsexpr (Fact-id obj))
            'term (to-jsexpr (Fact-term obj))
            'proof (to-jsexpr (Fact-proof obj)))]
-    [(SolverResult? obj)
-     (hash 'type "SolverResult"
-           'facts (to-jsexpr
-                    (map to-jsexpr (SolverResult-facts obj))))]
     [(SolverResult? obj)
      (hash 'type "SolverResult"
            'facts (to-jsexpr
@@ -46,7 +44,40 @@
     [else obj]
     ))
 
+(define (from-json port)
+  (from-jsexpr (read-json port)))
+
+(define (obj-type obj type)
+  (and (hash? obj) (equal? (hash-ref obj 'type) type)))
+
+(define (from-jsexpr obj)
+  (cond
+    [(obj-type obj "Term") (parse-term (hash-ref obj 'value))]
+    [(obj-type obj "FactId") (FactId (hash-ref obj 'value))]
+    [(obj-type obj "FactProof")
+     (FactProof
+       (string->axiom (hash-ref obj 'axiom))
+       (map from-jsexpr (hash-ref obj 'parameters)))]
+    [(obj-type obj "Fact")
+     (Fact
+       (from-jsexpr (hash-ref obj 'id))
+       (from-jsexpr (hash-ref obj 'term))
+       (from-jsexpr (hash-ref obj 'proof)))]
+    [(obj-type obj "SolverResult")
+     (SolverResult
+       (map from-jsexpr (hash-ref obj 'facts))
+       (map from-jsexpr (hash-ref obj 'met-goals))
+       (map from-jsexpr (hash-ref obj 'unmet-goals)))]
+    [(list? obj) (map from-jsexpr obj)]
+    [else obj]))
+
+(define (from-json-string s)
+  (from-jsexpr (string->jsexpr s)))
+
 (provide
   to-json
   to-json-string
-  to-jsexpr)
+  to-jsexpr
+  from-json
+  from-json-string
+  from-jsexpr)
