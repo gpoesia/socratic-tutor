@@ -282,6 +282,8 @@
    [(Number n) (format "~a" n)]
    ; Variable
    [(Variable v) (format "~a" v)]
+   ; Unary operator
+   [(UnOp op v) (format "~a~a" (op->string op) (format-term v))]
    ; Variable with coefficient
    [(BinOp op (Number n) (Variable v)) #:if (eq? op op*) (format "~a~a" n v)]
    ; Generic binary operation.
