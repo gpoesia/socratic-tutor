@@ -12,6 +12,7 @@
 (require "debug.rkt")
 (require "strategy.rkt")
 
+(struct Problem (initial-facts goals))
 (struct SolverResult (facts met-goals unmet-goals) #:transparent)
 
 ; Searches for a solution for the given set of goals.
@@ -69,6 +70,11 @@
 
 (define (find-solution goals initial-facts strategy prune depth)
   (find-solution-loop empty initial-facts empty goals #f strategy prune depth))
+
+(define (solve-problem problem strategy prune depth)
+  (find-solution (Problem-goals problem)
+                 (Problem-initial-facts problem)
+                 strategy prune depth))
 
 ; Checks whether all goals in unmet-goals match any of the facts.
 ; Returns a pair (met-goals . unmet-goals).
@@ -163,11 +169,13 @@
           new-facts)))))
 
 (provide
+  Problem Problem-initial-facts Problem-goals
   SolverResult SolverResult?
   SolverResult-facts
   SolverResult-met-goals
   SolverResult-unmet-goals
   find-solution
+  solve-problem
   goal-solution
   get-step-by-step
   renumber

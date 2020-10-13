@@ -41,6 +41,15 @@
            )]
     [(Operator? obj)
      (hash 'type "Operator" 'operator (op->string obj))]
+    [(Problem? obj)
+     (hash 'type "Problem"
+           'initial-facts (to-jsexpr (Problem-initial-facts obj))
+           'goals (to-jsexpr (Problem-goals obj)))]
+    [(list? obj) (map to-jsexpr obj)]
+    [(hash? obj)
+     (make-hash 
+       (hash-map (lambda (k v) (cons k (to-jsexpr v)))
+                  obj))]
     [else obj]
     ))
 
@@ -69,6 +78,10 @@
        (map from-jsexpr (hash-ref obj 'met-goals))
        (map from-jsexpr (hash-ref obj 'unmet-goals)))]
     [(list? obj) (map from-jsexpr obj)]
+    [(hash? obj)
+     (make-hash
+       (hash-map (lambda (k v) (cons k (from-jsexpr v)))
+                 obj))]
     [else obj]))
 
 (define (from-json-string s)
