@@ -13,10 +13,11 @@ sub        : expr_l1 OP_MINUS expr_l2
 expr_l2    : prod | div | expr_l3
 prod       : expr_l2 OP_TIMES expr_l3 
              | paren-expr paren-expr 
-             | number expr_l3
+varcoeff   : number expr_l4
 div        : expr_l2 OP_DIV expr_l3
 
-expr_l3    : number | variable | any_number | paren-expr
+expr_l3    : number | any_number | varcoeff | expr_l4
+expr_l4    : variable | paren-expr
 paren-expr : LEFT_PAREN expr RIGHT_PAREN
 variable   : VARIABLE
 any_number : ANY_NUMBER

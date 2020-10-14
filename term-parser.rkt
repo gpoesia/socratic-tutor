@@ -7,7 +7,7 @@
 
 (define (parse-term t)
   (let ([parse-tree (parse (tokenize (open-input-string t)))])
-    (parse-tree-to-term (syntax->datum parse-tree))))
+      (parse-tree-to-term (syntax->datum parse-tree))))
 
 (provide parse-term)
 
@@ -20,6 +20,7 @@
          [`(expr_l1 ,e) (parse-tree-to-term e)]
          [`(expr_l2 ,e) (parse-tree-to-term e)]
          [`(expr_l3 ,e) (parse-tree-to-term e)]
+         [`(expr_l4 ,e) (parse-tree-to-term e)]
          [`(equality ,e1 ,_ ,e2)
            (Predicate 
              'Eq (list (parse-tree-to-term e1) (parse-tree-to-term e2)))]
@@ -27,6 +28,8 @@
            (BinOp op+ (parse-tree-to-term e1) (parse-tree-to-term e2))]
          [`(sub ,e1 ,_ ,e2)
            (BinOp op- (parse-tree-to-term e1) (parse-tree-to-term e2))]
+         [`(varcoeff ,e1 ,e2)
+           (BinOp op* (parse-tree-to-term e1) (parse-tree-to-term e2))]
          [`(prod ,e1 ,_ ,e2)
            (BinOp op* (parse-tree-to-term e1) (parse-tree-to-term e2))]
          [`(prod ,e1 ,e2)
