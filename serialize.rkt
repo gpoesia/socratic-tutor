@@ -63,6 +63,7 @@
   (cond
     [(obj-type obj "Term") (parse-term (hash-ref obj 'value))]
     [(obj-type obj "FactId") (FactId (hash-ref obj 'value))]
+    [(obj-type obj "Operator") (string->op (hash-ref obj 'operator))]
     [(obj-type obj "FactProof")
      (FactProof
        (string->axiom (hash-ref obj 'axiom))

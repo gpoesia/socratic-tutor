@@ -273,6 +273,16 @@
     [(== op/) "/"]
     ))
 
+; Parse operator.
+(define (string->op s)
+  (match s
+    [(== "+") op+]
+    [(== "-") op-]
+    [(== "*") op*]
+    [(== "/") op/]
+    ))
+
+
 ; Compact form of printing a term.
 (define format-term
   (function
@@ -317,4 +327,4 @@
   term-size
   goal-matches?
   Term? Number Variable UnOp BinOp AnyNumber Predicate
-  Operator? op+ op* op- op/ is-commutative? is-associative? is-distributive? compute-bin-op op->string)
+  Operator? op+ op* op- op/ is-commutative? is-associative? is-distributive? compute-bin-op op->string string->op)
