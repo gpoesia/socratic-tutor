@@ -38,6 +38,7 @@
                         (map to-jsexpr (SolverResult-met-goals obj)))
            'unmet-goals (to-jsexpr
                           (map to-jsexpr (SolverResult-unmet-goals obj)))
+           'contradiction (to-jsexpr (SolverResult-contradiction obj))
            )]
     [(Operator? obj)
      (hash 'type "Operator" 'operator (op->string obj))]
@@ -48,8 +49,7 @@
     [(list? obj) (map to-jsexpr obj)]
     [(hash? obj)
      (make-hash 
-       (hash-map (lambda (k v) (cons k (to-jsexpr v)))
-                  obj))]
+       (hash-map obj (lambda (k v) (cons k (to-jsexpr v)))))]
     [else obj]
     ))
 
@@ -76,12 +76,12 @@
      (SolverResult
        (map from-jsexpr (hash-ref obj 'facts))
        (map from-jsexpr (hash-ref obj 'met-goals))
-       (map from-jsexpr (hash-ref obj 'unmet-goals)))]
+       (map from-jsexpr (hash-ref obj 'unmet-goals))
+       (from-jsexpr (hash-ref obj 'contradiction)))]
     [(list? obj) (map from-jsexpr obj)]
     [(hash? obj)
      (make-hash
-       (hash-map (lambda (k v) (cons k (from-jsexpr v)))
-                 obj))]
+       (hash-map obj (lambda (k v) (cons k (from-jsexpr v)))))]
     [else obj]))
 
 (define (from-json-string s)

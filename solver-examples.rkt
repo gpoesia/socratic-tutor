@@ -7,6 +7,7 @@
 (require "tactics.rkt")
 (require "facts.rkt")
 (require "debug.rkt")
+(require "serialize.rkt")
 
 (define (solve-for variable)
   (Predicate 'Eq (list (Variable variable) AnyNumber)))
@@ -17,16 +18,22 @@
   (printf "Solving:\n~a\nWith goals ~a\n"
           (string-join (map format-fact facts) "\n")
           (string-join (map format-term goals) ", "))
-  (define sr (find-solution goals facts s:all
-                            (prune:keep-smallest-k 50) 20))
+  (define sr (from-json-string (to-json-string 
+    (find-solution goals facts s:all (prune:keep-smallest-k 50) 20))))
   (define succeeded? (empty? (SolverResult-unmet-goals sr)))
+  (define contradiction? (SolverResult-contradiction sr))
   (printf
     "Solver ~a:\n  Facts: ~a\n\n  Met goals: ~a\n\n  Unmet goals: ~a\n\n"
-    (if succeeded? "succeeded" "failed")
-    (if succeeded?
-      (string-join (map format-fact-v (get-step-by-step sr)) "\n")
-      (string-join (map format-fact
-                        (SolverResult-facts sr)) "\n"))
+    (if succeeded? "succeeded"
+      (if contradiction? "found contradiction" "timed out"))
+    (cond
+      [succeeded?
+        (string-join (map format-fact-v (get-step-by-step-solution sr)) "\n")]
+      [contradiction?
+        (string-join (map format-fact-v (get-step-by-step-contradiction sr)) "\n")]
+      [else 
+        (string-join (map format-fact
+                          (SolverResult-facts sr)) "\n")])
     (string-join (map (lambda (g)
                         (format "~a (solves ~a)"
                                 (format-fact (goal-solution g sr))
@@ -35,6 +42,7 @@
     (string-join (map format-term-debug (SolverResult-unmet-goals sr)) ", ")
     ))
 
+(run-example (list "0x = 1") (list "x = ?"))
 (run-example (list "x + 1 = 4") (list "x = ?"))
 (run-example (list "x - 1 = 4") (list "x = ?"))
 (run-example (list "x = 1 + 2 + 3") (list "x = ?"))

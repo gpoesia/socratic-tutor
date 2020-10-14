@@ -1,10 +1,13 @@
 ; Implementation of a Hilbert-style deductive system for solving
 ; math problems.
 
-#lang racket
+#lang algebraic/racket/base
 
 (require data/gvector)
 (require racket/set)
+(require racket/string)
+(require racket/list)
+(require racket/function)
 
 (require "terms.rkt")
 (require "facts.rkt")
@@ -13,7 +16,10 @@
 (require "strategy.rkt")
 
 (struct Problem (initial-facts goals) #:transparent)
-(struct SolverResult (facts met-goals unmet-goals) #:transparent)
+(struct SolverResult (facts
+                      met-goals
+                      unmet-goals
+                      contradiction) #:transparent)
 
 ; Searches for a solution for the given set of goals.
 ; old-facts - list of facts known as of the last iteration
@@ -42,31 +48,44 @@
              depth
              (length last-facts)
              (string-join (map format-fact last-facts) ", "))
-  ; Base cases: either solved the problem or timed out.
-  (if (or (= 0 depth) (empty? unmet-goals))
-    (SolverResult (append old-facts last-facts) met-goals unmet-goals)
-    (let*-values
-      ([(next-tactic new-strategy-state)
-          (strategy old-facts last-facts unmet-goals strategy-state)]
-       [(new-facts-unfiltered)
-          (next-tactic met-goals unmet-goals old-facts last-facts)]
-       [(next-old-facts) (append old-facts last-facts)]
-       [(new-facts) (prune (remove* next-old-facts 
-                                    (remove-duplicates
-                                      new-facts-unfiltered
-                                      #:key Fact-term)
-                                    fact-terms-equal?))]
-       [(new-met-goals new-unmet-goals) 
-          (match-goals met-goals unmet-goals new-facts)])
-      (find-solution-loop
-        next-old-facts
-        new-facts
-        new-met-goals
-        new-unmet-goals
-        new-strategy-state
-        strategy
-        prune
-        (- depth 1)))))
+  ; Base cases: either solved the problem, timed out or found a contradiction.
+  (let ([contradiction (find-contradiction last-facts)])
+    (if (or (= 0 depth) (empty? unmet-goals) contradiction)
+      (SolverResult (append old-facts last-facts)
+                    met-goals unmet-goals contradiction)
+      (let*-values
+        ([(next-tactic new-strategy-state)
+            (strategy old-facts last-facts unmet-goals strategy-state)]
+         [(new-facts-unfiltered)
+            (next-tactic met-goals unmet-goals old-facts last-facts)]
+         [(next-old-facts) (append old-facts last-facts)]
+         [(new-facts) (prune (remove* next-old-facts 
+                                      (remove-duplicates
+                                        new-facts-unfiltered
+                                        #:key Fact-term)
+                                      fact-terms-equal?))]
+         [(new-met-goals new-unmet-goals) 
+            (match-goals met-goals unmet-goals new-facts)])
+        (find-solution-loop
+          next-old-facts
+          new-facts
+          new-met-goals
+          new-unmet-goals
+          new-strategy-state
+          strategy
+          prune
+          (- depth 1))))))
+
+(define is-contradiction?
+  (function
+    [(Predicate 'Eq ((Number a) (Number b)))
+     #:if (not (= a b))
+     #t]
+    [_ #f]
+    ))
+
+(define (find-contradiction facts)
+  (findf (lambda (f) (is-contradiction? (Fact-term f))) facts))
 
 (define (find-solution goals initial-facts strategy prune depth)
   (find-solution-loop empty initial-facts empty goals #f strategy prune depth))
@@ -113,7 +132,7 @@
 
 ; Returns a step-by-step solution from a SolverResult
 ; only involving relevant facts.
-(define (get-step-by-step sr)
+(define (get-step-by-step-solution sr)
   (let* ([solutions (map (lambda (g) (goal-solution g sr))
                          (SolverResult-met-goals sr))]
          [all-solution-steps (trace-facts (SolverResult-facts sr) 
@@ -122,6 +141,19 @@
                                                      all-solution-steps))
                                  (SolverResult-facts sr))])
     (renumber relevant-facts)))
+
+; Returns a step-by-step derivation of a contradiction from a
+; SolverResult, in case the solver found one.
+(define (get-step-by-step-contradiction sr)
+  (if (SolverResult-contradiction sr)
+    (let* ([all-steps (trace-facts 
+                        (SolverResult-facts sr)
+                        (list (SolverResult-contradiction sr)))]
+           [relevant-facts (filter (lambda (f) (member (Fact-id f)
+                                                       all-steps))
+                                   (SolverResult-facts sr))])
+      (renumber relevant-facts))
+    #f))
 
 ; Returns a list of the ids of all facts that appear in the proof
 ; of any f in `facts` (including themselves).
@@ -169,15 +201,17 @@
           new-facts)))))
 
 (provide
-  Problem Problem-initial-facts Problem-goals
+  Problem? Problem Problem-initial-facts Problem-goals
   SolverResult SolverResult?
   SolverResult-facts
   SolverResult-met-goals
   SolverResult-unmet-goals
+  SolverResult-contradiction
   find-solution
   solve-problem
   goal-solution
-  get-step-by-step
+  get-step-by-step-solution
+  get-step-by-step-contradiction
   renumber
   prune:keep-all
   prune:keep-smallest-k
