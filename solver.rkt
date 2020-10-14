@@ -12,7 +12,7 @@
 (require "debug.rkt")
 (require "strategy.rkt")
 
-(struct Problem (initial-facts goals))
+(struct Problem (initial-facts goals) #:transparent)
 (struct SolverResult (facts met-goals unmet-goals) #:transparent)
 
 ; Searches for a solution for the given set of goals.
