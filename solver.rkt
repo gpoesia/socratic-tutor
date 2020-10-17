@@ -13,7 +13,6 @@
 (require "facts.rkt")
 (require "tactics.rkt")
 (require "debug.rkt")
-(require "strategy.rkt")
 
 (struct Problem (initial-facts goals) #:transparent)
 (struct SolverResult (facts
