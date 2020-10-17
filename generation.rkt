@@ -105,7 +105,8 @@
                          (printf "Saving ~a problems to ~a.\n"
                                  (length all) out-path)
                          (call-with-output-file out-path
-                           (lambda (out) (to-json all out))))
+                           (lambda (out) (to-json all out))
+                           #:exists 'replace))
                        void)
                      (loop (cons result all) (+ 1 i)))])
       (loop empty 0))))
