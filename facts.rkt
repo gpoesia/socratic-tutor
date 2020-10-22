@@ -35,6 +35,8 @@
                        (format-fact-proof (Fact-proof f)))
       "")))
 
+(define (format-fact-i f) (format-fact f #f #t))
+
 (define (format-fact-v f) (format-fact f #t #t))
 
 (define (fact-terms-equal? f1 f2)
@@ -50,6 +52,7 @@
   assumption
   fact
   format-fact
+  format-fact-i
   format-fact-v
   format-fact-proof
   fact-terms-equal?

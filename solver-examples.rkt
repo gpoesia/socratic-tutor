@@ -8,9 +8,17 @@
 (require "facts.rkt")
 (require "debug.rkt")
 (require "serialize.rkt")
+(require "questions.rkt")
 
-(define (solve-for variable)
-  (Predicate 'Eq (list (Variable variable) AnyNumber)))
+(define show-questions? #t)
+
+(define (generate-all-questions sr)
+  (define facts (get-step-by-step-solution sr))
+  (for-each (lambda (f)
+              (printf "===> Q: ~a\nA: ~a\n"
+                      (generate-leading-question (Fact-proof f) facts)
+                      (format-fact-i f)))
+            (cdr facts)))
 
 (define (run-example facts-str goals-str)
   (define facts (map (compose assumption parse-term) facts-str))
@@ -40,12 +48,15 @@
                                 (format-term g)))
                       (SolverResult-met-goals sr)) ", ")
     (string-join (map format-term-debug (SolverResult-unmet-goals sr)) ", ")
-    ))
+    )
+  (if (and succeeded? show-questions?)
+    (generate-all-questions sr)
+    #f))
 
+(run-example (list "x = 1 + 2 + 3") (list "x = ?"))
 (run-example (list "0x = 1") (list "x = ?"))
 (run-example (list "x + 1 = 4") (list "x = ?"))
 (run-example (list "x - 1 = 4") (list "x = ?"))
-(run-example (list "x = 1 + 2 + 3") (list "x = ?"))
 (run-example (list "3x - 3 - 2x = 3") (list "x = ?"))
 (run-example (list "3 + (x + -3) = 12 + 5*7") (list "x = ?"))
 (run-example (list "2x + 1 = 5") (list "x = ?"))

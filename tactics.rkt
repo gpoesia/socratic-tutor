@@ -292,6 +292,16 @@
 
 (provide
   a:premise
+  a:commutativity
+  a:subtraction-commutativity
+  a:binop-eval
+  a:associativity
+  a:add-zero
+  a:mul-zero
+  a:mul-one
+  a:distributivity
+  a:op-both-sides
+
   s:all
   axiom->string
   string->axiom)

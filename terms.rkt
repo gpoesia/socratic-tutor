@@ -6,8 +6,17 @@
 (require rebellion/type/enum)
 (require "debug.rkt")
 
-(data Term (Number Variable UnOp BinOp AnyNumber Predicate))
+; A mathematical term.
+; A Marker is a "fake" wrapper term, only used for doing formatting
+; tricks (e.g. see generate-term-boundary-string in questions.rkt).
+; The parser (term-parser.rkt) never returns markers, and general functions
+; that are manipulating terms are not supposed to handle or produce them.
+(data Term (Number Variable UnOp BinOp AnyNumber Predicate
+            Marker))
 (define-enum-type Operator (op+ op- op* op/))
+
+(define BEGIN-MARKER "[-[-[")
+(define END-MARKER "]-]-]")
 
 (define (Term? t)
   (or
@@ -129,6 +138,10 @@
                        (cons (append sts (list st)) (- idx s)))))))
              (cons (list) (- index 1))
              (subterms term))))))
+
+; Adds markers around the term with index `i` inside `t`.
+(define (mark-term t i)
+  (rewrite-subterm t Marker i))
 
 ; Tells whether a binary operator is commutative: a op b = b op a
 (define (is-commutative? op) (if (member op (list op+ op*)) #t #f))
@@ -282,8 +295,11 @@
     [(== "/") op/]
     ))
 
-
 ; Compact form of printing a term.
+; transform is a function that takes the generated string for a term
+; and the term's index and transforms it. By default, it just returns
+; the string itself, unchanged. This is used to generate a string that
+; highlights just one of the terms, based on its index.
 (define format-term
   (function
    ; AnyNumber
@@ -301,6 +317,9 @@
    ; Equality.
    [(Predicate 'Eq (a b))
     (format "~a = ~a" (format-term a) (format-term b))]
+   ; Marker
+   [(Marker t)
+    (format "~a~a~a" BEGIN-MARKER (format-term t) END-MARKER)]
    ))
 
 ; Returns (format-term t) plus the raw representation of the term.
@@ -327,4 +346,5 @@
   term-size
   goal-matches?
   Term? Number Variable UnOp BinOp AnyNumber Predicate
+  mark-term BEGIN-MARKER END-MARKER
   Operator? op+ op* op- op/ is-commutative? is-associative? is-distributive? compute-bin-op op->string string->op)
