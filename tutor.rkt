@@ -3,6 +3,7 @@
 
 (require brag/support)
 (require "terms.rkt")
+(require "facts.rkt")
 (require "term-parser.rkt")
 (require "solver.rkt")
 (require "tactics.rkt")
@@ -25,7 +26,7 @@
   (print-facts goals 1 "G"))
 
 (define (goal-met goal facts)
-  (ormap (lambda (f) (goal-matches? goal f)) facts))
+  (ormap (lambda (f) (goal-matches? goal (Fact-term f))) facts))
 
 (define (all-goals-met goals facts)
   (andmap (lambda (g) (goal-met g facts)) goals))
@@ -49,23 +50,23 @@
           (
            ; Read user input
            [l (read-line)]
-           ; Parse it as a fact f.
-           [f (parse-term l)]
+           ; Parse it as a term t.
+           [t (parse-term l)]
            ; Use solver to verify f.
-           [sr (find-solution (list f) facts s:all
+           [sr (find-solution (list t) facts s:all
                               (prune:keep-smallest-k 50) 20)]
            ; Check whether we could verify it.
            [verified (empty? (SolverResult-unmet-goals sr))]
            ; If verified, check whether it matches any goal.
-           [matched-goal (and verified (matches-any-goal f goals))]
+           [matched-goal (and verified (matches-any-goal t goals))]
            )
           (if verified
             (begin
               (printf "OK! Let's add that to what we know:\n")
-              (print-indexed-fact f (+ 1 (length facts)))
+              (print-indexed-fact t (+ 1 (length facts)))
               (and matched-goal
                    (printf "Great, this matches the goal ~a\n" (format-term matched-goal)))
-              (tutor-repl (append facts (list f)) goals))
+              (tutor-repl (append facts (list (assumption t))) goals))
             (begin
               (printf "Hmm, I could not verify that. Try again?\n")
               (tutor-repl facts goals))
@@ -76,6 +77,6 @@
   (print-facts facts)
   (printf "You need to meet:\n")
   (print-goals goals)
-  (tutor-repl facts goals))
+  (tutor-repl (map assumption facts) goals))
 
 (provide tutor solve-for)
