@@ -22,6 +22,9 @@
 
 (define (fact term proof) (new-fact term proof))
 
+(define (is-assumption? fact) (equal? (FactProof-axiom (Fact-proof fact))
+                                      'Assumption))
+
 (define (format-fact-proof fp)
   (format "~a(~a)"
           (FactProof-axiom fp)
@@ -50,6 +53,7 @@
   Fact Fact? Fact-id Fact-term Fact-proof
   FactId FactId? FactId-id
   assumption
+  is-assumption?
   fact
   format-fact
   format-fact-i
