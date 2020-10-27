@@ -85,6 +85,12 @@
       (cons result (+ 1 index))
       (subterms t))))
 
+; Substitutes all occurrences of t1 by t2 in t.
+(define (substitute-term t t1 t2)
+  (if (equal? t1 t)
+    t2
+    (replace-subterms t (map (lambda (st) (substitute-term st t1 t2)) (subterms t)))))
+
 ; Returns whether a pair of terms matches (i.e. are equal except that
 ; AnyNumber is considered equal to Number). Does not recurse: only compares
 ; the top level (which we might want to change at some point).
@@ -342,6 +348,7 @@
   format-term format-term-debug
   rewrite-subterm
   filter-subterms
+  substitute-term
   enumerate-subterms
   term-size
   goal-matches?

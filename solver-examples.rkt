@@ -53,6 +53,7 @@
     (generate-all-questions sr)
     #f))
 
+(run-example (list "x = 2 + 2" "y = x + 1") (list "x = ?" "y = ?"))
 (run-example (list "x = 1 + 2 + 3") (list "x = ?"))
 (run-example (list "0x = 1") (list "x = ?"))
 (run-example (list "x + 1 = 4") (list "x = ?"))

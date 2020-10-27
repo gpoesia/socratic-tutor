@@ -25,10 +25,19 @@
     [(Predicate 'Eq `(,t1 ,t2)) (Predicate 'Eq (list t2 t1))]
     [t #f]))
 
-; Use equality e1 := t1 = t2 to substitute occurrences
+; Use equality e := t1 = t2 to substitute occurrences
 ; of the term t1 by the term t2 in equality e2.
-(define (a:substitute-both-sides eq term)
-  #f)
+(define (a:substitute-both-sides e)
+  ((function
+     [(Predicate 'Eq `(,t1 ,t2))
+      (function
+        [(Predicate 'Eq `(,t3 ,t4))
+         (Predicate 'Eq (list (substitute-term t3 t1 t2)
+                              (substitute-term t4 t1 t2)))]
+        [t #f])
+      ]
+      [t (lambda (_) #f)])
+   e))
 
 ; Commutes both sides of a binary operation.
 (define a:commutativity?
@@ -163,6 +172,7 @@
     [(== a:mul-zero) "a:mul-zero"]
     [(== a:mul-one) "a:mul-one"]
     [(== a:distributivity) "a:distributivity"]
+    [(== a:substitute-both-sides) "a:substitute-both-sides"]
     [(== a:op-both-sides) "a:op-both-sides"]))
 
 ; Returns a unique string representing each axiom.
@@ -178,6 +188,7 @@
     [(== "a:mul-zero") a:mul-zero]
     [(== "a:mul-one") a:mul-one]
     [(== "a:distributivity") a:distributivity]
+    [(== "a:substitute-both-sides") a:substitute-both-sides]
     [(== "a:op-both-sides") a:op-both-sides]))
 
 ; ==============================
@@ -264,12 +275,26 @@
 (define (t:apply-op-both-sides met-goals unmet-goals old-facts new-facts)
   (apply append (map produce-new-equalities new-facts)))
 
+; Tactic that substitutes one equation into another.
+(define (t:substitute met-goals unmet-goals old-facts new-facts)
+  (apply append
+    (map (lambda (new-fact)
+           (let ([sub (a:substitute-both-sides (Fact-term new-fact))])
+             (map (lambda (other-fact)
+                    (fact (sub (Fact-term other-fact))
+                          (FactProof a:substitute-both-sides
+                                     (list (FactId (Fact-id new-fact))
+                                           (FactId (Fact-id other-fact))))))
+                  (append new-facts old-facts))))
+           new-facts)))
+
 ; Applies all tactics.
 (define (t:all met-goals unmet-goals old-facts new-facts)
   (apply append
          (map (lambda (t) (t met-goals unmet-goals old-facts new-facts))
               (list
-                ; t:flip
+                t:flip
+                t:substitute
                 t:eval
                 t:associativity
                 t:commutativity
@@ -301,6 +326,7 @@
   a:mul-one
   a:distributivity
   a:op-both-sides
+  a:substitute-both-sides
 
   s:all
   axiom->string
