@@ -56,6 +56,15 @@
        (format-fact-i (find-fact (first-param fact-proof) all-facts))
        (operation-name (third-param fact-proof))
        (format-term (second-param fact-proof)))]
+    [(== a:substitute-both-sides)
+     (let ([source (find-fact (first-param fact-proof) all-facts)]
+           [target (find-fact (second-param fact-proof) all-facts)])
+       (format
+         "What do you get if you use\n~a\n to substitute ~a by ~a in ~a?\n"
+         (format-fact-i source)
+         (format-term (first (Predicate-terms (Fact-term source))))
+         (format-term (second (Predicate-terms (Fact-term source))))
+         (format-fact-i target)))]
     [_ #f]))
 
 (define (generate-term-boundary-string fact t-idx [fmt format-fact-i])
