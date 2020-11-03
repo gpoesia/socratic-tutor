@@ -55,9 +55,14 @@
       (let*-values
         ([(next-tactic new-strategy-state)
             (strategy old-facts last-facts unmet-goals strategy-state)]
-         [(new-facts-unfiltered)
+         [(new-facts-unfiltered kept-old-facts)
             (next-tactic met-goals unmet-goals old-facts last-facts)]
-         [(next-old-facts) (append old-facts last-facts)]
+         [(next-old-facts-ids) (trace-facts
+                                 (append old-facts last-facts)
+                                 kept-old-facts)]
+         [(next-old-facts) (filter (lambda (f) 
+                                     (member (Fact-id f) next-old-facts-ids))
+                                   (append old-facts last-facts))]
          [(new-facts) (prune (remove* next-old-facts 
                                       (remove-duplicates
                                         new-facts-unfiltered

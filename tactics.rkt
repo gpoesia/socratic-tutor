@@ -7,6 +7,7 @@
 (require racket/list)
 (require racket/function)
 (require racket/match)
+(require rebellion/type/enum)
 (require "terms.rkt")
 (require "facts.rkt")
 (require "debug.rkt")
@@ -290,21 +291,23 @@
 
 ; Applies all tactics.
 (define (t:all met-goals unmet-goals old-facts new-facts)
-  (apply append
-         (map (lambda (t) (t met-goals unmet-goals old-facts new-facts))
-              (list
-                t:flip
-                t:substitute
-                t:eval
-                t:associativity
-                t:commutativity
-                t:subtraction-commutativity
-                t:distributivity
-                t:add-zero
-                t:mul-zero
-                t:mul-one
-                t:apply-op-both-sides
-                ))))
+  (values
+    (apply append
+           (map (lambda (t) (t met-goals unmet-goals old-facts new-facts))
+                (list
+                  t:flip
+                  t:substitute
+                  t:eval
+                  t:associativity
+                  t:commutativity
+                  t:subtraction-commutativity
+                  t:distributivity
+                  t:add-zero
+                  t:mul-zero
+                  t:mul-one
+                  t:apply-op-both-sides
+                  )))
+    (append old-facts new-facts)))
 
 ; ==============================
 ; ======== Strategies ==========
