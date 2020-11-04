@@ -3,6 +3,7 @@
 #lang algebraic/racket/base
 
 (require racket/string)
+(require racket/function)
 (require racket/format)
 (require "terms.rkt")
 
@@ -24,6 +25,10 @@
 
 (define (is-assumption? fact) (equal? (FactProof-axiom (Fact-proof fact))
                                       'Assumption))
+
+(define (fact-dependencies f)
+  (filter identity (map (lambda (a) (if (FactId? a) (FactId-id a) #f))
+                        (FactProof-parameters (Fact-proof f)))))
 
 (define (format-fact-proof fp)
   (format "~a(~a)"
@@ -55,6 +60,7 @@
   assumption
   is-assumption?
   fact
+  fact-dependencies
   format-fact
   format-fact-i
   format-fact-v

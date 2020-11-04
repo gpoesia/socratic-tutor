@@ -53,21 +53,26 @@
       (SolverResult (append old-facts last-facts)
                     met-goals unmet-goals contradiction)
       (let*-values
-        ([(next-tactic new-strategy-state)
+        ([(new-facts-unfiltered kept-old-facts new-strategy-state)
             (strategy old-facts last-facts unmet-goals strategy-state)]
-         [(new-facts-unfiltered kept-old-facts)
-            (next-tactic met-goals unmet-goals old-facts last-facts)]
          [(next-old-facts-ids) (trace-facts
                                  (append old-facts last-facts)
-                                 kept-old-facts)]
+                                 (append kept-old-facts new-facts-unfiltered))]
          [(next-old-facts) (filter (lambda (f) 
-                                     (member (Fact-id f) next-old-facts-ids))
+                                     (and
+                                       (member (Fact-id f) next-old-facts-ids)
+                                       (not (member f new-facts-unfiltered))))
                                    (append old-facts last-facts))]
-         [(new-facts) (prune (remove* next-old-facts 
-                                      (remove-duplicates
-                                        new-facts-unfiltered
-                                        #:key Fact-term)
-                                      fact-terms-equal?))]
+         [(renewed-facts) (filter (lambda (f)
+                                    (or (member f old-facts)
+                                        (member f last-facts)))
+                                  new-facts-unfiltered)]
+         [(dedup-new-facts) (remove* (append next-old-facts renewed-facts)
+                                     (remove-duplicates
+                                       new-facts-unfiltered
+                                       #:key Fact-term)
+                                     fact-terms-equal?)]
+         [(new-facts) (append renewed-facts (prune dedup-new-facts))]
          [(new-met-goals new-unmet-goals) 
             (match-goals met-goals unmet-goals new-facts)])
         (find-solution-loop
@@ -122,12 +127,7 @@
 ; Returns a pruner function that sorts facts by term size and gets the k
 ; smallest, with a random tie breaking.
 (define (prune:keep-smallest-k k)
-  (lambda (facts)
-    (take
-      (sort (shuffle facts)
-            (lambda (a b) (< (term-size (Fact-term a)) 
-                             (term-size (Fact-term b)))))
-      (min k (length facts)))))
+  (lambda (facts) (smallest-k-facts k facts)))
 
 ; Returns a pruner function that samples k facts uniformly.
 (define (prune:keep-random-k k)
@@ -145,6 +145,21 @@
                                                      all-solution-steps))
                                  (SolverResult-facts sr))])
     (renumber relevant-facts)))
+
+; Topologically sort facts by their proof dependencies.
+; Worst-case O(N^3), but always called on lists containing just solution
+; steps, which are very small.
+(define (facts-toposort facts [included empty])
+  (let* ([next (filter
+                 (lambda (f)
+                   (and (not (member (Fact-id f) included))
+                        (andmap (lambda (d) (member d included))
+                                (fact-dependencies f))))
+                 facts)])
+    (printf "Next: ~a / ~a\n" (map format-fact facts) next)
+    (if (empty? next)
+      empty
+      (append next (facts-toposort facts (append included (map Fact-id next)))))))
 
 ; Returns a step-by-step derivation of a contradiction from a
 ; SolverResult, in case the solver found one.
@@ -168,15 +183,11 @@
       (map 
         (lambda (f)
           (let* ([proof-arguments (FactProof-parameters (Fact-proof f))]
-                 [used-facts (filter identity
-                                     (map (lambda (p)
-                                            (if (FactId? p) (FactId-id p) #f))
-                                          proof-arguments))])
+                 [dependencies (fact-dependencies f)])
             (append (list (Fact-id f))
-                    used-facts
+                    dependencies
                     (trace-facts all-facts
-                      (filter (lambda (f) (member (Fact-id f)
-                                                  used-facts))
+                      (filter (lambda (f) (member (Fact-id f) dependencies))
                               all-facts))))
           )
         facts))))
@@ -187,7 +198,7 @@
   (for/fold ([new-id (hash)]
              [new-facts (list)]
              #:result (reverse new-facts))
-            ([f (in-list facts)]
+            ([f (in-list (facts-toposort facts))]
              [i (in-range 1 (+ 1 (length facts)))])
     (let ([proof (Fact-proof f)])
       (values
