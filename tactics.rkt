@@ -5,6 +5,7 @@
 (require algebraic/function)
 (require algebraic/racket/base/forms)
 (require racket/list)
+(require racket/string)
 (require racket/function)
 (require racket/match)
 (require rebellion/type/enum)
@@ -57,6 +58,29 @@
 
 (define a:subtraction-commutativity
   (phi (BinOp op (BinOp op a b) c) (BinOp op (BinOp op a c) b)))
+
+; Computes a subtraction between equal terms, resulting in 0.
+(define a:subtraction-same?
+  (function
+    [(BinOp (op #:if (eq? op op-)) a b) (equal? a b)]
+    [_ #f]))
+
+(define a:subtraction-same
+  (phi (BinOp op a b) (Number 0)))
+
+; Combines a */ b +- c */ b as (a +- c) */ b
+(define a:combine-coefficients?
+  (function
+    [(BinOp op1 (BinOp op2 a b) (BinOp op3 c d))
+     (and
+       (eq? op2 op3)
+       (or (eq? op1 op+) (eq? op1 op-))
+       (or (eq? op2 op*) (eq? op1 op/)))]
+    [_ #f]))
+
+(define a:combine-coefficients
+  (phi (BinOp op1 (BinOp op2 a b) (BinOp op3 c d))
+       (BinOp op2 (BinOp op1 a c) b)))
 
 ; Rearranges an associative operation.
 (define a:associativity?
@@ -167,6 +191,8 @@
     [(== a:flip-equality) "a:flip-equality"]
     [(== a:commutativity) "a:commutativity"]
     [(== a:subtraction-commutativity) "a:subtraction-commutativity"]
+    [(== a:subtraction-same) "a:subtraction-same"]
+    [(== a:combine-coefficients) "a:combine-coefficients"]
     [(== a:associativity) "a:associativity"]
     [(== a:binop-eval) "a:binop-eval"]
     [(== a:add-zero) "a:add-zero"]
@@ -183,6 +209,8 @@
     [(== "a:flip-equality") a:flip-equality]
     [(== "a:commutativity") a:commutativity]
     [(== "a:subtraction-commutativity") a:subtraction-commutativity]
+    [(== "a:subtraction-same") a:subtraction-same]
+    [(== "a:combine-coefficients") a:combine-coefficients]
     [(== "a:associativity") a:associativity]
     [(== "a:binop-eval") a:binop-eval]
     [(== "a:add-zero") a:add-zero]
@@ -198,13 +226,13 @@
 ; Tactics apply axioms to the new known facts, producing others.
 
 ; Apply a:flip-equality.
-(define (t:flip met-goals unmet-goals old-facts new-facts)
+(define (t:flip unmet-goals old-facts new-facts)
   (filter identity (map a:flip-equality new-facts)))
 
 ; Meta-tactic that applies a simple term-level transform pair
 ; to all new facts, in all terms that satisfy the given predicate.
 (define-syntax-rule (local-rewrite-tactic name predicate transform)
-  (define (name met-goals unmet-goals old-facts new-facts)
+  (define (name unmet-goals old-facts new-facts)
     (apply append
       (map (lambda (f)
              (let ([indices (filter-subterms (Fact-term f) predicate)])
@@ -233,10 +261,18 @@
 ; Apply a:commutativity.
 (local-rewrite-tactic t:commutativity a:commutativity? a:commutativity)
 
+; Apply a:combine-coefficients
+(local-rewrite-tactic t:combine-coefficients
+                      a:combine-coefficients?
+                      a:combine-coefficients)
+
 ; Apply a:subtraction-commutativity
 (local-rewrite-tactic t:subtraction-commutativity
                       a:subtraction-commutativity?
                       a:subtraction-commutativity)
+
+; Apply a:subtraction-same.
+(local-rewrite-tactic t:subtraction-same a:subtraction-same? a:subtraction-same)
 
 ; Apply a:distributivity.
 (local-rewrite-tactic t:distributivity a:distributivity? a:distributivity)
@@ -273,11 +309,11 @@
        ) t)]
     [_ empty]))
 
-(define (t:apply-op-both-sides met-goals unmet-goals old-facts new-facts)
+(define (t:apply-op-both-sides unmet-goals old-facts new-facts)
   (apply append (map produce-new-equalities new-facts)))
 
 ; Tactic that substitutes one equation into another.
-(define (t:substitute met-goals unmet-goals old-facts new-facts)
+(define (t:substitute unmet-goals old-facts new-facts)
   (apply append
     (map (lambda (new-fact)
            (let ([sub (a:substitute-both-sides (Fact-term new-fact))])
@@ -289,11 +325,14 @@
                   (append new-facts old-facts))))
            new-facts)))
 
+(define (combine-tactics tactics)
+  (lambda (unmet-goals old-facts new-facts)
+      (apply append
+             (map (lambda (t) (t unmet-goals old-facts new-facts))
+                  tactics))))
+
 ; Applies all tactics.
-(define (t:all met-goals unmet-goals old-facts new-facts)
-  (values
-    (apply append
-           (map (lambda (t) (t met-goals unmet-goals old-facts new-facts))
+(define t:all (combine-tactics
                 (list
                   t:flip
                   t:substitute
@@ -301,22 +340,87 @@
                   t:associativity
                   t:commutativity
                   t:subtraction-commutativity
+                  t:subtraction-same
+                  t:combine-coefficients
                   t:distributivity
                   t:add-zero
                   t:mul-zero
                   t:mul-one
                   t:apply-op-both-sides
                   )))
-    (append old-facts new-facts)))
 
 ; ==============================
 ; ======== Strategies ==========
 ; ==============================
 ; These guide the solver in applying tactics.
 
-; Always apply all known tactics.
+; Trivial strategy: always apply all known tactics.
 (define (s:all old-facts last-facts unmet-goals strategy-state)
-  (values t:all #f))
+  (values (t:all unmet-goals old-facts last-facts)
+          (append old-facts last-facts)
+          #f))
+
+; Applies tactics to try to solve linear equations using a common strategy.
+; Algorithm:
+; 1- Apply t:eval, t:associativity, t:commutativity, t:subtraction-commutativity,
+;          t:distributivity, t:add-zero, t:mul-zero, t:mul-one, until they don't
+;          produce any more facts.
+; 2- Get only the top k simplest facts found
+; 3- Apply one round of apply-op-both-sides
+; 4- Repeat (1-3) until it managed to isolate a variable. Either we reached
+;    (a) v = number, or (b) v = <some function of other variables>.
+;    If (a), we're done; otherwise, apply one round of t:substitute and
+;    repeat from (1).
+
+(define-enum-type s:equations-state (st:simpl st:filter st:op-both-sides st:substitute))
+
+(define t:equations-simpl
+  (combine-tactics
+    (list
+      t:eval
+      t:associativity
+      t:commutativity
+      t:subtraction-commutativity
+;      t:subtraction-same
+;      t:combine-coefficients
+      t:distributivity
+      t:add-zero
+      t:mul-zero
+      t:mul-one)))
+
+(define (smallest-k-facts k facts)
+  (define l
+    (take
+      (sort (shuffle facts)
+            (lambda (a b) (< (term-size (Fact-term a))
+                             (term-size (Fact-term b)))))
+      (min k (length facts))))
+  (printf "Keeping ~a\n" (string-join (map (lambda (f) (format-term (Fact-term f))) l) ", "))
+  l)
+
+(define (s:equations old-facts last-facts unmet-goals last-state)
+  (let* ([state (cond
+                  [(and (equal? last-state st:simpl)
+                        (> 0 (length last-facts))) st:simpl]
+                  [(and (equal? last-state st:simpl)
+                        (equal? 0 (length last-facts))) st:filter]
+                  [(equal? last-state st:filter) st:op-both-sides]
+                  [(equal? last-state st:op-both-sides) st:simpl]
+                  [(equal? last-state st:substitute) st:simpl]
+                  [else st:simpl])]
+         [_ (printf "Solver state: ~a\n" state)]
+         [new-facts 
+           (match state
+             [(== st:simpl) (t:equations-simpl unmet-goals old-facts last-facts)]
+             [(== st:filter) (smallest-k-facts 50 (append old-facts last-facts ))]
+             [(== st:op-both-sides) (t:apply-op-both-sides unmet-goals old-facts last-facts)])]
+         [kept-existing-facts
+           (match state
+             [(or (== st:simpl) (== st:op-both-sides))
+              (append old-facts last-facts)]
+             [(== st:filter) empty])]
+         )
+    (values new-facts kept-existing-facts state)))
 
 (provide
   a:premise
@@ -332,5 +436,9 @@
   a:substitute-both-sides
 
   s:all
+  s:equations
   axiom->string
-  string->axiom)
+  string->axiom
+
+  smallest-k-facts
+  )
