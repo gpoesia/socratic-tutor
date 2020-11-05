@@ -55,7 +55,7 @@
           (cond
             [(equal? l "help")
              (printf "Let me see...\n")
-             (let* ([sr (find-solution goals facts s:all
+             (let* ([sr (find-solution goals facts s:equations
                                        (prune:keep-smallest-k 50) 20)]
                     [solved? (empty? (SolverResult-unmet-goals sr))]
                     [step-by-step (and solved? 
@@ -72,24 +72,25 @@
               (let* (
                 ; Parse it as a term t.
                 [t (parse-term l)]
-                ; Use solver to verify f.
-                [sr (find-solution (list t) facts s:all
-                                   (prune:keep-smallest-k 50) 20)]
-                ; Check whether we could verify it.
-                [verified (empty? (SolverResult-unmet-goals sr))]
+                ; Check if we can prove f is false.
+                [sr (find-solution goals (append facts (list (assumption t))) s:all
+                                   (prune:keep-smallest-k 50) 10)]
+                [contradiction (SolverResult-contradiction sr)]
                 ; If verified, check whether it matches any goal.
-                [matched-goal (and verified (matches-any-goal t goals))])
-                (if verified
+                [matched-goal (and (not contradiction) (matches-any-goal t goals))])
+                (if (not contradiction)
                   (begin
                     (printf "OK! Let's add that to what we know:\n")
                     (print-indexed-fact t (+ 1 (length facts)))
                     (and matched-goal
                          (printf "Great, this matches the goal ~a\n" (format-term matched-goal)))
                     (tutor-repl (append facts (list (assumption t))) goals))
-                  (begin
-                    (printf "Hmm, I could not verify that. Try again?\n")
-                    (tutor-repl facts goals))
-                  ))]))))))
+                  (let* ([step-by-step (get-step-by-step-contradiction sr)]
+                         [question (generate-leading-question
+                                     (Fact-proof (first-non-assumption step-by-step))
+                                     step-by-step)])
+                    (printf "Hmm... ~a\n" question)
+                    (tutor-repl facts goals))))]))))))
 
 (define (tutor facts goals)
   (printf "Let's solve a math problem! Given:\n")
