@@ -156,7 +156,6 @@
                         (andmap (lambda (d) (member d included))
                                 (fact-dependencies f))))
                  facts)])
-    (printf "Next: ~a / ~a\n" (map format-fact facts) next)
     (if (empty? next)
       empty
       (append next (facts-toposort facts (append included (map Fact-id next)))))))

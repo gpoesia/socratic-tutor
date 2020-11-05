@@ -68,20 +68,6 @@
 (define a:subtraction-same
   (phi (BinOp op a b) (Number 0)))
 
-; Combines a */ b +- c */ b as (a +- c) */ b
-(define a:combine-coefficients?
-  (function
-    [(BinOp op1 (BinOp op2 a b) (BinOp op3 c d))
-     (and
-       (eq? op2 op3)
-       (or (eq? op1 op+) (eq? op1 op-))
-       (or (eq? op2 op*) (eq? op1 op/)))]
-    [_ #f]))
-
-(define a:combine-coefficients
-  (phi (BinOp op1 (BinOp op2 a b) (BinOp op3 c d))
-       (BinOp op2 (BinOp op1 a c) b)))
-
 ; Rearranges an associative operation.
 (define a:associativity?
   (function
@@ -192,7 +178,6 @@
     [(== a:commutativity) "a:commutativity"]
     [(== a:subtraction-commutativity) "a:subtraction-commutativity"]
     [(== a:subtraction-same) "a:subtraction-same"]
-    [(== a:combine-coefficients) "a:combine-coefficients"]
     [(== a:associativity) "a:associativity"]
     [(== a:binop-eval) "a:binop-eval"]
     [(== a:add-zero) "a:add-zero"]
@@ -210,7 +195,6 @@
     [(== "a:commutativity") a:commutativity]
     [(== "a:subtraction-commutativity") a:subtraction-commutativity]
     [(== "a:subtraction-same") a:subtraction-same]
-    [(== "a:combine-coefficients") a:combine-coefficients]
     [(== "a:associativity") a:associativity]
     [(== "a:binop-eval") a:binop-eval]
     [(== "a:add-zero") a:add-zero]
@@ -225,9 +209,21 @@
 ; ==============================
 ; Tactics apply axioms to the new known facts, producing others.
 
+; When to apply t:flip
+(define isolated-variable-t?
+  (function
+    [(Predicate 'Eq `(,t1 ,t2)) (or (Variable? t1) (Variable? t2))]
+    [_ #f]))
+
+(define (isolated-variable? f)
+  (isolated-variable-t? (Fact-term f)))
+
 ; Apply a:flip-equality.
 (define (t:flip unmet-goals old-facts new-facts)
-  (filter identity (map a:flip-equality new-facts)))
+  (map (lambda (f)
+         (fact (a:flip-equality (Fact-term f))
+               (FactProof a:flip-equality (list (Fact-id f)))))
+       (filter isolated-variable? new-facts)))
 
 ; Meta-tactic that applies a simple term-level transform pair
 ; to all new facts, in all terms that satisfy the given predicate.
@@ -260,11 +256,6 @@
 
 ; Apply a:commutativity.
 (local-rewrite-tactic t:commutativity a:commutativity? a:commutativity)
-
-; Apply a:combine-coefficients
-(local-rewrite-tactic t:combine-coefficients
-                      a:combine-coefficients?
-                      a:combine-coefficients)
 
 ; Apply a:subtraction-commutativity
 (local-rewrite-tactic t:subtraction-commutativity
@@ -323,7 +314,7 @@
                                      (list (FactId (Fact-id new-fact))
                                            (FactId (Fact-id other-fact))))))
                   (append new-facts old-facts))))
-           new-facts)))
+         (filter isolated-variable? new-facts))))
 
 (define (combine-tactics tactics)
   (lambda (unmet-goals old-facts new-facts)
@@ -341,7 +332,6 @@
                   t:commutativity
                   t:subtraction-commutativity
                   t:subtraction-same
-                  t:combine-coefficients
                   t:distributivity
                   t:add-zero
                   t:mul-zero
@@ -381,22 +371,38 @@
       t:associativity
       t:commutativity
       t:subtraction-commutativity
-;      t:subtraction-same
-;      t:combine-coefficients
+      t:subtraction-same
       t:distributivity
+      t:flip
       t:add-zero
       t:mul-zero
       t:mul-one)))
 
 (define (smallest-k-facts k facts)
-  (define l
-    (take
-      (sort (shuffle facts)
-            (lambda (a b) (< (term-size (Fact-term a))
-                             (term-size (Fact-term b)))))
-      (min k (length facts))))
-  (printf "Keeping ~a\n" (string-join (map (lambda (f) (format-term (Fact-term f))) l) ", "))
-  l)
+  (take
+    (sort (shuffle facts)
+          (lambda (a b) (< (term-size (Fact-term a))
+                           (term-size (Fact-term b)))))
+    (min k (length facts))))
+
+; Look for facts that meet isolated-variable? and that have not been used yet.
+(define (any-new-isolated-variable? facts)
+  (ormap
+    (lambda (f)
+      (and
+        (isolated-variable? f)
+        (let ([id (Fact-id f)])
+              (andmap (lambda (of) (not (member id (fact-dependencies of))))
+                      facts))))
+    facts))
+
+(define is-trivial?
+  (function
+    [(Predicate 'Eq `(,a ,b)) (equal? a b)]
+    [_ #f]))
+
+(define (remove-trivial facts)
+  (filter (lambda (f) (not (is-trivial? (Fact-term f)))) facts))
 
 (define (s:equations old-facts last-facts unmet-goals last-state)
   (let* ([state (cond
@@ -404,23 +410,25 @@
                         (> 0 (length last-facts))) st:simpl]
                   [(and (equal? last-state st:simpl)
                         (equal? 0 (length last-facts))) st:filter]
+                  [(and (equal? last-state st:filter)
+                        (any-new-isolated-variable? last-facts)) st:substitute]
                   [(equal? last-state st:filter) st:op-both-sides]
+                  [(equal? last-state st:substitute) st:op-both-sides]
                   [(equal? last-state st:op-both-sides) st:simpl]
-                  [(equal? last-state st:substitute) st:simpl]
                   [else st:simpl])]
-         [_ (printf "Solver state: ~a\n" state)]
-         [new-facts 
+         [new-facts
            (match state
              [(== st:simpl) (t:equations-simpl unmet-goals old-facts last-facts)]
-             [(== st:filter) (smallest-k-facts 50 (append old-facts last-facts ))]
-             [(== st:op-both-sides) (t:apply-op-both-sides unmet-goals old-facts last-facts)])]
+             [(== st:filter) (smallest-k-facts 50 (append old-facts last-facts))]
+             [(== st:op-both-sides) (t:apply-op-both-sides unmet-goals old-facts last-facts)]
+             [(== st:substitute) (t:substitute unmet-goals old-facts last-facts)])]
          [kept-existing-facts
            (match state
-             [(or (== st:simpl) (== st:op-both-sides))
+             [(or (== st:simpl) (== st:op-both-sides) (== st:substitute))
               (append old-facts last-facts)]
              [(== st:filter) empty])]
          )
-    (values new-facts kept-existing-facts state)))
+    (values (remove-trivial new-facts) kept-existing-facts state)))
 
 (provide
   a:premise

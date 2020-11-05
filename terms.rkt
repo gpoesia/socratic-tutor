@@ -352,7 +352,8 @@
   enumerate-subterms
   term-size
   goal-matches?
-  Term? Number Variable UnOp BinOp AnyNumber Predicate
+  Number Variable UnOp BinOp AnyNumber Predicate
+  Term? Number? Variable? UnOp? BinOp? AnyNumber? Predicate?
   Predicate-type Predicate-terms
   mark-term BEGIN-MARKER END-MARKER
   Operator? op+ op* op- op/ is-commutative? is-associative? is-distributive? compute-bin-op op->string string->op)
