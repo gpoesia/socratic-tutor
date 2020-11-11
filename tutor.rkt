@@ -99,4 +99,8 @@
   (print-goals goals)
   (tutor-repl (map assumption facts) goals))
 
-(provide tutor solve-for)
+(provide
+  tutor
+  solve-for
+  first-non-assumption
+  )

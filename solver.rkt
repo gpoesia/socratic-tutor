@@ -15,6 +15,12 @@
 (require "debug.rkt")
 
 (struct Problem (initial-facts goals) #:transparent)
+
+(define (format-problem p)
+  (format "Given ~a solve ~a"
+          (string-join (map format-fact (Problem-initial-facts p)) ", ")
+          (string-join (map format-term (Problem-goals p)) ", ")))
+
 (struct SolverResult (facts
                       met-goals
                       unmet-goals
@@ -215,7 +221,7 @@
           new-facts)))))
 
 (provide
-  Problem? Problem Problem-initial-facts Problem-goals
+  Problem? Problem Problem-initial-facts Problem-goals format-problem
   SolverResult SolverResult?
   SolverResult-facts
   SolverResult-met-goals
