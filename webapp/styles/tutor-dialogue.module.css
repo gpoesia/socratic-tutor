@@ -1,0 +1,48 @@
+.dialogueContainer {
+  display: flex;
+  padding: 3em;
+}
+
+.factsContainer {
+  flex: 1;
+}
+
+.historyContainer {
+  flex: 1;
+}
+
+.messagesContainer {
+  font-family: monospace;
+  font-size: 1.25em;
+  overflow-y: scroll;
+  max-height: 60vh;
+}
+
+.inputContainer {
+  margin-top: 0.5em;
+}
+
+.inputContainer * {
+  margin-right: 0.5em;
+  height: 100%;
+}
+
+.message-tutor {
+  display: flex;
+}
+
+.message-tutor pre {
+  margin-right: 30%;
+  padding: 1.5em;
+  border-radius: 0.5em;
+  background-color: lightblue;
+  flex-direction: row;
+}
+
+.message-student pre {
+  margin-left: 30%;
+  padding: 1.5em;
+  border-radius: 0.5em;
+  background-color: lightgreen;
+  flex-direction: row-reverse;
+}
