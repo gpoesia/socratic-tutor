@@ -29,6 +29,10 @@
 ; Returns a number between -10 and 10
 (define (random-small-integer) (choice (range -10 11)))
 
+; Returns a number between -10 and 10 that is not zero.
+(define (random-nonzero-small-integer)
+  (* (choice (range 1 11)) (choice (list -1 1))))
+
 ; Generates a term that is equivalent to the given number.
 (define (random-eqv-number n)
   (match (choice '(+ - * /))
@@ -36,7 +40,7 @@
                (BinOp op+ (Number m) (Number (- n m))))]
     [(== '-) (let ([m (random-small-integer)])
                (BinOp op- (Number (+ n m)) (Number m)))]
-    [(== '/) (let ([m (random-small-integer)])
+    [(== '/) (let ([m (random-nonzero-small-integer)])
                (BinOp op/ (Number (* n m)) (Number m)))]
     [(== '*) (let ([f (if (eq? 0 n) (random-small-integer)
                                     (choice (divisors n)))])
@@ -122,12 +126,12 @@
 (define (generate-problem)
   (let* ([variables (map ~a (take (shuffle (string->list "abcdefghijklmnopqrstuvwxyz")) (choice '(1 2 3))))]
          [answer (map (lambda (v) (cons v (random-small-integer))) variables)]
-         [goals (map (lambda (v) (Predicate 'Eq (list (Variable v) 
+         [goals (map (lambda (v) (Predicate 'Eq (list (Variable v)
                                                       (AnyNumber))))
                      variables)]
          [base-facts
            (map (lambda (var-value)
-                  (Predicate 'Eq (list (Variable (car var-value)) 
+                  (Predicate 'Eq (list (Variable (car var-value))
                                        (Number (cdr var-value)))))
                 answer)])
     (Problem
@@ -153,7 +157,7 @@
         (printf "Solver succeeded!\n")
         (place-channel-put
           channel
-          (to-jsexpr 
+          (to-jsexpr
             (hash
               'problem problem
               'solution (engine-result e))))
@@ -171,7 +175,7 @@
                           (range n-threads))]
              [loop (lambda (all i)
                      (define result (place-channel-get
-                                      (list-ref places 
+                                      (list-ref places
                                                 (remainder i n-threads))))
                      (if (eq? 0 (remainder i 10))
                        (begin

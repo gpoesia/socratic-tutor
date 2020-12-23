@@ -27,7 +27,7 @@
           (string-join (map format-fact facts) "\n")
           (string-join (map format-term goals) ", "))
   (define sr (from-json-string (to-json-string 
-    (find-solution goals facts s:equations (prune:keep-smallest-k 20) 100))))
+    (find-solution goals facts s:all (prune:keep-smallest-k 20) 100))))
   (define succeeded? (empty? (SolverResult-unmet-goals sr)))
   (define contradiction? (SolverResult-contradiction sr))
   (printf

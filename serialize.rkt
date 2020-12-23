@@ -17,10 +17,12 @@
 
 (define (to-jsexpr obj)
   (cond
-    [(Term? obj) 
+    [(Term? obj)
       (hash 'type "Term" 'value (format-term obj))]
     [(FactId? obj)
       (hash 'type "FactId" 'value (FactId-id obj))]
+    [(FactProofAnnotation? obj)
+      (hash 'type "FactProofAnnotation" 'content (FactProofAnnotation-content obj))]
     [(FactProof? obj)
       (hash 'type "FactProof"
             'axiom (axiom->string (FactProof-axiom obj))
@@ -48,7 +50,7 @@
            'goals (to-jsexpr (Problem-goals obj)))]
     [(list? obj) (map to-jsexpr obj)]
     [(hash? obj)
-     (make-hash 
+     (make-hash
        (hash-map obj (lambda (k v) (cons k (to-jsexpr v)))))]
     [else obj]
     ))
@@ -63,6 +65,7 @@
   (cond
     [(obj-type obj "Term") (parse-term (hash-ref obj 'value))]
     [(obj-type obj "FactId") (FactId (hash-ref obj 'value))]
+    [(obj-type obj "FactProofAnnotation") (FactProofAnnotation (hash-ref obj 'content))]
     [(obj-type obj "Operator") (string->op (hash-ref obj 'operator))]
     [(obj-type obj "FactProof")
      (FactProof

@@ -12,6 +12,11 @@
 ; Used to tag FactProof parameters that refer to previous facts.
 (struct FactId (id) #:transparent)
 
+; Used to tag a FactProof argument that provides legible information about the
+; proof, but that is not interpreted formally. This is used to facilitate the
+; job of the value function learner.
+(struct FactProofAnnotation (content) #:transparent)
+
 (struct Fact (id term proof))
 
 (define (new-fact term proof)
@@ -30,16 +35,23 @@
   (filter identity (map (lambda (a) (if (FactId? a) (FactId-id a) #f))
                         (FactProof-parameters (Fact-proof f)))))
 
-(define (format-fact-proof fp)
-  (format "~a(~a)"
-          (FactProof-axiom fp)
-          (string-join (map ~s (FactProof-parameters fp)))))
+(define (format-proof-argument pa)
+  (cond
+    [(FactId? pa) (format "f:(~a)" (FactId-id pa))]
+    [(FactProofAnnotation? pa) (format "a:(~a)" (FactProofAnnotation-content pa))]
+    [(Term? pa) (format "t:(~a)" )]
+    [#t (~s pa)]))
+
+(define (format-fact-proof fp [format-axiom ~s])
+  (format "~a [~a]"
+          (format-axiom (FactProof-axiom fp))
+          (string-join (map format-proof-argument (FactProof-parameters fp)) ",")))
 
 (define (format-fact f [proof? #f] [id? #f])
   (format "~a~a~a"
     (if id? (format "(~a) " (Fact-id f)) "")
     (format-term (Fact-term f))
-    (if proof? (format " [~a]"
+    (if proof? (format " :: ~a"
                        (format-fact-proof (Fact-proof f)))
       "")))
 
@@ -57,6 +69,7 @@
   FactProof FactProof? FactProof-axiom FactProof-parameters
   Fact Fact? Fact-id Fact-term Fact-proof
   FactId FactId? FactId-id
+  FactProofAnnotation FactProofAnnotation? FactProofAnnotation-content
   assumption
   is-assumption?
   fact

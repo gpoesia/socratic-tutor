@@ -46,7 +46,7 @@
           met-goals
           unmet-goals
           strategy-state
-          strategy 
+          strategy
           prune
           depth)
   (log-debug "find-solution-loop depth ~a, ~a new facts: ~a\n"
@@ -64,7 +64,7 @@
          [(next-old-facts-ids) (trace-facts
                                  (append old-facts last-facts)
                                  (append kept-old-facts new-facts-unfiltered))]
-         [(next-old-facts) (filter (lambda (f) 
+         [(next-old-facts) (filter (lambda (f)
                                      (and
                                        (member (Fact-id f) next-old-facts-ids)
                                        (not (member f new-facts-unfiltered))))
@@ -79,7 +79,7 @@
                                        #:key Fact-term)
                                      fact-terms-equal?)]
          [(new-facts) (append renewed-facts (prune dedup-new-facts))]
-         [(new-met-goals new-unmet-goals) 
+         [(new-met-goals new-unmet-goals)
             (match-goals met-goals unmet-goals new-facts)])
         (find-solution-loop
           next-old-facts
@@ -145,7 +145,7 @@
 (define (get-step-by-step-solution sr)
   (let* ([solutions (map (lambda (g) (goal-solution g sr))
                          (SolverResult-met-goals sr))]
-         [all-solution-steps (trace-facts (SolverResult-facts sr) 
+         [all-solution-steps (trace-facts (SolverResult-facts sr)
                                           solutions)]
          [relevant-facts (filter (lambda (f) (member (Fact-id f)
                                                      all-solution-steps))
@@ -170,7 +170,7 @@
 ; SolverResult, in case the solver found one.
 (define (get-step-by-step-contradiction sr)
   (if (SolverResult-contradiction sr)
-    (let* ([all-steps (trace-facts 
+    (let* ([all-steps (trace-facts
                         (SolverResult-facts sr)
                         (list (SolverResult-contradiction sr)))]
            [relevant-facts (filter (lambda (f) (member (Fact-id f)
@@ -185,7 +185,7 @@
   (if (empty? facts)
     empty
     (apply append
-      (map 
+      (map
         (lambda (f)
           (let* ([proof-arguments (FactProof-parameters (Fact-proof f))]
                  [dependencies (fact-dependencies f)])
@@ -208,7 +208,7 @@
     (let ([proof (Fact-proof f)])
       (values
         (hash-set new-id (Fact-id f) i)
-        (cons 
+        (cons
           (Fact i ; New ID.
                 (Fact-term f) ; Same term.
                 (FactProof
@@ -232,6 +232,7 @@
   goal-solution
   get-step-by-step-solution
   get-step-by-step-contradiction
+  trace-facts
   renumber
   prune:keep-all
   prune:keep-smallest-k

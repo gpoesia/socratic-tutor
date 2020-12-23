@@ -222,7 +222,7 @@
 (define (t:flip unmet-goals old-facts new-facts)
   (map (lambda (f)
          (fact (a:flip-equality (Fact-term f))
-               (FactProof a:flip-equality (list (Fact-id f)))))
+               (FactProof a:flip-equality (list (FactId (Fact-id f))))))
        (filter isolated-variable? new-facts)))
 
 ; Meta-tactic that applies a simple term-level transform pair
@@ -239,8 +239,8 @@
                                    (format-term (Fact-term f))
                                    (format-term rewritten))
                         (if rewritten
-                          (fact rewritten 
-                                (FactProof 
+                          (fact rewritten
+                                (FactProof
                                   transform
                                   (list (FactId (Fact-id f)) i)))
                           #f
