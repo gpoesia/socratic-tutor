@@ -39,7 +39,7 @@
   (cond
     [(FactId? pa) (format "f:(~a)" (FactId-id pa))]
     [(FactProofAnnotation? pa) (format "a:(~a)" (FactProofAnnotation-content pa))]
-    [(Term? pa) (format "t:(~a)" )]
+    [(Term? pa) (format "t:(~a)" (format-term pa))]
     [#t (~s pa)]))
 
 (define (format-fact-proof fp [format-axiom ~s])
@@ -65,6 +65,14 @@
 (define (fact-solves-goal? f g)
   (goal-matches? g (Fact-term f)))
 
+; Formats a step-by-step solution, returning a string for each step.
+(define (format-step-by-step facts format-axiom)
+  (map (lambda (f) (format "(~a) ~a :: ~a"
+                           (Fact-id f)
+                           (format-term (Fact-term f))
+                           (format-fact-proof (Fact-proof f) format-axiom)))
+       facts))
+
 (provide
   FactProof FactProof? FactProof-axiom FactProof-parameters
   Fact Fact? Fact-id Fact-term Fact-proof
@@ -77,7 +85,7 @@
   format-fact
   format-fact-i
   format-fact-v
-  format-fact-proof
+  format-step-by-step
   fact-terms-equal?
   fact-solves-goal?
   )

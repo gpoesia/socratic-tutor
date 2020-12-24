@@ -154,7 +154,14 @@ def serve_model(config):
     @app.route('/', methods=['POST'])
     def serve():
         X = request.get_json()
+
+        print('Request:', X)
+
         assert type(X) is list
+
+        # If received a list of lists, join it first.
+        X = [(x if isinstance(x, str) else '\n'.join(x))
+             for x in X]
 
         y = []
 

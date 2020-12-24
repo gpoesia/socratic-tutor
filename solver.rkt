@@ -78,7 +78,7 @@
                                        new-facts-unfiltered
                                        #:key Fact-term)
                                      fact-terms-equal?)]
-         [(new-facts) (append renewed-facts (prune dedup-new-facts))]
+         [(new-facts) (append renewed-facts (prune next-old-facts dedup-new-facts))]
          [(new-met-goals new-unmet-goals)
             (match-goals met-goals unmet-goals new-facts)])
         (find-solution-loop
@@ -128,16 +128,16 @@
   (findf (lambda (f) (fact-solves-goal? f g)) (SolverResult-facts sr)))
 
 ; Don't prune: keep all facts.
-(define prune:keep-all identity)
+(define (prune:keep-all all-facts facts) facts)
 
 ; Returns a pruner function that sorts facts by term size and gets the k
 ; smallest, with a random tie breaking.
 (define (prune:keep-smallest-k k)
-  (lambda (facts) (smallest-k-facts k facts)))
+  (lambda (all-facts facts) (smallest-k-facts k facts)))
 
 ; Returns a pruner function that samples k facts uniformly.
 (define (prune:keep-random-k k)
-  (lambda (facts)
+  (lambda (all-facts facts)
     (take (shuffle facts) (min k (length facts)))))
 
 ; Returns a step-by-step solution from a SolverResult
@@ -197,6 +197,12 @@
           )
         facts))))
 
+(define (trace-solver-steps all-facts facts)
+  (let* ([fact-trace-ids (trace-facts all-facts facts)]
+         [relevant-facts (filter (lambda (sf) (member (Fact-id sf) fact-trace-ids))
+                                 (remove-duplicates (append facts all-facts)))])
+    (renumber relevant-facts)))
+
 ; Given a list of facts, changes their IDs to be sequentially assigned
 ; integers. Useful for human-friendly presentation.
 (define (renumber facts)
@@ -233,6 +239,7 @@
   get-step-by-step-solution
   get-step-by-step-contradiction
   trace-facts
+  trace-solver-steps
   renumber
   prune:keep-all
   prune:keep-smallest-k
