@@ -2,6 +2,9 @@
 
 #lang racket
 
+(require racket/engine)
+(require racket/place)
+
 (require "solver.rkt")
 (require "tactics.rkt")
 (require "generation.rkt")
@@ -29,91 +32,164 @@
                       axiom->string))
          picked-examples)))
 
+(define SOLVER-TIMEOUT 60)
+
+(define (generate-and-solve-problems
+         channel
+         generator-name
+         strategy-name
+         ranking-fn-name
+         beam-size
+         depth
+         n-negative-examples)
+ (let* ([generate-problem-fn (get-problem-generator-by-name generator-name)]
+        [strategy (get-strategy-by-name strategy-name)]
+        [ranking-fn (get-ranking-fn-by-name ranking-fn-name)]
+        [problem (generate-problem-fn)]
+        [e (engine (lambda (_) (solve-problem
+                                problem
+                                strategy
+                                (lambda (all-facts facts)
+                                  (take (ranking-fn all-facts facts) (min beam-size (length facts))))                 
+                                depth)))]
+         [success? (engine-run SOLVER-TIMEOUT e)]
+         [sr (if success? (engine-result e) #f)])
+    (place-channel-put
+      channel
+      (to-jsexpr
+       (if (and success? (problem-solved? sr))
+        (let* ([solution (get-step-by-step-solution sr)]
+               [negative-examples (make-negative-examples sr solution n-negative-examples)])
+          (hash 'type "Example"
+                'success #t
+                'problem problem
+                'solution (format-step-by-step solution axiom->string)
+                'negative-examples negative-examples))
+        (hash 'type "Example"
+              'success #f
+              'problem problem))))
+    (generate-and-solve-problems channel generator-name strategy-name
+                                 ranking-fn-name beam-size depth n-negative-examples)))
+
 ; Runs the solver until it is able to successfully solve n problems.
 (define (run-solver-round
+         n-threads
+         solver-places
+         place-dead-evts
          generate-problem-fn
-         strategy
+         strategy-name
          n-problems
          n-negative-examples
-         ranking-fn
+         ranking-fn-name
          beam-size
          depth
          solutions)
-  (with-handlers ([exn? (lambda (e)
-                          (printf "Error: ~a\n" e)
-                          (run-solver-round generate-problem-fn
-                                            strategy
-                                            n-problems
-                                            n-negative-examples
-                                            ranking-fn
-                                            beam-size
-                                            depth
-                                            solutions))])
-  (if (= n-problems 0)
-      solutions
-      (let* ([problem (generate-problem-fn)]
-             [_ (printf "Going to solve a problem...\n")]
-             [sr (solve-problem problem
-                                strategy
-                                (lambda (all-facts facts)
-                                  (take (ranking-fn all-facts facts) (min beam-size (length facts))))
-                                depth)]
-             [problem-solved? (empty? (SolverResult-unmet-goals sr))]
-             [n-remaining (if problem-solved? (- n-problems 1) n-problems)]
-             [_ (printf "~a, ~a problems left\n"
-                        (if problem-solved? "suceeded" "timed out")
-                        n-remaining)]
-             [generated-example
-              (if problem-solved?
-                  (let* ([solution (get-step-by-step-solution sr)]
-                         [negative-examples (make-negative-examples sr solution n-negative-examples)])
-                    (list (hash 'type "Example"
-                                'problem problem
-                                'solution (format-step-by-step solution axiom->string)
-                                'negative-examples negative-examples)))
-                  (list))])
-
-        (run-solver-round generate-problem-fn
-                          strategy
-                          n-remaining
-                          n-negative-examples
-                          ranking-fn
-                          beam-size
-                          depth
-                          (append generated-example solutions))))))
+  (with-handlers ([exn:break? (lambda (e)
+                                (begin (printf "Stopping...\n")
+                                       solutions))]
+                  [exn? (lambda (e) (begin (printf "Error: ~a\n" e)
+                                           solutions))])
+    (cond
+      ; If we solved enough problems.
+      [(<= n-problems 0) solutions]
+      ; If we have budget to create more threads.
+      [(< (length solver-places) n-threads)
+       (let ([p (place/context ch
+                  (generate-and-solve-problems
+                   ch
+                   generate-problem-fn
+                   strategy-name
+                   ranking-fn-name
+                   beam-size
+                   depth
+                   n-negative-examples))])
+          (printf "Starting new solver thread...\n")
+          (run-solver-round
+            n-threads
+            (cons p solver-places)
+            (cons (place-dead-evt p) place-dead-evts)
+            generate-problem-fn
+            strategy-name
+            n-problems
+            n-negative-examples
+            ranking-fn-name
+            beam-size
+            depth
+            solutions))]
+     ; Otherwise: wait on any of the places.
+     [#t (let ([next-evt (sync (apply choice-evt (append solver-places place-dead-evts)))])
+        ; If next-evt is evt?, one of the places is dead: find it and
+        ; remove from the list.
+        (if (evt? next-evt)
+          (let ([i (index-of place-dead-evts next-evt)])
+            (printf "Solver thread ~a died.\n" i)
+            (run-solver-round
+              n-threads
+              (remove (list-ref solver-places i) solver-places)
+              (remove next-evt place-dead-evts)
+              generate-problem-fn
+              strategy-name
+              n-problems
+              n-negative-examples
+              ranking-fn-name
+              beam-size
+              depth
+              solutions))
+        ; Otherwise, it's a new example. Append it and continue.
+          (let* ([success? (hash-ref next-evt 'success)]
+                 [remaining-problems (- n-problems (if success? 1 0))])
+            (printf "Solver ~a, ~a left.\n"
+              (if success? "succeeded" "failed")
+              remaining-problems)
+            (run-solver-round
+             n-threads
+             solver-places
+             place-dead-evts
+             generate-problem-fn
+             strategy-name
+             remaining-problems
+             n-negative-examples
+             ranking-fn-name
+             beam-size
+             depth
+             (cons next-evt solutions)))))])))
 
 (define (run-equation-solver-round
          n-problems
          depth
+         beam-width
          n-round
          value-function)
   (let ([result (run-solver-round
-                 generate-problem
-                 s:equations
+                 (min 16 (processor-count))
+                 (list)
+                 (list)
+                 'equations:gen
+                 's:all
                  n-problems
                  5
                  (if value-function
-                     rank-facts-value-function
-                     (lambda (all-facts facts) (shuffle facts)))
-                 30
+                     'rank-facts-value-function
+                     'shuffle)
+                 beam-width
                  depth
                  (list))]
         [output-file (format "equation-examples-round-~a.json" n-round)])
     (call-with-output-file output-file (lambda (out) (to-json result out)) #:exists 'replace)
     (printf "Wrote ~a\n" output-file)))
 
-(define round-number (make-parameter 1))
-(define n-problems (make-parameter 100))
-(define depth (make-parameter 5))
-(define use-value-function (make-parameter #f))
+(define (get-ranking-fn-by-name name)
+  (match name
+    [(== 'shuffle) (lambda (all-facts facts) (shuffle facts))]
+    [(== 'rank-facts-value-function) rank-facts-value-function]))
 
-(command-line
- #:program "domain-learner"
- #:once-each
- [("-V" "--value-function") "Use learned value function server."
-                            (use-value-function #t)]
- [("-n" "--round") n
-                   "Round number <n> (determines output file)"
-                   (round-number n)])
+(define (get-strategy-by-name name)
+  (match name
+    [(== 's:all) s:all]))
 
-(run-equation-solver-round (n-problems) (depth) (round-number) (use-value-function))
+(define (get-problem-generator-by-name name)
+  (match name
+    [(== 'equations:gen) generate-problem]))
+
+(provide
+  run-equation-solver-round)

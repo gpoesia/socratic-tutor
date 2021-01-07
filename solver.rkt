@@ -26,6 +26,9 @@
                       unmet-goals
                       contradiction) #:transparent)
 
+; Given a SolverResult, returns whether the problem was solved successfully.
+(define (problem-solved? sr) (empty? (SolverResult-unmet-goals sr)))
+
 ; Searches for a solution for the given set of goals.
 ; old-facts - list of facts known as of the last iteration
 ; last-facts - list of facts discovered in the last iteration
@@ -228,7 +231,7 @@
 
 (provide
   Problem? Problem Problem-initial-facts Problem-goals format-problem
-  SolverResult SolverResult?
+  SolverResult SolverResult? problem-solved?
   SolverResult-facts
   SolverResult-met-goals
   SolverResult-unmet-goals
