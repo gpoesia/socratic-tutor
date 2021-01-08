@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import argparse
+import collections
 import json
 import random
 import os
@@ -111,9 +112,18 @@ def parse_solutions_dataset(path, verbose=False):
             for neg in row['negative-examples']:
                 examples.append(('\n'.join(neg), 0))
 
-    print('Average solution length:', sum(solution_lens) / len(solution_lens))
+    max_solution_len = max(solution_lens)
+    len_hist = collections.Counter(solution_lens)
 
-    return examples
+    return (d,
+            examples,
+            {
+                'n': len(d),
+                'avg_solution_len': sum(solution_lens) / len(solution_lens),
+                'max_solution_len': max_solution_len,
+                'success_rate': len(solution_lens) / len(d),
+                'solution_len_hist': [len_hist.get(l, 0) for l in range(0, max_solution_len + 1)]
+            })
 
 def split_dataset(dataset):
     train_size = int(0.7 * len(dataset))
@@ -179,11 +189,15 @@ def serve_model(config):
 
     app.run('127.0.0.1', config.get('port', 9911))
 
+def learn_domain(config, gpus):
+    pass
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Trains and serves the tutor domain learner')
     parser.add_argument('--train', action='store_const', default=False, const=True,
                         help='Train one round of the learner')
+    parser.add_argument('--learn', action='store_const', default=False, const=True,
+                        help='Learn a solver for the entire domain.')
     parser.add_argument('--serve', action='store_const', default=False, const=True,
                         help='Serve a ranking model')
     parser.add_argument('--dataset', help='Solutions dataset to use.')
@@ -202,3 +216,5 @@ if __name__ == '__main__':
         train_domain_learner(config, opt.gpus)
     elif opt.serve:
         serve_model(config)
+    elif opt.learn:
+        learn_domain(config, opt.gpus)
