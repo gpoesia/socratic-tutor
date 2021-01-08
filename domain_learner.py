@@ -94,17 +94,24 @@ class LearnerValueFunction(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
-def parse_solutions_dataset(path):
+def parse_solutions_dataset(path, verbose=False):
     with open(path) as f:
         d = json.load(f)
 
     examples = []
+    solution_lens = []
 
     for row in d:
-        examples.append(('\n'.join(row['solution']), 1))
+        if row['success']:
+            solution_lens.append(len(row['solution']))
+            
+            for i in range(len(row['solution'])):
+                examples.append(('\n'.join(row['solution'][:i + 1]), 1))
 
-        for neg in row['negative-examples']:
-            examples.append(('\n'.join(neg), 0))
+            for neg in row['negative-examples']:
+                examples.append(('\n'.join(neg), 0))
+
+    print('Average solution length:', sum(solution_lens) / len(solution_lens))
 
     return examples
 
