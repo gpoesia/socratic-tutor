@@ -52,8 +52,8 @@
                                 (lambda (all-facts facts)
                                   (take (ranking-fn all-facts facts) (min beam-size (length facts))))                 
                                 depth)))]
-         [success? (engine-run SOLVER-TIMEOUT e)]
-         [sr (if success? (engine-result e) #f)])
+        [success? (engine-run (* 1000 SOLVER-TIMEOUT) e)]
+        [sr (if success? (engine-result e) #f)])
     (place-channel-put
       channel
       (to-jsexpr
