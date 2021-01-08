@@ -42,7 +42,7 @@
                (BinOp op- (Number (+ n m)) (Number m)))]
     [(== '/) (let ([m (random-nonzero-small-integer)])
                (BinOp op/ (Number (* n m)) (Number m)))]
-    [(== '*) (let ([f (if (eq? 0 n) (random-small-integer)
+    [(== '*) (let ([f (if (eq? 0 n) (random-nonzero-small-integer)
                                     (choice (divisors n)))])
                (BinOp op* (Number (/ n f)) (Number f)))]))
 
