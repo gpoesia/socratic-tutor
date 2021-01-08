@@ -219,7 +219,8 @@ def learn_domain(config, gpus):
             print(now(), 'Spawning value function server and giving 60s for it to come up...')
             server_process = subprocess.Popen(['python', 'domain_learner.py',
                                                '--serve',
-                                               '--config', server_config_path])
+                                               '--config', server_config_path],
+                                               stderr=subprocess.DEVNULL)
             time.sleep(60)
 
         # Run solver for this round.
