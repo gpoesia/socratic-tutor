@@ -2,8 +2,9 @@
 
 (require "learn.rkt")
 
-(define round-number (make-parameter 1))
+(define output-file (make-parameter "solver-output.json"))
 (define n-problems (make-parameter 1000))
+(define negatives (make-parameter 5))
 (define depth (make-parameter 5))
 (define use-value-function (make-parameter #f))
 (define beam-width (make-parameter 10))
@@ -20,11 +21,15 @@
   [("-d" "--depth") d
    "Max search depth."
    (depth (string->number d))]
+  [("-n" "--negatives") n
+   "Number of negative examples to extract."
+   (negatives (string->number n))]
   [("-b" "--beam") b
    "Beam width for beam search."
    (beam-width (string->number b))]
-  [("-n" "--round") n
-   "Round number <n> (determines output file)"
-   (round-number n)])
+  [("-o" "--output") o
+   "Path to output file"
+   (output-file o)])
 
-(run-equation-solver-round (n-problems) (depth) (beam-width) (round-number) (use-value-function))
+(run-equation-solver-round (n-problems) (depth) (negatives) (beam-width)
+                           (output-file) (use-value-function))

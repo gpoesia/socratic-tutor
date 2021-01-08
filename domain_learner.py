@@ -2,9 +2,12 @@
 
 import argparse
 import collections
+import datetime
 import json
 import random
 import os
+import subprocess
+import time
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -13,6 +16,7 @@ import pytorch_lightning as pl
 import GPUtil
 from pytorch_lightning.loggers import WandbLogger
 from flask import Flask, request
+import wandb
 
 
 class CharEncoding(nn.Module):
@@ -132,14 +136,16 @@ def split_dataset(dataset):
 
 def train_domain_learner(config, gpus=0, logger=None):
     print('Training on', config['dataset'])
-    examples = parse_solutions_dataset(config['dataset'])
+    _, examples, _ = parse_solutions_dataset(config['dataset'])
     train, val = split_dataset(examples)
     batch_size = config.get('batch_size', 128)
+    max_epochs = config.get('max_epochs', 50)
 
     if logger is None:
         logger = WandbLogger()
 
     trainer = pl.Trainer(gpus=GPUtil.getAvailable(order='random', maxLoad=0.3, maxMemory=0.5)[:gpus],
+                         max_epochs=max_epochs,
                          logger=logger)
     model = LearnerValueFunction(config['LearnerValueFunction'])
 
@@ -172,8 +178,6 @@ def serve_model(config):
     def serve():
         X = request.get_json()
 
-        print('Request:', X)
-
         assert type(X) is list
 
         # If received a list of lists, join it first.
@@ -189,8 +193,82 @@ def serve_model(config):
 
     app.run('127.0.0.1', config.get('port', 9911))
 
+def now():
+    return datetime.datetime.now().isoformat(timespec='seconds')
+
 def learn_domain(config, gpus):
-    pass
+    wandb.init(config=config, project=f'domain-learner-{config["domain"]}')
+
+    dataset = []
+    stats = []
+
+    for r in range(config['rounds']):
+        print(now(), '#' * 20, 'Round', r+1, '/', config['rounds'])
+
+        # We use the learned value function starting from the second round.
+        use_value_function = r > 0
+
+        # If we need the value function to run the solver, spawn a server.
+        if use_value_function:
+            server_config = config['server_template']
+            server_config['model'] = config['learner_template']['output'].format(r-1)
+            server_config_path = '{}-server-{}.json'.format(config['domain'], r)
+            with open(server_config_path, 'w') as f:
+                json.dump(server_config, f)
+
+            print(now(), 'Spawning value function server and giving 60s for it to come up...')
+            server_process = subprocess.Popen(['python', 'domain_learner.py',
+                                               '--serve',
+                                               '--config', server_config_path])
+            time.sleep(60)
+
+        # Run solver for this round.
+        solver_output = config['solver_output'].format(r)
+        print(now(), 'Running solver...')
+        args = ['racket', 'run-learn.rkt',
+                '-o', solver_output,
+                '-d', str(config['initial_depth'] + r),
+                # Use negative examples = depth.
+                '-n', str(config['initial_depth'] + r),
+                '-p', str(config['problems_per_round']),
+                '-b', str(config['beam_width'])]
+        if use_value_function:
+            # Use value function after bootstrap round.
+            args.append('-V')
+        print(now(), '$', ' '.join(args))
+        subprocess.run(args)
+
+        # Kill the model server.
+        if use_value_function:
+            print(now(), 'Terminating value function server.')
+            server_process.terminate()
+
+        # Merge solver output dataset with datasets from previous rounds.
+        round_dataset, _, round_stats = parse_solutions_dataset(solver_output)
+
+        print(now(), 'Solver statistics for round', r, ':\n', json.dumps(round_stats, indent=4))
+        stats.append(round_stats)
+        dataset.extend(round_dataset)
+
+        dataset_path = config['learner_template']['dataset'].format(r)
+        with open(dataset_path, 'w') as f:
+            json.dump(dataset, f)
+
+        print(now(), 'Dataset now has', sum(row['success'] for row in dataset), 'solutions.')
+        learner_config = config['learner_template'].copy()
+        learner_config['dataset'] = dataset_path
+        learner_config['output'] = learner_config['output'].format(r)
+        train_domain_learner(learner_config, gpus)
+
+        wandb.log({ 'avg_solution_len': round_stats['avg_solution_len'],
+                    'success_rate': round_stats['success_rate'] })
+
+    stats_path = '{}-stats.json'.format(config['domain'])
+
+    with open(stats_path, 'w') as f:
+        json.dump(stats, f)
+
+    print(now(), 'Wrote', stats_path)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Trains and serves the tutor domain learner')

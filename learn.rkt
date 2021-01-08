@@ -12,6 +12,7 @@
 (require "facts.rkt")
 (require "terms.rkt")
 (require "value-function.rkt")
+(require "debug.rkt")
 
 ; Returns all facts in the SolverResult that are not part of the given solution.
 (define (filter-irrelevant-facts sr solution)
@@ -103,7 +104,7 @@
                    beam-size
                    depth
                    n-negative-examples))])
-          (printf "Starting new solver thread...\n")
+          (log-debug "Starting new solver thread...\n")
           (run-solver-round
             n-threads
             (cons p solver-places)
@@ -122,7 +123,7 @@
         ; remove from the list.
         (if (evt? next-evt)
           (let ([i (index-of place-dead-evts next-evt)])
-            (printf "Solver thread ~a died.\n" i)
+            (log-debug "Solver thread ~a died.\n" i)
             (run-solver-round
               n-threads
               (remove (list-ref solver-places i) solver-places)
@@ -138,9 +139,9 @@
         ; Otherwise, it's a new example. Append it and continue.
           (let* ([success? (hash-ref next-evt 'success)]
                  [remaining-problems (- n-problems (if success? 1 0))])
-            (printf "Solver ~a, ~a left.\n"
-              (if success? "succeeded" "failed")
-              remaining-problems)
+            (if success?
+              (printf "\r~a remaining..." remaining-problems)
+              (void))
             (run-solver-round
              n-threads
              solver-places
@@ -157,8 +158,9 @@
 (define (run-equation-solver-round
          n-problems
          depth
+         negative-examples
          beam-width
-         n-round
+         output-file
          value-function)
   (let ([result (run-solver-round
                  (min 16 (processor-count))
@@ -167,16 +169,15 @@
                  'equations:gen
                  's:all
                  n-problems
-                 5
+                 negative-examples
                  (if value-function
                      'rank-facts-value-function
                      'shuffle)
                  beam-width
                  depth
-                 (list))]
-        [output-file (format "equation-examples-round-~a.json" n-round)])
+                 (list))])
     (call-with-output-file output-file (lambda (out) (to-json result out)) #:exists 'replace)
-    (printf "Wrote ~a\n" output-file)))
+    (printf "\nWrote ~a\n" output-file)))
 
 (define (get-ranking-fn-by-name name)
   (match name

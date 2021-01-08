@@ -12,7 +12,7 @@
                                      (trace-solver-steps all-facts (list f))
                                      axiom->string))
                         facts)]
-         [res (post "http://localhost:9911/" #:json examples)]
+         [res (post "http://127.0.0.1:9911/" #:json examples)]
          [examples-with-score (map cons facts (response-json res))]
          [sorted-examples (sort examples-with-score (lambda (a b) (> (cdr a) (cdr b))))])
     (response-close! res)
