@@ -379,11 +379,7 @@
       t:mul-one)))
 
 (define (smallest-k-facts k facts)
-  (take
-    (sort (shuffle facts)
-          (lambda (a b) (< (term-size (Fact-term a))
-                           (term-size (Fact-term b)))))
-    (min k (length facts))))
+  (take (sort-facts-by-size facts) (min k (length facts))))
 
 ; Look for facts that meet isolated-variable? and that have not been used yet.
 (define (any-new-isolated-variable? facts)

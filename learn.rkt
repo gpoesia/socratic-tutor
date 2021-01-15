@@ -140,7 +140,9 @@
           (let* ([success? (hash-ref next-evt 'success)]
                  [remaining-problems (- n-problems (if success? 1 0))])
             (if success?
-              (printf "\r~a remaining..." remaining-problems)
+              (begin (printf "\r~a remaining (~a attempts)..."
+                             remaining-problems (length solutions))
+                     (flush-output))
               (void))
             (run-solver-round
              n-threads
@@ -172,7 +174,7 @@
                  negative-examples
                  (if value-function
                      'rank-facts-value-function
-                     'shuffle)
+                     'smallest)
                  beam-width
                  depth
                  (list))])
@@ -181,6 +183,7 @@
 
 (define (get-ranking-fn-by-name name)
   (match name
+    [(== 'smallest) (lambda (all-facts facts) (sort-facts-by-size facts))]
     [(== 'shuffle) (lambda (all-facts facts) (shuffle facts))]
     [(== 'rank-facts-value-function) rank-facts-value-function]))
 

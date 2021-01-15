@@ -27,7 +27,7 @@
           (string-join (map format-fact facts) "\n")
           (string-join (map format-term goals) ", "))
   (define sr (from-json-string (to-json-string 
-    (find-solution goals facts s:all (prune:keep-smallest-k 20) 100))))
+    (find-solution goals facts s:all (prune:keep-smallest-k 50) 7))))
   (define succeeded? (empty? (SolverResult-unmet-goals sr)))
   (define contradiction? (SolverResult-contradiction sr))
   (printf
@@ -54,11 +54,13 @@
     #f))
 
 ; (run-example (list "x = y - 1" "y = 2x") (list "x = ?" "y = ?"))
-(run-example (list "x = 2 + 2" "y = x + 1") (list "x = ?" "y = ?"))
-(run-example (list "2x + 1 = 5") (list "x = ?"))
+(run-example (list "x = 2 + 2" "y = x") (list "x = ?" "y = ?"))
+(run-example (list "2x = 4") (list "x = ?"))
+(run-example (list "x + 1 = 5") (list "x = ?"))
 (run-example (list "x = 1 + 2 + 3") (list "x = ?"))
-(run-example (list "0x = 1") (list "x = ?"))
-(run-example (list "x = 6x + 16 - 6x") (list "x = ?"))
+(run-example (list "1 + x - 1 = 3") (list "x = ?"))
+; (run-example (list "0x = 1") (list "x = ?"))
+; (run-example (list "x = 6x + 16 - 6x") (list "x = ?"))
 ; (run-example (list "7x = 6x + 16") (list "x = ?"))
 ; (run-example (list "7x - 15 = 6x + 1") (list "x = ?"))
 ; (run-example (list "x + 1 = 4") (list "x = ?"))

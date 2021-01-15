@@ -3,6 +3,7 @@
 #lang algebraic/racket/base
 
 (require racket/string)
+(require racket/list)
 (require racket/function)
 (require racket/format)
 (require "terms.rkt")
@@ -73,6 +74,11 @@
                            (format-fact-proof (Fact-proof f) format-axiom)))
        facts))
 
+(define (sort-facts-by-size facts)
+  (sort (shuffle facts)
+        (lambda (a b) (< (term-size (Fact-term a))
+                         (term-size (Fact-term b))))))
+
 (provide
   FactProof FactProof? FactProof-axiom FactProof-parameters
   Fact Fact? Fact-id Fact-term Fact-proof
@@ -88,4 +94,5 @@
   format-step-by-step
   fact-terms-equal?
   fact-solves-goal?
+  sort-facts-by-size
   )
