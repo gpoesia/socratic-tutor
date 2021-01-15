@@ -8,6 +8,7 @@
 (define (pad-number n w)
   (~a n
       #:min-width w
+      #:align 'right
       #:pad-string "0"))
 
 (define (format-period period)
