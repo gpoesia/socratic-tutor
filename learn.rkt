@@ -150,7 +150,8 @@
             (if success?
               (begin (printf "\r~a | ~a/~a solved, ~a attempts"
                              (progress-bar (/ (- total-problems remaining-problems) remaining-problems)
-                                           begin-time)
+                                           begin-time
+                                           (- total-problems remaining-problems))
                              (- total-problems remaining-problems)
                              total-problems
                              (+ 1 (length solutions)))
