@@ -123,8 +123,9 @@
   (if (eq? n 0) t
     (repeat-perturb (random-eqv-term t p ans) (- n 1) p ans)))
 
-(define (generate-problem)
-  (let* ([variables (map ~a (take (shuffle (string->list "abcdefghijklmnopqrstuvwxyz")) (choice '(1 2 3))))]
+(define (generate-problem [max-difficulty 10] [max-variables 2])
+  (let* ([variables (map ~a (take (shuffle (string->list "abcdefghijklmnopqrstuvwxyz"))
+                                  (choice (range 1 (+ 1 max-variables)))))]
          [answer (map (lambda (v) (cons v (random-small-integer))) variables)]
          [goals (map (lambda (v) (Predicate 'Eq (list (Variable v)
                                                       (AnyNumber))))
@@ -135,7 +136,7 @@
                                        (Number (cdr var-value)))))
                 answer)])
     (Problem
-      (map (lambda (t) (assumption (repeat-perturb t (random 1 10) 0.3 answer))) base-facts)
+      (map (lambda (t) (assumption (repeat-perturb t (random 1 max-difficulty) 0.3 answer))) base-facts)
       goals)))
 
 ; Constant timeout for the problem generation place below, in ms.
