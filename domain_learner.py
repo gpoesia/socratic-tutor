@@ -109,7 +109,7 @@ def parse_solutions_dataset(path, verbose=False):
     for row in d:
         if row['success']:
             solution_lens.append(len(row['solution']))
-            
+
             for i in range(len(row['solution'])):
                 examples.append(('\n'.join(row['solution'][:i + 1]), 1))
 
@@ -197,7 +197,7 @@ def now():
     return datetime.datetime.now().isoformat(timespec='seconds')
 
 def learn_domain(config, gpus):
-    wandb.init(config=config, project=f'domain-learner-{config["domain"]}')
+    wandb_run = wandb.init(config=config, project=f'domain-learner-{config["domain"]}')
 
     dataset = []
     stats = []
@@ -261,8 +261,8 @@ def learn_domain(config, gpus):
         learner_config['output'] = learner_config['output'].format(r)
         train_domain_learner(learner_config, gpus)
 
-        wandb.log({ 'avg_solution_len': round_stats['avg_solution_len'],
-                    'success_rate': round_stats['success_rate'] })
+        wandb_run.log({ 'avg_solution_len': round_stats['avg_solution_len'],
+                        'success_rate': round_stats['success_rate'] })
 
     stats_path = '{}-stats.json'.format(config['domain'])
 
