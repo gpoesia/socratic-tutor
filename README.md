@@ -11,7 +11,7 @@ since Algebraic Data Types are especially useful for recursive structures like
 mathematical expressions. You can install all dependencies with:
 
 ```
-raco pkg install --auto --pkgs algebraic brag date rebellion
+raco pkg install --auto --pkgs algebraic brag date rebellion easy-http gregor
 ```
 
 ## Prototype

@@ -2,6 +2,7 @@
 
 #lang racket
 
+(require racket/date)
 (require racket/engine)
 (require racket/place)
 
@@ -13,6 +14,7 @@
 (require "terms.rkt")
 (require "value-function.rkt")
 (require "debug.rkt")
+(require "util.rkt")
 
 ; Returns all facts in the SolverResult that are not part of the given solution.
 (define (filter-irrelevant-facts sr solution)
@@ -75,6 +77,8 @@
 ; Runs the solver until it is able to successfully solve n problems.
 (define (run-solver-round
          n-threads
+         begin-time
+         total-problems
          solver-places
          place-dead-evts
          generate-problem-fn
@@ -107,6 +111,8 @@
           (log-debug "Starting new solver thread...\n")
           (run-solver-round
             n-threads
+            begin-time
+            total-problems
             (cons p solver-places)
             (cons (place-dead-evt p) place-dead-evts)
             generate-problem-fn
@@ -126,6 +132,8 @@
             (log-debug "Solver thread ~a died.\n" i)
             (run-solver-round
               n-threads
+              begin-time
+              total-problems
               (remove (list-ref solver-places i) solver-places)
               (remove next-evt place-dead-evts)
               generate-problem-fn
@@ -140,12 +148,18 @@
           (let* ([success? (hash-ref next-evt 'success)]
                  [remaining-problems (- n-problems (if success? 1 0))])
             (if success?
-              (begin (printf "\r~a remaining (~a attempts)..."
-                             remaining-problems (length solutions))
+              (begin (printf "\r~a | ~a/~a solved, ~a attempts"
+                             (progress-bar (/ (- total-problems remaining-problems) remaining-problems)
+                                           begin-time)
+                             (- total-problems remaining-problems)
+                             total-problems
+                             (+ 1 (length solutions)))
                      (flush-output))
               (void))
             (run-solver-round
              n-threads
+             begin-time
+             total-problems
              solver-places
              place-dead-evts
              generate-problem-fn
@@ -166,6 +180,8 @@
          value-function)
   (let ([result (run-solver-round
                  (min 16 (processor-count))
+                 (current-seconds)
+                 n-problems
                  (list)
                  (list)
                  'equations:gen
