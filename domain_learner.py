@@ -18,6 +18,7 @@ from pytorch_lightning.loggers import WandbLogger
 from flask import Flask, request
 import wandb
 
+MAX_EXAMPLE_SIZE = 5
 
 class CharEncoding(nn.Module):
     def __init__(self, params={}):
@@ -111,10 +112,10 @@ def parse_solutions_dataset(path, verbose=False):
             solution_lens.append(len(row['solution']))
 
             for i in range(len(row['solution'])):
-                examples.append(('\n'.join(row['solution'][:i + 1]), 1))
+                examples.append(('\n'.join(row['solution'][:i + 1][-MAX_EXAMPLE_SIZE:]), 1))
 
             for neg in row['negative-examples']:
-                examples.append(('\n'.join(neg), 0))
+                examples.append(('\n'.join(neg[-MAX_EXAMPLE_SIZE:]), 0))
 
     max_solution_len = max(solution_lens)
     len_hist = collections.Counter(solution_lens)
@@ -163,7 +164,7 @@ def batch(l, batch_size):
         i += batch_size
 
 def serve_model(config):
-    gpus = GPUtil.getAvailable(order='random', maxLoad=0.3, maxMemory=0.5)
+    gpus = GPUtil.getAvailable(order='random', maxLoad=0.3, maxMemory=0.2)
 
     device = torch.device('cuda:{}'.format(gpus[0]) if len(gpus) else 'cpu')
     model = torch.load(config['model'], map_location=device)
@@ -181,7 +182,7 @@ def serve_model(config):
         assert type(X) is list
 
         # If received a list of lists, join it first.
-        X = [(x if isinstance(x, str) else '\n'.join(x))
+        X = [(x if isinstance(x, str) else '\n'.join(x[-MAX_EXAMPLE_SIZE:]))
              for x in X]
 
         y = []
@@ -225,19 +226,22 @@ def learn_domain(config, gpus):
 
         # Run solver for this round.
         solver_output = config['solver_output'].format(r)
-        print(now(), 'Running solver...')
-        args = ['racket', 'run-learn.rkt',
-                '-o', solver_output,
-                '-d', str(config['initial_depth'] + r),
-                # Use negative examples = depth.
-                '-n', str(config['initial_depth'] + r),
-                '-p', str(config['problems_per_round']),
-                '-b', str(config['beam_width'])]
-        if use_value_function:
-            # Use value function after bootstrap round.
-            args.append('-V')
-        print(now(), '$', ' '.join(args))
-        subprocess.run(args)
+        if os.path.exists(solver_output):
+            print(solver_output, 'already exists. Skipping.')
+        else:
+            print(now(), 'Running solver...')
+            args = ['racket', 'run-learn.rkt',
+                    '-o', solver_output,
+                    '-d', str(config['initial_depth'] + r),
+                    # Use negative examples = depth.
+                    '-n', str(config['initial_depth'] + r),
+                    '-p', str(config['problems_per_round']),
+                    '-b', str(config['beam_width'])]
+            if use_value_function:
+                # Use value function after bootstrap round.
+                args.append('-V')
+            print(now(), '$', ' '.join(args))
+            subprocess.run(args)
 
         # Kill the model server.
         if use_value_function:
@@ -256,10 +260,16 @@ def learn_domain(config, gpus):
             json.dump(dataset, f)
 
         print(now(), 'Dataset now has', sum(row['success'] for row in dataset), 'solutions.')
+
         learner_config = config['learner_template'].copy()
-        learner_config['dataset'] = dataset_path
-        learner_config['output'] = learner_config['output'].format(r)
-        train_domain_learner(learner_config, gpus)
+        model_output = learner_config['output'].format(r)
+
+        if os.path.exists(model_output):
+            print('Model', model_output, 'already exists. Skipping.')
+        else:
+            learner_config['dataset'] = dataset_path
+            learner_config['output'] = model_output
+            train_domain_learner(learner_config, gpus)
 
         wandb_run.log({ 'avg_solution_len': round_stats['avg_solution_len'],
                         'success_rate': round_stats['success_rate'] })
