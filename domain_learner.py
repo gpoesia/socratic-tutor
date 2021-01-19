@@ -6,6 +6,7 @@ import datetime
 import json
 import random
 import os
+import math
 import subprocess
 import time
 import torch
@@ -36,28 +37,48 @@ class CharEncoding(nn.Module):
              for s in batch])
         return self.embedding(int_batch.to(device=device))
 
+# Copied from https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:x.size(0), :]
+        return self.dropout(x)
+
 class LearnerValueFunction(pl.LightningModule):
     def __init__(self, params={}):
         super().__init__()
 
         self.params = params
-        self.encoding = CharEncoding(params.get('char_encoding', {}))
-        embedding_dim = params.get('embedding_dim', 64)
+        self.embedding_dim = params.get('embedding_dim', 64)
+        self.encoding = CharEncoding({ 'embedding_dim': self.embedding_dim })
 
         self.kind = params.get('kind', 'transformer')
         hidden_dim = params.get('hidden_dim', 256)
 
         if self.kind == 'transformer':
+            self.positional_encoding = PositionalEncoding(self.embedding_dim)
+
             self.encoder_layer = nn.TransformerEncoderLayer(
-                d_model=embedding_dim,
+                d_model=self.embedding_dim,
                 nhead=params.get('heads', 4),
                 dim_feedforward=hidden_dim)
 
             self.encoder = nn.TransformerEncoder(self.encoder_layer,
                                                  num_layers=params.get('layers', 4))
-            out_dim = embedding_dim
+            out_dim = self.embedding_dim
         else:
-            self.gru = nn.GRU(embedding_dim,
+            self.gru = nn.GRU(self.embedding_dim,
                               hidden_dim,
                               params.get('layers', 2),
                               batch_first=True,
@@ -66,6 +87,8 @@ class LearnerValueFunction(pl.LightningModule):
 
         self.output = nn.Linear(out_dim, 1)
 
+        self.lr = params.get('lr', 1e-3)
+
     def embed_batch(self, batch):
         return self.encoding.embed_batch(batch, self.device)
 
@@ -73,9 +96,14 @@ class LearnerValueFunction(pl.LightningModule):
         embedding = self.embed_batch(x)
 
         if self.kind == 'transformer':
+            embedding *= math.sqrt(self.embedding_dim)
+            embedding = self.positional_encoding(embedding)
             encoder_out = self.encoder(embedding)
             s_len = embedding.shape[1]
-            encoder_out = encoder_out[:, 0, :]
+            encoder_out = encoder_out[torch.arange(embedding.shape[0]), # batch size
+                                      torch.tensor([len(x_i) for x_i in x],
+                                                   device=embedding.device), # lengths
+                                      :]
         else:
             gru_out, _ = self.gru(embedding)
             encoder_out = gru_out[:, -1, :]
@@ -97,7 +125,8 @@ class LearnerValueFunction(pl.LightningModule):
         return acc
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        print('Using lr=', self.lr)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         return optimizer
 
 def parse_solutions_dataset(path, verbose=False):
@@ -135,7 +164,7 @@ def split_dataset(dataset):
     val_size = len(dataset) - train_size
     return random_split(dataset, [train_size, val_size])
 
-def train_domain_learner(config, gpus=0, logger=None):
+def train_domain_learner(config, gpus=0, logger=None, tune_lr=False):
     print('Training on', config['dataset'])
     _, examples, _ = parse_solutions_dataset(config['dataset'])
     train, val = split_dataset(examples)
@@ -145,10 +174,18 @@ def train_domain_learner(config, gpus=0, logger=None):
     if logger is None:
         logger = WandbLogger()
 
-    trainer = pl.Trainer(gpus=GPUtil.getAvailable(order='random', maxLoad=0.3, maxMemory=0.5)[:gpus],
+    devices = GPUtil.getAvailable(order='random', maxLoad=0.3, maxMemory=0.5)[:gpus]
+    print('Using GPUs', devices)
+
+    trainer = pl.Trainer(gpus=devices,
                          max_epochs=max_epochs,
-                         logger=logger)
+                         logger=logger,
+                         auto_lr_find=tune_lr)
     model = LearnerValueFunction(config['LearnerValueFunction'])
+
+    if tune_lr:
+        lr = trainer.tuner.lr_find(model).suggestion()
+        model.lr = lr
 
     trainer.fit(model,
                 DataLoader(train, batch_size=batch_size),
@@ -287,6 +324,8 @@ if __name__ == '__main__':
                         help='Train one round of the learner')
     parser.add_argument('--learn', action='store_const', default=False, const=True,
                         help='Learn a solver for the entire domain.')
+    parser.add_argument('--tune', action='store_const', default=False, const=True,
+                        help='Run learning rate tuner before training the model.')
     parser.add_argument('--serve', action='store_const', default=False, const=True,
                         help='Serve a ranking model')
     parser.add_argument('--dataset', help='Solutions dataset to use.')
@@ -302,7 +341,7 @@ if __name__ == '__main__':
         config = {}
 
     if opt.train:
-        train_domain_learner(config, opt.gpus)
+        train_domain_learner(config, opt.gpus, opt.tune)
     elif opt.serve:
         serve_model(config)
     elif opt.learn:
