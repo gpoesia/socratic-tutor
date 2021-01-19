@@ -37,7 +37,7 @@ class CharEncoding(nn.Module):
              for s in batch])
         return self.embedding(int_batch.to(device=device))
 
-# Copied from https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+# Adapted from https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.1, max_len=5000):
         super(PositionalEncoding, self).__init__()
@@ -45,7 +45,7 @@ class PositionalEncoding(nn.Module):
 
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10.0) / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0).transpose(0, 1)
@@ -96,7 +96,6 @@ class LearnerValueFunction(pl.LightningModule):
         embedding = self.embed_batch(x)
 
         if self.kind == 'transformer':
-            embedding *= math.sqrt(self.embedding_dim)
             embedding = self.positional_encoding(embedding)
             encoder_out = self.encoder(embedding)
             s_len = embedding.shape[1]
@@ -125,8 +124,11 @@ class LearnerValueFunction(pl.LightningModule):
         return acc
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        return optimizer
+        optimizer = self.params.get('optimizer', 'Adam')
+        if optimizer == 'SGD':
+            return torch.optim.Adam(self.parameters(), lr=self.lr)
+        else:
+            return torch.optim.SGD(self.parameters(), lr=self.lr)
 
 def parse_solutions_dataset(path, verbose=False):
     with open(path) as f:
