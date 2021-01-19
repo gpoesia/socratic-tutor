@@ -125,7 +125,6 @@ class LearnerValueFunction(pl.LightningModule):
         return acc
 
     def configure_optimizers(self):
-        print('Using lr=', self.lr)
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         return optimizer
 
@@ -164,17 +163,25 @@ def split_dataset(dataset):
     val_size = len(dataset) - train_size
     return random_split(dataset, [train_size, val_size])
 
-def train_domain_learner(config, gpus=0, logger=None, tune_lr=False):
+def train_domain_learner(config, gpus=0, logger=None):
     print('Training on', config['dataset'])
     _, examples, _ = parse_solutions_dataset(config['dataset'])
+
+    if config.get('max_examples'):
+        print('Limiting number of examples to', config['max_examples'])
+        examples = examples[:config['max_examples']]
+
     train, val = split_dataset(examples)
     batch_size = config.get('batch_size', 128)
     max_epochs = config.get('max_epochs', 50)
+    tune_lr = config.get('tune_lr', False)
 
     if logger is None:
         logger = WandbLogger()
 
-    devices = GPUtil.getAvailable(order='random', maxLoad=0.3, maxMemory=0.5)[:gpus]
+    logger.log_hyperparams(config)
+
+    devices = GPUtil.getAvailable(order='random', maxLoad=0.3, maxMemory=0.1)[:gpus]
     print('Using GPUs', devices)
 
     trainer = pl.Trainer(gpus=devices,
@@ -184,8 +191,13 @@ def train_domain_learner(config, gpus=0, logger=None, tune_lr=False):
     model = LearnerValueFunction(config['LearnerValueFunction'])
 
     if tune_lr:
-        lr = trainer.tuner.lr_find(model).suggestion()
+        print('Tuning learning rate')
+        lr = (trainer.tuner.lr_find(model,
+                                    DataLoader(train, batch_size=batch_size),
+                                    DataLoader(val, batch_size=batch_size))
+                           .suggestion())
         model.lr = lr
+        print('Best learning rate found:', model.lr)
 
     trainer.fit(model,
                 DataLoader(train, batch_size=batch_size),
@@ -309,7 +321,7 @@ def learn_domain(config, gpus):
             train_domain_learner(learner_config, gpus)
 
         wandb_run.log({ 'avg_solution_len': round_stats['avg_solution_len'],
-                        'success_rate': round_stats['success_rate'] })
+                        'success_rate': round_stats['success_rate'] }, step=r+1)
 
     stats_path = '{}-stats.json'.format(config['domain'])
 
@@ -324,8 +336,6 @@ if __name__ == '__main__':
                         help='Train one round of the learner')
     parser.add_argument('--learn', action='store_const', default=False, const=True,
                         help='Learn a solver for the entire domain.')
-    parser.add_argument('--tune', action='store_const', default=False, const=True,
-                        help='Run learning rate tuner before training the model.')
     parser.add_argument('--serve', action='store_const', default=False, const=True,
                         help='Serve a ranking model')
     parser.add_argument('--dataset', help='Solutions dataset to use.')
@@ -341,7 +351,7 @@ if __name__ == '__main__':
         config = {}
 
     if opt.train:
-        train_domain_learner(config, opt.gpus, opt.tune)
+        train_domain_learner(config, opt.gpus)
     elif opt.serve:
         serve_model(config)
     elif opt.learn:
