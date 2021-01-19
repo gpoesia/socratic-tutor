@@ -257,29 +257,29 @@ def learn_domain(config, gpus):
     for r in range(config['rounds']):
         print(now(), '#' * 20, 'Round', r+1, '/', config['rounds'])
 
-        # We use the learned value function starting from the second round.
-        use_value_function = r > 0
-
-        # If we need the value function to run the solver, spawn a server.
-        if use_value_function:
-            server_config = config['server_template']
-            server_config['model'] = config['learner_template']['output'].format(r-1)
-            server_config_path = '{}-server-{}.json'.format(config['domain'], r)
-            with open(server_config_path, 'w') as f:
-                json.dump(server_config, f)
-
-            print(now(), 'Spawning value function server and giving 60s for it to come up...')
-            server_process = subprocess.Popen(['python', 'domain_learner.py',
-                                               '--serve',
-                                               '--config', server_config_path],
-                                               stderr=subprocess.DEVNULL)
-            time.sleep(60)
-
         # Run solver for this round.
         solver_output = config['solver_output'].format(r)
         if os.path.exists(solver_output):
             print(solver_output, 'already exists. Skipping.')
         else:
+            # We use the learned value function starting from the second round.
+            use_value_function = r > 0
+
+            # If we need the value function to run the solver, spawn a server.
+            if use_value_function:
+                server_config = config['server_template']
+                server_config['model'] = config['learner_template']['output'].format(r-1)
+                server_config_path = '{}-server-{}.json'.format(config['domain'], r)
+                with open(server_config_path, 'w') as f:
+                    json.dump(server_config, f)
+
+                print(now(), 'Spawning value function server and giving 60s for it to come up...')
+                server_process = subprocess.Popen(['python', 'domain_learner.py',
+                                                   '--serve',
+                                                   '--config', server_config_path],
+                                                   stderr=subprocess.DEVNULL)
+                time.sleep(60)
+
             print(now(), 'Running solver...')
             args = ['racket', 'run-learn.rkt',
                     '-o', solver_output,
@@ -294,10 +294,10 @@ def learn_domain(config, gpus):
             print(now(), '$', ' '.join(args))
             subprocess.run(args)
 
-        # Kill the model server.
-        if use_value_function:
-            print(now(), 'Terminating value function server.')
-            server_process.terminate()
+            # Kill the model server.
+            if use_value_function:
+                print(now(), 'Terminating value function server.')
+                server_process.terminate()
 
         # Merge solver output dataset with datasets from previous rounds.
         round_dataset, _, round_stats = parse_solutions_dataset(solver_output)
