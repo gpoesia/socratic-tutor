@@ -50,7 +50,7 @@ class BytePairEncoding(nn.Module):
         super().__init__()
         self.params = params
         self.v_size = params.get('vocabulary_size', 1000)
-        self.e_size = params.get('embedding_size', 256)
+        self.e_size = params.get('embedding_dim', 256)
         self.vocab = {}
         self.piece2ind = {}
         self.embedding = nn.Embedding(
@@ -264,9 +264,9 @@ class LearnerValueFunction(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = self.params.get('optimizer', 'Adam')
         if optimizer == 'SGD':
-            return torch.optim.Adam(self.parameters(), lr=self.lr)
-        else:
             return torch.optim.SGD(self.parameters(), lr=self.lr)
+        else:
+            return torch.optim.Adam(self.parameters(), lr=self.lr)
 
 def parse_solutions_dataset(path, verbose=False):
     with open(path) as f:
