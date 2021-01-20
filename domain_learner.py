@@ -18,6 +18,7 @@ import GPUtil
 from pytorch_lightning.loggers import WandbLogger
 from flask import Flask, request
 import wandb
+from tqdm import tqdm
 
 MAX_EXAMPLE_SIZE = 5
 
@@ -25,17 +26,146 @@ class CharEncoding(nn.Module):
     def __init__(self, params={}):
         super().__init__()
 
+        self.params = params
         self.embedding = nn.Embedding(128, params.get('embedding_dim', 64))
 
         self.padding_idx = 0
         self.end_token_idx = 1
 
     def embed_batch(self, batch, device=None):
-        max_len = max(len(s) for s in batch)
+        lens = [len(s) for s in batch]
+        max_len = max(lens)
         int_batch = torch.LongTensor(
             [list(s.encode('ascii')) + [self.end_token_idx] + [self.padding_idx] * (max_len - len(s))
              for s in batch])
-        return self.embedding(int_batch.to(device=device))
+        return self.embedding(int_batch.to(device=device)), lens
+
+class BytePairEncoding(nn.Module):
+    NUM_ASCII = 128
+    PADDING_INDEX = 0
+    START_INDEX = 1
+    END_INDEX = 2
+
+    def __init__(self, params={}):
+        super().__init__()
+        self.params = params
+        self.v_size = params.get('vocabulary_size', 1000)
+        self.e_size = params.get('embedding_size', 256)
+        self.vocab = {}
+        self.piece2ind = {}
+        self.embedding = nn.Embedding(
+            self.v_size, self.e_size, padding_idx=self.PADDING_INDEX)
+
+        if params.get('vocab_file'):
+            self.load_vocabulary(params['vocab_file'])
+        self.keep_digits = params.get('keep_digits', False)
+        self.max_examples = params.get('max_examples', 1000)
+
+    def compute_vocabulary(self, examples):
+        frequencies = collections.defaultdict(int)
+
+        for i in range(self.NUM_ASCII):
+            self.vocab[i] = chr(i)
+            self.piece2ind[chr(i)] = i
+
+        if self.max_examples:
+            examples = random.sample(examples, k=min(len(examples), self.max_examples))
+
+        ds = [list(e) for e in examples]
+
+        print('Computing Byte Pair Encoding vocabulary...')
+        for _ in tqdm(range(self.v_size - len(self.vocab))):
+            freq = collections.defaultdict(int)
+
+            for l in ds:
+                for i in range(len(l) - 1):
+                    if not ((l[i].isdigit() or l[i+1].isdigit()) and self.keep_digits):
+                        freq[(l[i], l[i+1])] += 1
+
+            pair, _ = max(list(freq.items()), key=lambda p: p[1])
+            piece = pair[0] + pair[1]
+            index = len(self.vocab)
+            self.vocab[index] = piece
+            self.piece2ind[piece] = index
+
+            for i in range(len(ds)):
+                j, new_l = 0, []
+                s = ds[i]
+
+                while j < len(s):
+                    if j + 1 < len(s) and s[j] == pair[0] and s[j+1] == pair[1]:
+                        new_l.append(piece)
+                        j += 2
+                    else:
+                        new_l.append(s[j])
+                        j += 1
+
+                ds[i] = new_l
+
+    def encode_indices(self, s, device=None):
+        'Given a string, returns a 2D tensor representation of it.'
+        i, l = 0, []
+
+        while i < len(s):
+            last = self.piece2ind[s[i]]
+
+            for j in range(i+1, len(s) + 1):
+                index = self.piece2ind.get(s[i:j])
+                if index is None:
+                    break
+                last = index
+
+            l.append(last)
+            i = j
+
+        l_t = torch.tensor([self.START_INDEX] +
+                           l +
+                           [self.END_INDEX],
+                            dtype=torch.long, device=device)
+        return l_t
+
+    def encode(self, s):
+        idxs = self.encode_indices(s)
+        return self.embedding(idxs)
+
+    def embed(self, indices):
+        return self.embedding(indices)
+
+    def padding_token_index(self):
+        return self.PADDING_INDEX
+
+    def embed_batch(self, batch, device=None):
+        bi, lens = self.encode_batch_indices(batch, device)
+        return self.embed(bi), lens
+
+    def encode_batch_indices(self, batch, device=None):
+        if len(batch) == 0:
+            return torch.zeros((0, 0), device=device)
+
+        indices = [self.encode_indices(s, device) for s in batch]
+        lens = [len(t) - 1 for t in indices]
+
+        max_length = max(map(len, indices))
+        padding_tensor = torch.tensor([self.PADDING_INDEX],
+                                      dtype=torch.long, device=device)
+        bi = torch.stack(
+                [torch.cat([idx, padding_tensor.repeat(max_length - len(idx))])
+                 for idx in indices])
+
+        return bi, lens
+
+    def dump_vocabulary(self, path):
+        with open(path, 'w') as f:
+            json.dump({
+                'vocab': self.vocab,
+                'piece2ind': self.piece2ind
+            }, f)
+
+    def load_vocabulary(self, path):
+        with open(path) as f:
+            v = json.load(f)
+            self.vocab = v['vocab']
+            self.piece2ind = v['piece2ind']
 
 # Adapted from https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 class PositionalEncoding(nn.Module):
@@ -61,7 +191,14 @@ class LearnerValueFunction(pl.LightningModule):
 
         self.params = params
         self.embedding_dim = params.get('embedding_dim', 64)
-        self.encoding = CharEncoding({ 'embedding_dim': self.embedding_dim })
+
+        encoding_params = params.get('encoding', {})
+        if encoding_params.get('type', 'char') == 'char':
+            self.encoding = CharEncoding({ **encoding_params,
+                                           'embedding_dim': self.embedding_dim })
+        else:
+            self.encoding = BytePairEncoding({ **encoding_params,
+                                               'embedding_dim': self.embedding_dim })
 
         self.kind = params.get('kind', 'transformer')
         hidden_dim = params.get('hidden_dim', 256)
@@ -93,14 +230,15 @@ class LearnerValueFunction(pl.LightningModule):
         return self.encoding.embed_batch(batch, self.device)
 
     def forward(self, x):
-        embedding = self.embed_batch(x)
+        embedding, lens = self.embed_batch(x)
 
         if self.kind == 'transformer':
             embedding = self.positional_encoding(embedding)
             encoder_out = self.encoder(embedding)
             s_len = embedding.shape[1]
-            encoder_out = encoder_out[torch.arange(embedding.shape[0]), # batch size
-                                      torch.tensor([len(x_i) for x_i in x],
+            encoder_out = encoder_out[torch.arange(embedding.shape[0],
+                                                   device=embedding.device), # batch size
+                                      torch.tensor(lens,
                                                    device=embedding.device), # lengths
                                       :]
         else:
@@ -191,6 +329,10 @@ def train_domain_learner(config, gpus=0, logger=None):
                          logger=logger,
                          auto_lr_find=tune_lr)
     model = LearnerValueFunction(config['LearnerValueFunction'])
+
+    if model.encoding.params.get('type') == 'bpe':
+        print('Computing BPE vocabulary...')
+        model.encoding.compute_vocabulary([x for x, y in examples])
 
     if tune_lr:
         print('Tuning learning rate')
