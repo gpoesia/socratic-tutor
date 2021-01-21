@@ -20,8 +20,6 @@ from flask import Flask, request
 import wandb
 from tqdm import tqdm
 
-MAX_EXAMPLE_SIZE = 5
-
 class CharEncoding(nn.Module):
     def __init__(self, params={}):
         super().__init__()
@@ -39,6 +37,44 @@ class CharEncoding(nn.Module):
             [list(s.encode('ascii')) + [self.end_token_idx] + [self.padding_idx] * (max_len - len(s))
              for s in batch])
         return self.embedding(int_batch.to(device=device)), lens
+
+# Encoding/tokenization utils
+def kind(self, s):
+    if s.isdigit():
+        return 'digit'
+    elif s.isalpha():
+        return 'alphabetic'
+
+def can_merge(self, a, b):
+    if a.isdigit() or b.isdigit():
+        return False
+    if b in '([]),':
+        return False
+    return True
+
+def tokenize(self, s):
+    tokens = []
+
+    last_token = ""
+    for c in s:
+        if c.isspace():
+            if len(last_token):
+                tokens.append(last_token)
+                last_token = ""
+        elif can_merge(last_token, c):
+            last_token += c
+        else:
+            tokens.append(last_token)
+            last_token = c
+
+    if len(last_token):
+        tokens.append(last_token)
+
+    return tokens
+
+class SolverOutputBPEEncoding(nn.Module):
+    def __init__(self, examples):
+        vocab = {'<unk>': 0}
 
 class BytePairEncoding(nn.Module):
     NUM_ASCII = 128
@@ -59,6 +95,7 @@ class BytePairEncoding(nn.Module):
         if params.get('vocab_file'):
             self.load_vocabulary(params['vocab_file'])
         self.keep_digits = params.get('keep_digits', False)
+        self.only_same_kind = params.get('only_same_kind', False)
         self.max_examples = params.get('max_examples', 1000)
 
     def compute_vocabulary(self, examples):
@@ -79,8 +116,13 @@ class BytePairEncoding(nn.Module):
 
             for l in ds:
                 for i in range(len(l) - 1):
-                    if not ((l[i].isdigit() or l[i+1].isdigit()) and self.keep_digits):
+                    if ((not self.only_same_kind or self.kind(l[i]) == self.kind(l[i+1])) and 
+                        (not (self.keep_digits and (l[i].isdigit() or l[i+1].isdigit())))):
                         freq[(l[i], l[i+1])] += 1
+
+            if not len(freq):
+                print('Only found', self.vocab, 'valid BPE tokens.')
+                break
 
             pair, _ = max(list(freq.items()), key=lambda p: p[1])
             piece = pair[0] + pair[1]
@@ -169,13 +211,13 @@ class BytePairEncoding(nn.Module):
 
 # Adapted from https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, dropout=0.1, max_len=5000):
+    def __init__(self, d_model, base, dropout=0.1, max_len=5000):
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
 
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10.0) / d_model))
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(base) / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0).transpose(0, 1)
@@ -204,14 +246,16 @@ class LearnerValueFunction(pl.LightningModule):
         hidden_dim = params.get('hidden_dim', 256)
 
         if self.kind == 'transformer':
-            self.positional_encoding = PositionalEncoding(self.embedding_dim)
+            self.positional_encoding = PositionalEncoding(
+                    self.embedding_dim,
+                    params.get('positional_encoding_base', 10000))
 
-            self.encoder_layer = nn.TransformerEncoderLayer(
+            encoder_layer = nn.TransformerEncoderLayer(
                 d_model=self.embedding_dim,
                 nhead=params.get('heads', 4),
                 dim_feedforward=hidden_dim)
 
-            self.encoder = nn.TransformerEncoder(self.encoder_layer,
+            self.encoder = nn.TransformerEncoder(encoder_layer,
                                                  num_layers=params.get('layers', 4))
             out_dim = self.embedding_dim
         else:
@@ -229,17 +273,23 @@ class LearnerValueFunction(pl.LightningModule):
     def embed_batch(self, batch):
         return self.encoding.embed_batch(batch, self.device)
 
+    def generate_square_subsequent_mask(self, sz):
+        mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
+        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+        return mask
+
     def forward(self, x):
         embedding, lens = self.embed_batch(x)
 
         if self.kind == 'transformer':
-            embedding = self.positional_encoding(embedding)
-            encoder_out = self.encoder(embedding)
-            s_len = embedding.shape[1]
-            encoder_out = encoder_out[torch.arange(embedding.shape[0],
-                                                   device=embedding.device), # batch size
-                                      torch.tensor(lens,
+            embedding = embedding.transpose(0, 1)
+            embedding = self.positional_encoding(embedding * math.sqrt(self.embedding_dim))
+            src_mask = self.generate_square_subsequent_mask(embedding.size(0)).to(self.device)
+            encoder_out = self.encoder(embedding, src_mask)
+            encoder_out = encoder_out[torch.tensor(lens,
                                                    device=embedding.device), # lengths
+                                      torch.arange(embedding.shape[1],
+                                          device=embedding.device), # batch size
                                       :]
         else:
             gru_out, _ = self.gru(embedding)
@@ -266,9 +316,10 @@ class LearnerValueFunction(pl.LightningModule):
         if optimizer == 'SGD':
             return torch.optim.SGD(self.parameters(), lr=self.lr)
         else:
-            return torch.optim.Adam(self.parameters(), lr=self.lr)
+            return torch.optim.Adam(self.parameters(), lr=self.lr,
+                                    betas=(0.9, 0.98), eps=1e-9)
 
-def parse_solutions_dataset(path, verbose=False):
+def parse_solutions_dataset(path, max_example_size=5):
     with open(path) as f:
         d = json.load(f)
 
@@ -280,10 +331,10 @@ def parse_solutions_dataset(path, verbose=False):
             solution_lens.append(len(row['solution']))
 
             for i in range(len(row['solution'])):
-                examples.append(('\n'.join(row['solution'][:i + 1][-MAX_EXAMPLE_SIZE:]), 1))
+                examples.append(('\n'.join(row['solution'][:i + 1][-max_example_size:]), 1))
 
             for neg in row['negative-examples']:
-                examples.append(('\n'.join(neg[-MAX_EXAMPLE_SIZE:]), 0))
+                examples.append(('\n'.join(neg[-max_example_size:]), 0))
 
     max_solution_len = max(solution_lens)
     len_hist = collections.Counter(solution_lens)
@@ -305,7 +356,8 @@ def split_dataset(dataset):
 
 def train_domain_learner(config, gpus=0, logger=None):
     print('Training on', config['dataset'])
-    _, examples, _ = parse_solutions_dataset(config['dataset'])
+    _, examples, _ = parse_solutions_dataset(config['dataset'],
+                                             config.get('max_example_size', 5))
 
     if config.get('max_examples'):
         print('Limiting number of examples to', config['max_examples'])
@@ -321,7 +373,7 @@ def train_domain_learner(config, gpus=0, logger=None):
 
     logger.log_hyperparams(config)
 
-    devices = GPUtil.getAvailable(order='random', maxLoad=0.3, maxMemory=0.1)[:gpus]
+    devices = GPUtil.getAvailable(order='random', maxLoad=0.3, maxMemory=0.2)[:gpus]
     print('Using GPUs', devices)
 
     trainer = pl.Trainer(gpus=devices,
@@ -362,8 +414,9 @@ def serve_model(config):
     device = torch.device('cuda:{}'.format(gpus[0]) if len(gpus) else 'cpu')
     model = torch.load(config['model'], map_location=device)
     model.to(device)
+    max_example_size = config.get('max_example_size', 5)
 
-    print('Serving model on', device)
+    print('Serving model on', device, '(max example size =', max_example_size, ')')
 
     batch_size = config.get('batch_size', 64)
     app = Flask(__name__)
@@ -375,7 +428,7 @@ def serve_model(config):
         assert type(X) is list
 
         # If received a list of lists, join it first.
-        X = [(x if isinstance(x, str) else '\n'.join(x[-MAX_EXAMPLE_SIZE:]))
+        X = [(x if isinstance(x, str) else '\n'.join(x[-max_example_size:]))
              for x in X]
 
         y = []
