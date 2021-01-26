@@ -395,6 +395,10 @@ def split_dataset(dataset):
     val_size = len(dataset) - train_size
     return random_split(dataset, [train_size, val_size])
 
+def collate_concat(l):
+    x, y = zip(*l)
+    return x, torch.tensor(y)
+
 def train_domain_learner(config, gpus=0, logger=None):
     print('Training on', config['dataset'])
     _, examples, _ = parse_solutions_dataset(config['dataset'],
@@ -430,15 +434,15 @@ def train_domain_learner(config, gpus=0, logger=None):
     if tune_lr:
         print('Tuning learning rate')
         lr = (trainer.tuner.lr_find(model,
-                                    DataLoader(train, batch_size=batch_size),
-                                    DataLoader(val, batch_size=batch_size))
+                                    DataLoader(train, batch_size=batch_size, collate_fn=collate_concat),
+                                    DataLoader(val, batch_size=batch_size, collate_fn=collate_concat))
                            .suggestion())
         model.lr = lr
         print('Best learning rate found:', model.lr)
 
     trainer.fit(model,
-                DataLoader(train, batch_size=batch_size),
-                DataLoader(val, batch_size=batch_size))
+                DataLoader(train, batch_size=batch_size, collate_fn=collate_concat),
+                DataLoader(val, batch_size=batch_size, collate_fn=collate_concat))
 
     if config.get('output'):
         torch.save(model, config['output'])
