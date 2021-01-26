@@ -77,17 +77,21 @@
   (printf "Solving:\n~a\nWith goals ~a\n"
           (string-join (map format-fact facts) "\n")
           (string-join (map format-term goals) ", "))
-  (define result (solve-problem-mcts (Problem facts goals)
-                                     d:equations
-                                     inverse-term-size-value-function 
-                                     50000))
+  (define result (solve-problem-smc (Problem facts goals)
+                                    d:equations
+                                    inverse-term-size-value-function 
+                                    20
+                                    10))
   (define solution (MCTSResult-terminal result))
   (printf
-    "Solver ~a:\n~a\n\n"
+    "Solver ~a (~a expanded nodes, ~a leafs):\n~a\n\n"
     (if solution "succeeded" "timed out")
+    (apply + (map (lambda (n) (if (MCTSNode-is-leaf? n) 0 1)) (MCTSResult-nodes result)))
+    (apply + (map (lambda (n) (if (MCTSNode-is-leaf? n) 1 0)) (MCTSResult-nodes result)))
     (if solution
         (string-join (map format-fact (MCTSNode-facts solution)) "\n")
         "<no solution found>")))
 
+(run-mcts-example (list "x = 1 + 2 + 3 + 4") (list "x = ?"))
 (run-mcts-example (list "2x = 4") (list "x = ?"))
-; (run-mcts-example (list "x + 1 = 4") (list "x = ?"))
+(run-mcts-example (list "x + 1 = 4") (list "x = ?"))

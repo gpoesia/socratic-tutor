@@ -149,6 +149,49 @@
                     children-nodes children-values)
           (find-solution-mcts-loop next-nodes goals domain value-function max-steps (+ 1 n-step)))))))
 
+; Searches for a solution using Sequential Monte Carlo.
+(define (find-solution-smc-loop
+         nodes
+         goals
+         domain
+         value-function
+         n-samples
+         max-depth)
+  ; If timed out, return.
+  (if (= 0 max-depth)
+    (MCTSResult nodes #f)
+    ; Find leaf with max value.
+    (let* ([all-leaves (filter MCTSNode-is-leaf? nodes)]
+           [leaves (take (sort (shuffle all-leaves)
+                               (lambda (n1 n2) (> (MCTSNode-value n1) (MCTSNode-value n2))))
+                         (min n-samples (length all-leaves)))]
+           [proposals (apply append
+                             (map (lambda (n)
+                                    (map (lambda (f)
+                                           (MCTSNode (append (MCTSNode-facts n) (list f))
+                                                      (MCTSNode-value n)
+                                                      #t))
+                                         (domain (MCTSNode-facts n))))
+                                  leaves))]
+           ; For each child node, check whether it solves all goals.
+           [terminal-nodes (filter (lambda (node) (solves-problem? goals (MCTSNode-facts node)))
+                                   proposals)]
+           ; Compute value estimates using value function.
+           [proposal-values (if (empty? terminal-nodes) (value-function proposals) (list))]
+           ; Create other nodes.
+           [next-nodes (append nodes proposals)])
+      ; Expanded nodes are not leaves anymore; update it.
+      (for-each (lambda (node) (set-MCTSNode-is-leaf?! node #f)) leaves)
+      (if (not (empty? terminal-nodes))
+        ; Found a solution!
+        (MCTSResult next-nodes (car terminal-nodes))
+        ; Otherwise, recurse.
+        (begin
+          ; Update computed values.
+          (for-each (lambda (node value) (set-MCTSNode-value! node value))
+                    proposals proposal-values)
+          (find-solution-smc-loop next-nodes goals domain value-function n-samples (- max-depth 1)))))))
+
 (define (inverse-term-size-value-function nodes)
   (map (lambda (node) (+ (* 0.01 (random)) (/ 1 (term-size (Fact-term (last (MCTSNode-facts node)))))))
        nodes))
@@ -163,6 +206,15 @@
     domain
     value-function
     max-states))
+
+(define (solve-problem-smc problem domain value-function n-samples max-depth)
+  (find-solution-smc-loop
+    (list (MCTSNode (Problem-initial-facts problem) 0.0 #t))
+    (Problem-goals problem)
+    domain
+    value-function
+    n-samples
+    max-depth))
 
 (define is-contradiction?
   (function
@@ -306,7 +358,7 @@
 
 (provide
   Problem? Problem Problem-initial-facts Problem-goals format-problem
-  MCTSNode MCTSResult MCTSNode-facts MCTSResult-terminal
+  MCTSNode MCTSResult MCTSNode-facts MCTSResult-terminal MCTSNode-is-leaf? MCTSResult-nodes
   SolverResult SolverResult? problem-solved?
   SolverResult-facts
   SolverResult-met-goals
@@ -315,6 +367,7 @@
   find-solution
   solve-problem
   solve-problem-mcts
+  solve-problem-smc
   inverse-term-size-value-function
   random-value-function
   goal-solution
