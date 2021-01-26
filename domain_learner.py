@@ -318,6 +318,7 @@ class LearnerValueFunction(pl.LightningModule):
                                   torch.zeros((max_steps - n_steps[i] + 1, self.embedding_dim),
                                               device=embedding.device)]).unsqueeze(1)
                 )
+                last_idx += n_steps[i]
 
             step_embedding = torch.cat(m, dim=1)
             step_embedding = self.sol_positional_encoding(step_embedding)
@@ -361,6 +362,7 @@ class LearnerValueFunction(pl.LightningModule):
                                     betas=(0.9, 0.98), eps=1e-9)
 
 def parse_solutions_dataset(path, max_example_size=0):
+    print('Loading', path, '(max_example_size=', max_example_size, ')')
     with open(path) as f:
         d = json.load(f)
 
