@@ -54,11 +54,11 @@
     #f))
 
 ; (run-example (list "x = y - 1" "y = 2x") (list "x = ?" "y = ?"))
-(run-example (list "x = 2 + 2" "y = x") (list "x = ?" "y = ?"))
-(run-example (list "2x = 4") (list "x = ?"))
-(run-example (list "x + 1 = 5") (list "x = ?"))
-(run-example (list "x = 1 + 2 + 3") (list "x = ?"))
-(run-example (list "1 + x - 1 = 3") (list "x = ?"))
+; (run-example (list "x = 2 + 2" "y = x") (list "x = ?" "y = ?"))
+; (run-example (list "2x = 4") (list "x = ?"))
+; (run-example (list "x + 1 = 5") (list "x = ?"))
+; (run-example (list "x = 1 + 2 + 3") (list "x = ?"))
+; (run-example (list "1 + x - 1 = 3") (list "x = ?"))
 ; (run-example (list "0x = 1") (list "x = ?"))
 ; (run-example (list "x = 6x + 16 - 6x") (list "x = ?"))
 ; (run-example (list "7x = 6x + 16") (list "x = ?"))
@@ -70,3 +70,24 @@
 ; (run-example (list "x + 1 - 1 = 2") (list "x = ?"))
 ; (run-example (list "-1 + x + 1 = 1 + 2 + 3") (list "x = ?"))
 ; (run-example (list "10x - 9x = 10") (list "x = ?"))
+
+(define (run-mcts-example facts-str goals-str)
+  (define facts (map (compose assumption parse-term) facts-str))
+  (define goals (map parse-term goals-str))
+  (printf "Solving:\n~a\nWith goals ~a\n"
+          (string-join (map format-fact facts) "\n")
+          (string-join (map format-term goals) ", "))
+  (define result (solve-problem-mcts (Problem facts goals)
+                                     d:equations
+                                     inverse-term-size-value-function 
+                                     50000))
+  (define solution (MCTSResult-terminal result))
+  (printf
+    "Solver ~a:\n~a\n\n"
+    (if solution "succeeded" "timed out")
+    (if solution
+        (string-join (map format-fact (MCTSNode-facts solution)) "\n")
+        "<no solution found>")))
+
+(run-mcts-example (list "2x = 4") (list "x = ?"))
+; (run-mcts-example (list "x + 1 = 4") (list "x = ?"))

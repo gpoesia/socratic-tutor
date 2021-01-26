@@ -340,6 +340,13 @@
                   )))
 
 ; ==============================
+; ======== Domains =============
+; ==============================
+; Functions that, given a node, lists all child nodes.
+(define (d:equations facts)
+  (t:all #f empty facts))
+
+; ==============================
 ; ======== Strategies ==========
 ; ==============================
 ; These guide the solver in applying tactics.
@@ -445,4 +452,6 @@
   string->axiom
 
   smallest-k-facts
+
+  d:equations
   )
