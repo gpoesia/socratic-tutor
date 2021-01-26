@@ -116,7 +116,7 @@ class BytePairEncoding(nn.Module):
 
             for l in ds:
                 for i in range(len(l) - 1):
-                    if ((not self.only_same_kind or self.kind(l[i]) == self.kind(l[i+1])) and 
+                    if ((not self.only_same_kind or self.kind(l[i]) == self.kind(l[i+1])) and
                         (not (self.keep_digits and (l[i].isdigit() or l[i+1].isdigit())))):
                         freq[(l[i], l[i+1])] += 1
 
@@ -243,20 +243,33 @@ class LearnerValueFunction(pl.LightningModule):
                                                'embedding_dim': self.embedding_dim })
 
         self.kind = params.get('kind', 'transformer')
-        hidden_dim = params.get('hidden_dim', 256)
+        self.hidden_dim = hidden_dim = params.get('hidden_dim', 256)
 
         if self.kind == 'transformer':
-            self.positional_encoding = PositionalEncoding(
+            self.step_positional_encoding = PositionalEncoding(
                     self.embedding_dim,
                     params.get('positional_encoding_base', 10000))
 
-            encoder_layer = nn.TransformerEncoderLayer(
+            step_encoder_layer = nn.TransformerEncoderLayer(
                 d_model=self.embedding_dim,
-                nhead=params.get('heads', 4),
+                nhead=params.get('step_heads', 4),
                 dim_feedforward=hidden_dim)
 
-            self.encoder = nn.TransformerEncoder(encoder_layer,
-                                                 num_layers=params.get('layers', 4))
+            self.step_encoder = nn.TransformerEncoder(step_encoder_layer,
+                                                      num_layers=params.get('step_layers', 4))
+
+            self.sol_positional_encoding = PositionalEncoding(
+                    self.embedding_dim,
+                    params.get('positional_encoding_base', 10000))
+
+            sol_encoder_layer = nn.TransformerEncoderLayer(
+                d_model=self.embedding_dim,
+                nhead=params.get('solution_heads', 4),
+                dim_feedforward=hidden_dim)
+
+            self.sol_encoder = nn.TransformerEncoder(sol_encoder_layer,
+                                                     num_layers=params.get('sol_layers', 4))
+
             out_dim = self.embedding_dim
         else:
             self.gru = nn.GRU(self.embedding_dim,
@@ -279,19 +292,47 @@ class LearnerValueFunction(pl.LightningModule):
         return mask
 
     def forward(self, x):
-        embedding, lens = self.embed_batch(x)
-
         if self.kind == 'transformer':
+            # x is a list of lists of strings.
+            batch_size = len(x)
+            n_steps = [len(sol) for sol in x]
+            max_steps = max(n_steps)
+            x_cat = [step for sol in x for step in sol]
+
+            embedding, lens = self.embed_batch(x_cat)
             embedding = embedding.transpose(0, 1)
-            embedding = self.positional_encoding(embedding * math.sqrt(self.embedding_dim))
+            embedding = self.step_positional_encoding(embedding * math.sqrt(self.embedding_dim))
             src_mask = self.generate_square_subsequent_mask(embedding.size(0)).to(self.device)
-            encoder_out = self.encoder(embedding, src_mask)
-            encoder_out = encoder_out[torch.tensor(lens,
-                                                   device=embedding.device), # lengths
-                                      torch.arange(embedding.shape[1],
-                                          device=embedding.device), # batch size
-                                      :]
+            step_encoder_out = self.step_encoder(embedding, src_mask)
+            step_encoder_out = step_encoder_out[torch.tensor(lens, device=embedding.device),
+                                                torch.arange(embedding.shape[1], device=embedding.device),
+                                                :]
+
+            # Now step_encoder_out is of dimension sum(n_steps) x embedding_dim.
+            m = []
+            last_idx = 0
+
+            for i in range(batch_size):
+                m.append(
+                        torch.cat([step_encoder_out[last_idx:last_idx + n_steps[i], :],
+                                  torch.zeros((max_steps - n_steps[i] + 1, self.embedding_dim),
+                                              device=embedding.device)]).unsqueeze(1)
+                )
+
+            step_embedding = torch.cat(m, dim=1)
+            step_embedding = self.sol_positional_encoding(step_embedding)
+            sol_src_mask = self.generate_square_subsequent_mask(step_embedding.size(0)).to(self.device)
+            # step_embeddings.shape should be (max_steps + 1) x batch_size x embedding_dim.
+            solution_encoder_out = self.sol_encoder(step_embedding, sol_src_mask)
+
+            encoder_out = solution_encoder_out[torch.tensor(n_steps, device=embedding.device),
+                                               torch.arange(step_embedding.shape[1], device=embedding.device),
+                                               :]
         else:
+            if isinstance(x[0], list):
+                x = ['\n'.join(x_i) for x_i in x]
+
+            embedding, lens = self.embed_batch(x)
             gru_out, _ = self.gru(embedding)
             encoder_out = gru_out[:, -1, :]
 
@@ -319,7 +360,7 @@ class LearnerValueFunction(pl.LightningModule):
             return torch.optim.Adam(self.parameters(), lr=self.lr,
                                     betas=(0.9, 0.98), eps=1e-9)
 
-def parse_solutions_dataset(path, max_example_size=5):
+def parse_solutions_dataset(path, max_example_size=0):
     with open(path) as f:
         d = json.load(f)
 
@@ -331,10 +372,10 @@ def parse_solutions_dataset(path, max_example_size=5):
             solution_lens.append(len(row['solution']))
 
             for i in range(len(row['solution'])):
-                examples.append(('\n'.join(row['solution'][:i + 1][-max_example_size:]), 1))
+                examples.append((row['solution'][:i + 1][-max_example_size:], 1))
 
             for neg in row['negative-examples']:
-                examples.append(('\n'.join(neg[-max_example_size:]), 0))
+                examples.append((neg[-max_example_size:], 0))
 
     max_solution_len = max(solution_lens)
     len_hist = collections.Counter(solution_lens)
@@ -427,8 +468,8 @@ def serve_model(config):
 
         assert type(X) is list
 
-        # If received a list of lists, join it first.
-        X = [(x if isinstance(x, str) else '\n'.join(x[-max_example_size:]))
+        # If received a list of lists, possibly trim it first.
+        X = [(x if isinstance(x, str) else x[-max_example_size:])
              for x in X]
 
         y = []
