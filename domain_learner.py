@@ -482,7 +482,12 @@ def serve_model(config):
     max_example_size = config.get('max_example_size', 0)
 
     print('Serving model on', device, '(max example size =', max_example_size, ')')
-    print('state_action_pairs?', model.state_action_pairs)
+    print('Input:', 'state/action pairs' if model.state_action_pairs else 'full solution')
+
+    log_requests_file = config.get('log_requests_to')
+    if log_requests_file:
+        print('Logging requests to', log_requests_file)
+        f = open(log_requests_file, 'w')
 
     batch_size = config.get('batch_size', 64)
     app = Flask(__name__)
@@ -491,6 +496,10 @@ def serve_model(config):
     def serve():
         try:
             X = request.get_json()
+
+            if log_requests_file:
+                f.write('{}\n'.format(json.dumps(X)))
+                f.flush()
 
             assert type(X) is list
 
