@@ -193,7 +193,7 @@
           (find-solution-smc-loop next-nodes goals domain value-function n-samples (- max-depth 1)))))))
 
 (define (inverse-term-size-value-function nodes)
-  (map (lambda (node) (+ (* 0.01 (random)) (/ 1 (term-size (Fact-term (last (MCTSNode-facts node)))))))
+  (map (lambda (node) (/ 1 (term-size (Fact-term (last (MCTSNode-facts node))))))
        nodes))
 
 (define (random-value-function nodes)

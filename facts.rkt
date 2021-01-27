@@ -74,6 +74,10 @@
                            (format-fact-proof (Fact-proof f) format-axiom)))
        facts))
 
+; Formats a step-by-step solution with just the terms in each step, not the proof.
+(define (format-step-by-step-terms facts)
+  (map (lambda (f) (format-term (Fact-term f))) facts))
+
 (define (sort-facts-by-size facts)
   (sort (shuffle facts)
         (lambda (a b) (< (term-size (Fact-term a))
@@ -92,6 +96,7 @@
   format-fact-i
   format-fact-v
   format-step-by-step
+  format-step-by-step-terms
   fact-terms-equal?
   fact-solves-goal?
   sort-facts-by-size

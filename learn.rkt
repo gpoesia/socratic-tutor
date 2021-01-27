@@ -22,57 +22,65 @@
           (SolverResult-facts sr)))
 
 ; Returns a list of negative examples of step-by-step solutions.
-(define (make-negative-examples sr solution n)
-  ; First, find facts that are not part of the given solution.
-  (let* ([all-irrelevant-facts (filter-irrelevant-facts sr solution)]
-         ; Then, take a random subset of n such facts.
-         [picked-examples (take (shuffle all-irrelevant-facts)
-                                (min n (length all-irrelevant-facts)))])
-    ; Finally, take the step-by-step trace to each of the picked facts and
-    ; format it.
-    (map (lambda (f) (format-step-by-step
-                      (trace-solver-steps (SolverResult-facts sr) (list f))
-                      axiom->string))
-         picked-examples)))
+(define (make-negative-examples solution all-nodes)
+  ; For each step i in the solution (skipping the first),
+  ; find a node that (1) has exactly i steps,
+  ; (2) is equal to the solution up to step (i-1), and
+  ; (3) differs in step i.
+  (map (lambda (node) (format-step-by-step-terms (MCTSNode-facts node)))
+    (filter identity
+      (map (lambda (n-steps)
+             (let ([candidates (filter (lambda (node)
+                                         (and
+                                           (= (length (MCTSNode-facts node)) n-steps) ; (1)
+                                           (= (- n-steps 1)                           ; (2) and (3)
+                                              (length (take-common-prefix
+                                                        (MCTSNode-facts node)
+                                                        solution
+                                                        fact-terms-equal?)))))
+                                       all-nodes)])
+             (car (append (shuffle candidates) (list #f)))))
+           (range 2 (length solution))))))
 
 (define SOLVER-TIMEOUT 60)
 
 (define (generate-and-solve-problems
          channel
          generator-name
-         strategy-name
-         ranking-fn-name
+         domain-name
+         value-fn-name
          beam-size
          depth
          n-negative-examples)
  (let* ([generate-problem-fn (get-problem-generator-by-name generator-name)]
-        [strategy (get-strategy-by-name strategy-name)]
-        [ranking-fn (get-ranking-fn-by-name ranking-fn-name)]
+        [domain (get-domain-by-name domain-name)]
+        [value-fn (get-value-fn-by-name value-fn-name)]
         [problem (generate-problem-fn)]
-        [e (engine (lambda (_) (solve-problem
+        [e (engine (lambda (_) (solve-problem-smc
                                 problem
-                                strategy
-                                (lambda (all-facts facts)
-                                  (take (ranking-fn all-facts facts) (min beam-size (length facts))))                 
+                                domain
+                                value-fn
+                                beam-size
                                 depth)))]
         [success? (engine-run (* 1000 SOLVER-TIMEOUT) e)]
-        [sr (if success? (engine-result e) #f)])
+        [result (if success? (engine-result e) #f)])
     (place-channel-put
       channel
       (to-jsexpr
-       (if (and success? (problem-solved? sr))
-        (let* ([solution (get-step-by-step-solution sr)]
-               [negative-examples (make-negative-examples sr solution n-negative-examples)])
+       (if (and success? (MCTSResult-terminal result))
+        (let* ([solution (MCTSNode-facts (MCTSResult-terminal result))]
+               [negative-examples (make-negative-examples solution (MCTSResult-nodes result))])
           (hash 'type "Example"
                 'success #t
                 'problem problem
-                'solution (format-step-by-step solution axiom->string)
+                'solution-detailed (format-step-by-step solution axiom->string)
+                'solution (format-step-by-step-terms solution)
                 'negative-examples negative-examples))
         (hash 'type "Example"
               'success #f
               'problem problem))))
-    (generate-and-solve-problems channel generator-name strategy-name
-                                 ranking-fn-name beam-size depth n-negative-examples)))
+    (generate-and-solve-problems channel generator-name domain-name
+                                 value-fn-name beam-size depth n-negative-examples)))
 
 ; Runs the solver until it is able to successfully solve n problems.
 (define (run-solver-round
@@ -180,13 +188,13 @@
          output-file
          value-function)
   (let ([result (run-solver-round
-                 (min 16 (processor-count))
+                 (min 8 (processor-count))
                  (current-seconds)
                  n-problems
                  (list)
                  (list)
                  'equations:gen
-                 's:all
+                 'd:equations
                  n-problems
                  negative-examples
                  (if value-function
@@ -198,15 +206,15 @@
     (call-with-output-file output-file (lambda (out) (to-json result out)) #:exists 'replace)
     (printf "\nWrote ~a\n" output-file)))
 
-(define (get-ranking-fn-by-name name)
+(define (get-value-fn-by-name name)
   (match name
-    [(== 'smallest) (lambda (all-facts facts) (sort-facts-by-size facts))]
-    [(== 'shuffle) (lambda (all-facts facts) (shuffle facts))]
-    [(== 'rank-facts-value-function) rank-facts-value-function]))
+    [(== 'smallest) inverse-term-size-value-function]
+    [(== 'shuffle) random-value-function]
+    [(== 'rank-facts-value-function) neural-value-function]))
 
-(define (get-strategy-by-name name)
+(define (get-domain-by-name name)
   (match name
-    [(== 's:all) s:all]))
+    [(== 'd:equations) d:equations]))
 
 (define (get-problem-generator-by-name name)
   (match name
