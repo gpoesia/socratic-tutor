@@ -420,7 +420,7 @@ def collate_concat(l):
 def train_domain_learner(config, gpus=0, logger=None):
     print('Training on', config['dataset'])
     _, examples, _ = parse_solutions_dataset(config['dataset'],
-                                             config.get('max_example_size', 5))
+                                             config.get('max_example_size', 0))
 
     if config.get('max_examples'):
         print('Limiting number of examples to', config['max_examples'])
@@ -444,6 +444,8 @@ def train_domain_learner(config, gpus=0, logger=None):
                          logger=logger,
                          auto_lr_find=tune_lr)
     model = LearnerValueFunction(config['LearnerValueFunction'])
+
+    print('Input:', 'state/action pairs' if model.state_action_pairs else 'full solution')
 
     if model.encoding.params.get('type') == 'bpe':
         print('Computing BPE vocabulary...')
@@ -477,29 +479,36 @@ def serve_model(config):
     device = torch.device('cuda:{}'.format(gpus[0]) if len(gpus) else 'cpu')
     model = torch.load(config['model'], map_location=device)
     model.to(device)
-    max_example_size = config.get('max_example_size', 5)
+    max_example_size = config.get('max_example_size', 0)
 
     print('Serving model on', device, '(max example size =', max_example_size, ')')
+    print('state_action_pairs?', model.state_action_pairs)
 
     batch_size = config.get('batch_size', 64)
     app = Flask(__name__)
 
     @app.route('/', methods=['POST'])
     def serve():
-        X = request.get_json()
+        try:
+            X = request.get_json()
 
-        assert type(X) is list
+            assert type(X) is list
 
-        # If received a list of lists, possibly trim it first.
-        X = [(x if isinstance(x, str) else x[-max_example_size:])
-             for x in X]
+            # If received a list of lists, possibly trim it first.
+            X = [(x if isinstance(x, str) else x[-max_example_size:])
+                 for x in X]
 
-        y = []
+            y = []
 
-        for b in batch(X, batch_size):
-            y.extend(model(b).tolist())
+            for b in batch(X, batch_size):
+                assert len(b) <= batch_size
+                y.extend(model(b).tolist())
 
-        return json.dumps(y)
+            return json.dumps(y)
+        except Exception as e:
+            print('Server error:', e)
+            import traceback; traceback.print_exc(e)
+            raise e
 
     app.run('127.0.0.1', config.get('port', 9911))
 
