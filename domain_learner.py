@@ -227,6 +227,12 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:x.size(0), :]
         return self.dropout(x)
 
+def tag_problem(s):
+    return '<P> ' + s
+
+def tag_step(s):
+    return '<S> ' + s
+
 class LearnerValueFunction(pl.LightningModule):
     def __init__(self, params={}):
         super().__init__()
@@ -244,6 +250,7 @@ class LearnerValueFunction(pl.LightningModule):
 
         self.kind = params.get('kind', 'transformer')
         self.hidden_dim = hidden_dim = params.get('hidden_dim', 256)
+        self.state_action_pairs = params.get('state_action_pairs', False)
 
         if self.kind == 'transformer':
             self.step_positional_encoding = PositionalEncoding(
@@ -292,6 +299,15 @@ class LearnerValueFunction(pl.LightningModule):
         return mask
 
     def forward(self, x):
+        if self.state_action_pairs:
+            x = [x_i[-2:] for x_i in x]
+
+            for x_i in x:
+                while len(x_i) < 2:
+                    x_i.append('')
+                x_i[0] = tag_problem(x_i[0])
+                x_i[1] = tag_step(x_i[1])
+
         if self.kind == 'transformer':
             # x is a list of lists of strings.
             batch_size = len(x)
