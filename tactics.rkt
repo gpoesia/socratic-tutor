@@ -345,7 +345,7 @@
 ; Functions that, given a node, lists all child nodes.
 (define (d:equations facts)
   (filter (lambda (f) (not (member f facts fact-terms-equal?)))
-          (t:all #f empty facts)))
+          (t:all #f empty (list (last facts)))))
 
 ; ==============================
 ; ======== Strategies ==========
