@@ -123,7 +123,7 @@
   (if (eq? n 0) t
     (repeat-perturb (random-eqv-term t p ans) (- n 1) p ans)))
 
-(define (generate-problem [max-difficulty 10] [max-variables 2])
+(define (generate-problem [max-difficulty 15] [max-variables 1])
   (let* ([variables (map ~a (take (shuffle (string->list "abcdefghijklmnopqrstuvwxyz"))
                                   (choice (range 1 (+ 1 max-variables)))))]
          [answer (map (lambda (v) (cons v (random-small-integer))) variables)]
