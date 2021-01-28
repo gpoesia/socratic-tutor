@@ -38,177 +38,6 @@ class CharEncoding(nn.Module):
              for s in batch])
         return self.embedding(int_batch.to(device=device)), lens
 
-# Encoding/tokenization utils
-def kind(self, s):
-    if s.isdigit():
-        return 'digit'
-    elif s.isalpha():
-        return 'alphabetic'
-
-def can_merge(self, a, b):
-    if a.isdigit() or b.isdigit():
-        return False
-    if b in '([]),':
-        return False
-    return True
-
-def tokenize(self, s):
-    tokens = []
-
-    last_token = ""
-    for c in s:
-        if c.isspace():
-            if len(last_token):
-                tokens.append(last_token)
-                last_token = ""
-        elif can_merge(last_token, c):
-            last_token += c
-        else:
-            tokens.append(last_token)
-            last_token = c
-
-    if len(last_token):
-        tokens.append(last_token)
-
-    return tokens
-
-class SolverOutputBPEEncoding(nn.Module):
-    def __init__(self, examples):
-        vocab = {'<unk>': 0}
-
-class BytePairEncoding(nn.Module):
-    NUM_ASCII = 128
-    PADDING_INDEX = 0
-    START_INDEX = 1
-    END_INDEX = 2
-
-    def __init__(self, params={}):
-        super().__init__()
-        self.params = params
-        self.v_size = params.get('vocabulary_size', 1000)
-        self.e_size = params.get('embedding_dim', 256)
-        self.vocab = {}
-        self.piece2ind = {}
-        self.embedding = nn.Embedding(
-            self.v_size, self.e_size, padding_idx=self.PADDING_INDEX)
-
-        if params.get('vocab_file'):
-            self.load_vocabulary(params['vocab_file'])
-        self.keep_digits = params.get('keep_digits', False)
-        self.only_same_kind = params.get('only_same_kind', False)
-        self.max_examples = params.get('max_examples', 1000)
-
-    def compute_vocabulary(self, examples):
-        frequencies = collections.defaultdict(int)
-
-        for i in range(self.NUM_ASCII):
-            self.vocab[i] = chr(i)
-            self.piece2ind[chr(i)] = i
-
-        if self.max_examples:
-            examples = random.sample(examples, k=min(len(examples), self.max_examples))
-
-        ds = [list(e) for e in examples]
-
-        print('Computing Byte Pair Encoding vocabulary...')
-        for _ in tqdm(range(self.v_size - len(self.vocab))):
-            freq = collections.defaultdict(int)
-
-            for l in ds:
-                for i in range(len(l) - 1):
-                    if ((not self.only_same_kind or self.kind(l[i]) == self.kind(l[i+1])) and
-                        (not (self.keep_digits and (l[i].isdigit() or l[i+1].isdigit())))):
-                        freq[(l[i], l[i+1])] += 1
-
-            if not len(freq):
-                print('Only found', self.vocab, 'valid BPE tokens.')
-                break
-
-            pair, _ = max(list(freq.items()), key=lambda p: p[1])
-            piece = pair[0] + pair[1]
-            index = len(self.vocab)
-            self.vocab[index] = piece
-            self.piece2ind[piece] = index
-
-            for i in range(len(ds)):
-                j, new_l = 0, []
-                s = ds[i]
-
-                while j < len(s):
-                    if j + 1 < len(s) and s[j] == pair[0] and s[j+1] == pair[1]:
-                        new_l.append(piece)
-                        j += 2
-                    else:
-                        new_l.append(s[j])
-                        j += 1
-
-                ds[i] = new_l
-
-    def encode_indices(self, s, device=None):
-        'Given a string, returns a 2D tensor representation of it.'
-        i, l = 0, []
-
-        while i < len(s):
-            last = self.piece2ind[s[i]]
-
-            for j in range(i+1, len(s) + 1):
-                index = self.piece2ind.get(s[i:j])
-                if index is None:
-                    break
-                last = index
-
-            l.append(last)
-            i = j
-
-        l_t = torch.tensor([self.START_INDEX] +
-                           l +
-                           [self.END_INDEX],
-                            dtype=torch.long, device=device)
-        return l_t
-
-    def encode(self, s):
-        idxs = self.encode_indices(s)
-        return self.embedding(idxs)
-
-    def embed(self, indices):
-        return self.embedding(indices)
-
-    def padding_token_index(self):
-        return self.PADDING_INDEX
-
-    def embed_batch(self, batch, device=None):
-        bi, lens = self.encode_batch_indices(batch, device)
-        return self.embed(bi), lens
-
-    def encode_batch_indices(self, batch, device=None):
-        if len(batch) == 0:
-            return torch.zeros((0, 0), device=device)
-
-        indices = [self.encode_indices(s, device) for s in batch]
-        lens = [len(t) - 1 for t in indices]
-
-        max_length = max(map(len, indices))
-        padding_tensor = torch.tensor([self.PADDING_INDEX],
-                                      dtype=torch.long, device=device)
-        bi = torch.stack(
-                [torch.cat([idx, padding_tensor.repeat(max_length - len(idx))])
-                 for idx in indices])
-
-        return bi, lens
-
-    def dump_vocabulary(self, path):
-        with open(path, 'w') as f:
-            json.dump({
-                'vocab': self.vocab,
-                'piece2ind': self.piece2ind
-            }, f)
-
-    def load_vocabulary(self, path):
-        with open(path) as f:
-            v = json.load(f)
-            self.vocab = v['vocab']
-            self.piece2ind = v['piece2ind']
-
 # Adapted from https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, base, dropout=0.1, max_len=5000):
@@ -289,6 +118,7 @@ class LearnerValueFunction(pl.LightningModule):
         self.output = nn.Linear(out_dim, 1)
 
         self.lr = params.get('lr', 1e-3)
+        self.max_line_length = params.get('max_line_length', 100)
 
     def embed_batch(self, batch):
         return self.encoding.embed_batch(batch, self.device)
@@ -298,15 +128,19 @@ class LearnerValueFunction(pl.LightningModule):
         mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
         return mask
 
-    def forward(self, x):
+    def preprocess_example(self, x_i):
         if self.state_action_pairs:
-            x = [x_i[-2:] for x_i in x]
+            x_i = [tag_problem(x_i[-2]), tag_step(x_i[-1])]
 
-            for x_i in x:
-                while len(x_i) < 2:
-                    x_i.append('')
-                x_i[0] = tag_problem(x_i[0])
-                x_i[1] = tag_step(x_i[1])
+        return [self.abbreviate(s) for s in x_i]
+
+    def abbreviate(self, s):
+        if len(s) > self.max_line_length:
+            return s[:self.max_line_length] + '...'
+        return s
+
+    def forward(self, x):
+        x = [self.preprocess_example(x_i) for x_i in x]
 
         if self.kind == 'transformer':
             # x is a list of lists of strings.
@@ -389,7 +223,7 @@ def parse_solutions_dataset(path, max_example_size=0):
         if row['success']:
             solution_lens.append(len(row['solution']))
 
-            for i in range(len(row['solution'])):
+            for i in range(1, len(row['solution'])):
                 examples.append((row['solution'][:i + 1][-max_example_size:], 1))
 
             for neg in row['negative-examples']:
@@ -529,6 +363,7 @@ def learn_domain(config, gpus):
 
     dataset = []
     stats = []
+    step = config.get('depth_step', 1)
 
     for r in range(config['rounds']):
         print(now(), '#' * 20, 'Round', r+1, '/', config['rounds'])
@@ -559,9 +394,7 @@ def learn_domain(config, gpus):
             print(now(), 'Running solver...')
             args = ['racket', 'run-learn.rkt',
                     '-o', solver_output,
-                    '-d', str(config['initial_depth'] + r),
-                    # Use negative examples = depth.
-                    '-n', str(config['initial_depth'] + r),
+                    '-d', str(config['initial_depth'] + r*step),
                     '-p', str(config['problems_per_round']),
                     '-b', str(config['beam_width'])]
             if use_value_function:
