@@ -42,7 +42,7 @@
              (car (append (shuffle candidates) (list #f)))))
            (range 2 (length solution))))))
 
-(define SOLVER-TIMEOUT 60)
+(define SOLVER-TIMEOUT 120)
 
 (define (generate-and-solve-problems
          channel
