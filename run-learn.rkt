@@ -8,13 +8,17 @@
 (define depth (make-parameter 5))
 (define use-value-function (make-parameter #f))
 (define beam-width (make-parameter 10))
+(define server (make-parameter "http://127.0.0.1:9911/"))
 
 (command-line
   #:program "domain-learner"
   #:once-each
   [("-V" "--value-function")
-   "Use learned value function server."
+   "Use neural value function server."
    (use-value-function #t)]
+  [("-S" "--server") s
+   "URL of the server to access the neural value function."
+   (server s)]
   [("-p" "--problems") p
    "Number of problems to solve successfully before stopping."
    (n-problems (string->number p))]
@@ -32,4 +36,5 @@
    (output-file o)])
 
 (run-equation-solver-round (n-problems) (depth) (negatives) (beam-width)
-                           (output-file) (use-value-function))
+                           (output-file) (use-value-function)
+                           (if (use-value-function) (list (server)) empty))

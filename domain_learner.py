@@ -314,8 +314,9 @@ def serve_model(config):
     model = torch.load(config['model'], map_location=device)
     model.to(device)
     max_example_size = config.get('max_example_size', 0)
+    port = config.get('port', 9911)
 
-    print('Serving model on', device, '(max example size =', max_example_size, ')')
+    print('Serving model on port', port, 'using device', device)
     print('Input:', 'state/action pairs' if model.state_action_pairs else 'full solution')
 
     log_requests_file = config.get('log_requests_to')
@@ -351,9 +352,12 @@ def serve_model(config):
         except Exception as e:
             print('Server error:', e)
             import traceback; traceback.print_exc(e)
+            with open('failed-requests', 'a') as f:
+                f.write(json.dumps(X))
+                f.write('\n')
             raise e
 
-    app.run('127.0.0.1', config.get('port', 9911))
+    app.run('127.0.0.1', config.get('port', port))
 
 def now():
     return datetime.datetime.now().isoformat(timespec='seconds')
@@ -364,6 +368,8 @@ def learn_domain(config, gpus):
     dataset = []
     stats = []
     step = config.get('depth_step', 1)
+    server_port = config.get('server_port', 9911)
+    server_address = 'http://127.0.0.1:{}/'.format(server_port)
 
     for r in range(config['rounds']):
         print(now(), '#' * 20, 'Round', r+1, '/', config['rounds'])
@@ -380,6 +386,7 @@ def learn_domain(config, gpus):
             if use_value_function:
                 server_config = config['server_template']
                 server_config['model'] = config['learner_template']['output'].format(r-1)
+                server_config['port'] = server_port
                 server_config_path = '{}-server-{}.json'.format(config['domain'], r)
                 with open(server_config_path, 'w') as f:
                     json.dump(server_config, f)
@@ -394,8 +401,10 @@ def learn_domain(config, gpus):
             print(now(), 'Running solver...')
             args = ['racket', 'run-learn.rkt',
                     '-o', solver_output,
-                    '-d', str(config['initial_depth'] + r*step),
+                    '-d', str(min(config['initial_depth'] + r*step,
+                                  config.get('max_depth', 100))),
                     '-p', str(config['problems_per_round']),
+                    '-S', server_address,
                     '-b', str(config['beam_width'])]
             if use_value_function:
                 # Use value function after bootstrap round.

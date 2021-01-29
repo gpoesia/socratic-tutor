@@ -7,13 +7,13 @@
 (require "tactics.rkt")
 (require "solver.rkt")
 
-(define (neural-value-function nodes)
-  (let* ([examples (map (lambda (node) (format-step-by-step-terms
-                                        (MCTSNode-facts node)))
-                        nodes)]
-         [res (post "http://127.0.0.1:9911/" #:json examples)]
-         [scores (response-json res)])
-    (response-close! res)
-    scores))
+(define (make-neural-value-function [address "http://127.0.0.1:9911/"])
+  (lambda (nodes)
+    (let* ([examples (map (lambda (node) (format-step-by-step-terms (MCTSNode-facts node)))
+                          nodes)]
+          [res (post address #:json examples)]
+          [scores (response-json res)])
+     (response-close! res)
+     scores)))
 
-(provide neural-value-function)
+(provide make-neural-value-function)

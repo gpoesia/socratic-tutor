@@ -49,12 +49,13 @@
          generator-name
          domain-name
          value-fn-name
+         value-fn-args
          beam-size
          depth
          n-negative-examples)
  (let* ([generate-problem-fn (get-problem-generator-by-name generator-name)]
         [domain (get-domain-by-name domain-name)]
-        [value-fn (get-value-fn-by-name value-fn-name)]
+        [value-fn (get-value-fn-by-name value-fn-name value-fn-args)]
         [problem (generate-problem-fn)]
         [e (engine (lambda (_) (solve-problem-smc
                                 problem
@@ -80,7 +81,7 @@
               'success #f
               'problem problem))))
     (generate-and-solve-problems channel generator-name domain-name
-                                 value-fn-name beam-size depth n-negative-examples)))
+                                 value-fn-name value-fn-args beam-size depth n-negative-examples)))
 
 ; Runs the solver until it is able to successfully solve n problems.
 (define (run-solver-round
@@ -94,6 +95,7 @@
          n-problems
          n-negative-examples
          ranking-fn-name
+         value-fn-args
          beam-size
          depth
          solutions)
@@ -113,6 +115,7 @@
                    generate-problem-fn
                    strategy-name
                    ranking-fn-name
+                   value-fn-args
                    beam-size
                    depth
                    n-negative-examples))])
@@ -128,6 +131,7 @@
             n-problems
             n-negative-examples
             ranking-fn-name
+            value-fn-args
             beam-size
             depth
             solutions))]
@@ -149,6 +153,7 @@
               n-problems
               n-negative-examples
               ranking-fn-name
+              value-fn-args
               beam-size
               depth
               solutions))
@@ -176,6 +181,7 @@
              remaining-problems
              n-negative-examples
              ranking-fn-name
+             value-fn-args
              beam-size
              depth
              (cons next-evt solutions)))))])))
@@ -186,9 +192,10 @@
          negative-examples
          beam-width
          output-file
-         value-function)
+         neural-value-function?
+         value-function-args)
   (let ([result (run-solver-round
-                 (min 8 (processor-count))
+                 (min 16 (processor-count))
                  (current-seconds)
                  n-problems
                  (list)
@@ -197,20 +204,21 @@
                  'd:equations
                  n-problems
                  negative-examples
-                 (if value-function
-                     'rank-facts-value-function
+                 (if neural-value-function?
+                     'neural-value-function
                      'smallest)
+                 value-function-args
                  beam-width
                  depth
                  (list))])
     (call-with-output-file output-file (lambda (out) (to-json result out)) #:exists 'replace)
     (printf "\nWrote ~a\n" output-file)))
 
-(define (get-value-fn-by-name name)
+(define (get-value-fn-by-name name args)
   (match name
     [(== 'smallest) inverse-term-size-value-function]
     [(== 'shuffle) random-value-function]
-    [(== 'rank-facts-value-function) neural-value-function]))
+    [(== 'neural-value-function) (apply make-neural-value-function args)]))
 
 (define (get-domain-by-name name)
   (match name
