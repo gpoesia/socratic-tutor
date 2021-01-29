@@ -270,7 +270,7 @@ def train_domain_learner(config, gpus=0, logger=None):
 
     logger.log_hyperparams(config)
 
-    devices = GPUtil.getAvailable(order='random', maxLoad=0.3, maxMemory=0.2)[:gpus]
+    devices = GPUtil.getAvailable(order='memory', maxLoad=0.3, maxMemory=0.2)[:gpus]
     print('Using GPUs', devices)
 
     trainer = pl.Trainer(gpus=devices,
@@ -308,7 +308,7 @@ def batch(l, batch_size):
         i += batch_size
 
 def serve_model(config):
-    gpus = GPUtil.getAvailable(order='random', maxLoad=0.3, maxMemory=0.2)
+    gpus = GPUtil.getAvailable(order='memory', maxLoad=0.3, maxMemory=0.2)
 
     device = torch.device('cuda:{}'.format(gpus[0]) if len(gpus) else 'cpu')
     model = torch.load(config['model'], map_location=device)
