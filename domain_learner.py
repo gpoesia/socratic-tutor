@@ -120,6 +120,23 @@ class LearnerValueFunction(pl.LightningModule):
         self.lr = params.get('lr', 1e-3)
         self.max_line_length = params.get('max_line_length', 100)
 
+    def embed_states(self, x):
+        embedding, lens = self.embed_batch(x)
+        embedding = embedding.transpose(0, 1)
+        embedding = self.step_positional_encoding(embedding * math.sqrt(self.embedding_dim))
+        src_mask = self.generate_square_subsequent_mask(embedding.size(0)).to(self.device)
+        step_encoder_out = self.step_encoder(embedding, src_mask)
+        state_embeddings = step_encoder_out[torch.tensor(lens, device=embedding.device),
+                                            torch.arange(embedding.shape[1], device=embedding.device),
+                                            :]
+        return state_embeddings
+
+    def embed_steps(self, steps):
+        return self.embed_states([self.abbreviate(tag_step(s)) for s in steps])
+
+    def embed_problems(self, problems):
+        return self.embed_states([self.abbreviate(tag_problem(p)) for p in problems])
+
     def embed_batch(self, batch):
         return self.encoding.embed_batch(batch, self.device)
 
@@ -450,12 +467,87 @@ def learn_domain(config, gpus):
 
     print(now(), 'Wrote', stats_path)
 
+def compute_most_similar(embeddings):
+    # L2-normalize.
+    embeddings /= (embeddings**2).sum(axis=1).sqrt()[:, None]
+    similarity = embeddings.matmul(embeddings.T)
+
+    # Remove diagonal (self-similarity) and sort.
+    similarity -= torch.eye(similarity.shape[0], device=similarity.device)
+    return similarity.argsort(dim=1, descending=True).tolist()
+
+def build_problem_graph(config, gpus):
+    level_range = config.get('level_range', 3)
+    max_problems_per_level = config.get('max_problems_per_level', 50)
+    n_similar_problems = config.get('n_similar_problems', 10)
+    n_similar_steps = config.get('n_similar_steps', 20)
+
+    dataset, _, _ = parse_solutions_dataset(config['solutions_dataset'])
+
+    n_solutions_by_level = collections.defaultdict(int)
+
+    solutions_dataset = []
+
+    random.shuffle(dataset)
+    
+    for s in dataset:
+        if s['success']:
+            level = (len(s['solution']) - 1) // level_range
+
+            if n_solutions_by_level[level] < max_problems_per_level:
+                solutions_dataset.append(s)
+                n_solutions_by_level[level] += 1
+
+    step_index_to_problem_step = {}
+
+    for i, sol in enumerate(solutions_dataset):
+        for j in range(1, len(sol['solution'])):
+            step_index_to_problem_step[len(step_index_to_problem_step)] = (i, j)
+
+    devices = GPUtil.getAvailable(order='memory', maxLoad=0.3, maxMemory=0.2)[:gpus]
+    device = torch.device('cuda:{}'.format(devices[0]) if len(devices) else 'cpu')
+    model = torch.load(config['model'], map_location=device)
+    model.to(device)
+
+    problems = [s['solution'][0] for s in solutions_dataset]
+    n_steps = [len(s['solution']) - 1 for s in solutions_dataset]
+    steps = [step for s in solutions_dataset
+                  for step in s['solution'][1:]]
+
+    print('Using', len(problems), 'problems with a total of', sum(n_steps), 'steps.')
+    print('Computing problem similarity graph...')
+    similar_problems = compute_most_similar(model.embed_problems(problems))
+
+    for i, s in enumerate(solutions_dataset):
+        s['similar_problems'] = similar_problems[i][:n_similar_problems]
+
+    print('Computing step similarity graph...')
+    similar_steps = compute_most_similar(model.embed_steps(steps))
+
+    next_index = 0
+    for sol in solutions_dataset:
+        similar_steps_i = []
+        for j in range(1, len(sol['solution'])):
+            indices = [step_index_to_problem_step[idx]
+                       for idx in similar_steps[next_index][:n_similar_steps]]
+            for p, idx in indices:
+                similar_steps_i.append({ 'problem': p, 'step': idx })
+            next_index += 1
+        sol['similar_steps'] = similar_steps_i
+
+    with open(config['output'], 'w') as f:
+        json.dump(solutions_dataset, f)
+
+    print('Wrote', config['output'])
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Trains and serves the tutor domain learner')
     parser.add_argument('--train', action='store_const', default=False, const=True,
                         help='Train one round of the learner')
     parser.add_argument('--learn', action='store_const', default=False, const=True,
                         help='Learn a solver for the entire domain.')
+    parser.add_argument('--build-graph', action='store_const', default=False, const=True,
+                        help='Make the problem/solution/step graph that is used in the teaching game.')
     parser.add_argument('--serve', action='store_const', default=False, const=True,
                         help='Serve a ranking model')
     parser.add_argument('--dataset', help='Solutions dataset to use.')
@@ -476,3 +568,5 @@ if __name__ == '__main__':
         serve_model(config)
     elif opt.learn:
         learn_domain(config, opt.gpus)
+    elif opt.build_graph:
+        build_problem_graph(config, opt.gpus)
