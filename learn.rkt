@@ -40,7 +40,7 @@
                                                         fact-terms-equal?)))))
                                        all-nodes)])
              (car (append (shuffle candidates) (list #f)))))
-           (range 2 (length solution))))))
+           (range 2 (+ 1 (length solution)))))))
 
 (define SOLVER-TIMEOUT 120)
 
