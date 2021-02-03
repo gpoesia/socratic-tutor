@@ -1,0 +1,35 @@
+.gameContainer {
+    padding: 2em;
+    align: center;
+    max-width: 1024px;
+}
+
+.stepsList {
+    flex-direction: column;
+    display: flex;
+    justify-content: flex-start;
+}
+
+.stepsList ol {
+    flex-shrink: 1;
+}
+
+.options {
+    display: flex;
+    flex-direction: row;
+}
+
+.option {
+    margin: 0.5em;
+    background-color: white;
+}
+
+.correctOption {
+    margin: 0.5em;
+    background-color: #ccffcc;
+}
+
+.incorrectOption {
+    margin: 0.5em;
+    background-color: #ffcccc;
+}
