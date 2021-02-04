@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 // import GuessingGame from './guessing-game.js';
 import dynamic from 'next/dynamic';
 
-const DynGuessingGame = dynamic(() => import('./guessing-game.js'), { ssr: false });
+const DynGuessingGame = dynamic(() => import('../lib/components/guessing-game.js'),
+                                { ssr: false });
 
 const policies = [
   { display: "[Choose]" },

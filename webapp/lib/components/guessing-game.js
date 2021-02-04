@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import CircularProgress from '@material-ui/core/CircularProgress';
 import IconButton from '@material-ui/core/IconButton';
 import Backspace from '@material-ui/icons/Backspace';
-import styles from '../styles/guessing-game.module.css';
+import styles from '../../styles/guessing-game.module.css';
 import lodash from 'lodash';
 import { MathComponent as Tex } from 'mathjax-react';
 
