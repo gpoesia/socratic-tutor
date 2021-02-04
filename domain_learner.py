@@ -6,6 +6,7 @@ import datetime
 import json
 import random
 import os
+import re
 import math
 import subprocess
 import time
@@ -563,15 +564,18 @@ def build_problem_graph(config, gpus):
     def get_variables(s):
         return ''.join(sorted(set(c for c in s if c.isalpha())))
 
+    def rewrite_variable(s, var):
+        return re.sub('[a-z]', var, s)
+
     print('Finding distractors...')
     for e in tqdm(exercises):
         p_var = get_variables(e['state'])
         similar = np.flip(step_sim[e['pos']['index'], :].argsort())
         valid = [all_steps[s]
-                for s in similar
-                if (all_steps[s]['problem'] != e['problem'] and
-                    get_variables(all_steps[s]['step']) == p_var)]
-        e['distractors'] = valid[:n_distractors]
+                 for s in similar
+                 if all_steps[s]['problem'] != e['problem']]
+        e['distractors'] = [{ **d, 'step': rewrite_variable(d['step'], p_var)}
+                            for d in valid[:n_distractors]]
         e['pos_neg_sim'] = step_sim[e['pos']['index'], e['neg']['index']]
 
     problems = [s['solution'][0] for s in dataset]
