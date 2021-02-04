@@ -1,28 +1,30 @@
 const lodash = require('lodash');
-const SOLUTION_GRAPH = require('../../solution_graph.json');
+const { problems, exercises } = require('../../solution_graph.json');
 
-SOLUTION_GRAPH.forEach((p, i) => p.id = i);
+problems.forEach((p, i) => p.id = i);
+exercises.forEach((e, i) => e.id = i);
 
 const config = require('../../config.json');
 
 const problemLevel = p => Math.floor(p.solution.length / config.levelRange);
+const exerciseLevel = e => e['pos']['level'];
 
-const MINIMUM_LEVEL = lodash.min(SOLUTION_GRAPH.map(problemLevel));
+const MINIMUM_LEVEL = lodash.min(exercises.map(exerciseLevel));
 
 export default (req, res) => {
   const params = JSON.parse(req.query.params || '{}');
   const policy = params.policy || 'random';
-  const lastProblem = (params.lastProblem ? SOLUTION_GRAPH[params.lastProblem] : null);
-  const mistakes = params.mistakes || [];
-  const targetLevel = lastProblem ? problemLevel(lastProblem) + 1 : MINIMUM_LEVEL;
-  const nextLevelProblems = SOLUTION_GRAPH.filter(p => (problemLevel(p) == targetLevel));
+  const lastExercise = (params.lastExercise ? exercises[params.lastExercise] : null);
+  const succeeded = params.succeeded || [];
+  const targetLevel = lastExercise ? exerciseLevel(lastExercise) + 1 : MINIMUM_LEVEL;
+  const nextLevelProblems = exercises.filter(e => (exerciseLevel(e) == targetLevel));
   const curriculum = (policy === 'curriculum' ||
                       policy === 'personalized_curriculum');
 
   let chosen = null;
 
   if (policy === 'random') {
-    chosen = lodash.sample(SOLUTION_GRAPH);
+    chosen = lodash.sample(exercises);
   }
 
   // In any of the curriculum cases, if not chosen yet, sample problem from next level.
@@ -31,16 +33,10 @@ export default (req, res) => {
   }
 
   if (chosen) {
-    res.json({
-      id: chosen['id'],
-      solution: chosen['solution'],
-      negatives: chosen['negative-examples'],
-    });
+    res.json(chosen);
   } else {
     res.json({
       id: null,
-      solution: [],
-      negatives: [],
     });
   }
 };
