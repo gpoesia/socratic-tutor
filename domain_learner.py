@@ -9,6 +9,7 @@ import os
 import math
 import subprocess
 import time
+import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -476,69 +477,119 @@ def compute_most_similar(embeddings):
     similarity -= torch.eye(similarity.shape[0], device=similarity.device)
     return similarity.argsort(dim=1, descending=True).tolist()
 
+def compute_pairwise_similarities(embeddings):
+    # L2-normalize.
+    embeddings = embeddings / (embeddings**2).sum(axis=1).sqrt()[:, None]
+
+    B = 1024
+    N, E = embeddings.shape
+    m = np.zeros((N, N))
+    n_batches = (N + B - 1) // B
+
+    print('Computing all pairwise similarities between', N, 'items.')
+    for i in tqdm(range(n_batches)):
+        i_b, i_e = i*B, min(N, (i+1)*B)
+        m_i = embeddings[i_b:i_e, :]
+
+        for j in range(i, n_batches):
+            j_b, j_e = j*B, min(N, (j+1)*B)
+            m_j = embeddings[j_b:j_e, :]
+
+            similarities = m_i.matmul(m_j.T).cpu().numpy()
+            m[i_b:i_e, j_b:j_e] = similarities
+            m[j_b:j_e, i_b:i_e] = similarities.T
+
+    return m
+
+@torch.no_grad()
 def build_problem_graph(config, gpus):
     level_range = config.get('level_range', 3)
     max_problems_per_level = config.get('max_problems_per_level', 50)
     n_similar_problems = config.get('n_similar_problems', 10)
     n_similar_steps = config.get('n_similar_steps', 20)
+    n_distractors = config.get('n_distractors', 5)
 
     dataset, _, _ = parse_solutions_dataset(config['solutions_dataset'])
-
-    n_solutions_by_level = collections.defaultdict(int)
-
-    solutions_dataset = []
+    dataset = [r for r in dataset if r['success']]
 
     random.shuffle(dataset)
-    
-    for s in dataset:
-        if s['success']:
-            level = (len(s['solution']) - 1) // level_range
 
-            if n_solutions_by_level[level] < max_problems_per_level:
-                solutions_dataset.append(s)
-                n_solutions_by_level[level] += 1
+    all_steps = []
+    exercises = []
 
-    step_index_to_problem_step = {}
+    for p, s in enumerate(dataset):
+        for i in range(len(s['solution']) - 1):
+            s_id = '{}_{}'.format(p, i),
+            all_steps.append({
+                'problem': p,
+                'id': s_id,
+                'index': len(all_steps),
+                'step': s['solution'][i+1],
+                'label': 'pos',
+                'level': len(s['solution']) - (i + 1),
+            })
 
-    for i, sol in enumerate(solutions_dataset):
-        for j in range(1, len(sol['solution'])):
-            step_index_to_problem_step[len(step_index_to_problem_step)] = (i, j)
+            all_steps.append({
+                'problem': p,
+                'id': s_id,
+                'index': len(all_steps),
+                'step': s['negative-examples'][i][-1],
+                'label': 'neg',
+            })
 
+            exercises.append({
+                'problem': p,
+                'step': i,
+                'state': s['solution'][i],
+                'pos': all_steps[-2],
+                'neg': all_steps[-1],
+            })
+
+    print('Loading model...')
     devices = GPUtil.getAvailable(order='memory', maxLoad=0.3, maxMemory=0.2)[:gpus]
     device = torch.device('cuda:{}'.format(devices[0]) if len(devices) else 'cpu')
     model = torch.load(config['model'], map_location=device)
     model.to(device)
 
-    problems = [s['solution'][0] for s in solutions_dataset]
-    n_steps = [len(s['solution']) - 1 for s in solutions_dataset]
-    steps = [step for s in solutions_dataset
-                  for step in s['solution'][1:]]
+    step_texts = [s['step'] for s in all_steps]
+    print(len(step_texts), 'steps.')
+    step_embeddings = []
+    for b in batched(step_texts):
+        step_embeddings.append(model.embed_states(b))
+    step_embeddings = torch.cat(step_embeddings)
 
-    print('Using', len(problems), 'problems with a total of', sum(n_steps), 'steps.')
-    print('Computing problem similarity graph...')
-    similar_problems = compute_most_similar(model.embed_problems(problems))
+    step_sim = compute_pairwise_similarities(step_embeddings)
 
-    for i, s in enumerate(solutions_dataset):
-        s['similar_problems'] = similar_problems[i][:n_similar_problems]
+    def get_variables(s):
+        return ''.join(sorted(set(c for c in s if c.isalpha())))
 
-    print('Computing step similarity graph...')
-    similar_steps = compute_most_similar(model.embed_steps(steps))
+    print('Finding distractors...')
+    for e in tqdm(exercises):
+        p_var = get_variables(e['state'])
+        similar = np.flip(step_sim[e['pos']['index'], :].argsort())
+        valid = [all_steps[s]
+                for s in similar
+                if (all_steps[s]['problem'] != e['problem'] and
+                    get_variables(all_steps[s]['step']) == p_var)]
+        e['distractors'] = valid[:n_distractors]
+        e['pos_neg_sim'] = step_sim[e['pos']['index'], e['neg']['index']]
 
-    next_index = 0
-    for sol in solutions_dataset:
-        similar_steps_i = []
-        for j in range(1, len(sol['solution'])):
-            indices = [step_index_to_problem_step[idx]
-                       for idx in similar_steps[next_index][:n_similar_steps]]
-            for p, idx in indices:
-                similar_steps_i.append({ 'problem': p, 'step': idx })
-            next_index += 1
-        sol['similar_steps'] = similar_steps_i
+    problems = [s['solution'][0] for s in dataset]
+    similar_problems = compute_pairwise_similarities(model.embed_problems(problems))
+
+    for i, s in enumerate(dataset):
+        s['similar_problems'] = np.flip(similar_problems[i].argsort())[1:n_similar_problems + 1].tolist()
 
     with open(config['output'], 'w') as f:
-        json.dump(solutions_dataset, f)
+        json.dump({ 'problems': dataset, 'exercises': exercises }, f)
 
     print('Wrote', config['output'])
+
+def batched(seq, b=128):
+    i = 0
+    while i < len(seq):
+        yield seq[i:i+b]
+        i += b
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Trains and serves the tutor domain learner')
