@@ -354,7 +354,7 @@
      (format "\\left(~a ~a ~a\\right)" (format-term-tex a) (op->string op) (format-term-tex b))]
    ; Equality.
    [(Predicate 'Eq (a b))
-    (format "~a = ~a" (format-term a) (format-term-tex b))]
+    (format "~a = ~a" (format-term-tex a) (format-term-tex b))]
    ; Marker
    [(Marker t)
     (format "~a~a~a" BEGIN-MARKER (format-term-tex t) END-MARKER)]
