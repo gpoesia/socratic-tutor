@@ -509,7 +509,7 @@ def build_problem_graph(config, gpus):
     max_problems_per_level = config.get('max_problems_per_level', 50)
     n_similar_problems = config.get('n_similar_problems', 10)
     n_similar_steps = config.get('n_similar_steps', 20)
-    n_distractors = config.get('n_distractors', 5)
+    n_distractors = config.get('n_distractors', 10)
 
     dataset, _, _ = parse_solutions_dataset(config['solutions_dataset'])
     dataset = [r for r in dataset if r['success']]
@@ -517,7 +517,7 @@ def build_problem_graph(config, gpus):
     random.shuffle(dataset)
 
     all_steps = []
-    exercises = []
+    guess_step_exercises = []
 
     for p, s in enumerate(dataset):
         for i in range(len(s['solution']) - 1):
@@ -526,7 +526,10 @@ def build_problem_graph(config, gpus):
                 'problem': p,
                 'id': s_id,
                 'index': len(all_steps),
+                'state': s['solution'][i],
                 'step': s['solution'][i+1],
+                'step-description': s['solution-description'][i+1],
+                'q-value': s['solution-value'][i+1],
                 'label': 'pos',
                 'level': len(s['solution']) - (i + 1),
             })
@@ -535,14 +538,18 @@ def build_problem_graph(config, gpus):
                 'problem': p,
                 'id': s_id,
                 'index': len(all_steps),
-                'step': s['negative-examples'][i][-1],
+                'state': s['solution'][i],
+                'step': s['negative-examples'][i]['step'],
+                'step-description': s['negative-examples'][i]['step-description'],
+                'q-value': s['negative-examples'][i]['value'],
                 'label': 'neg',
             })
 
-            exercises.append({
+            guess_step_exercises.append({
                 'problem': p,
                 'step': i,
                 'state': s['solution'][i],
+                'state-tex': s['solution-tex'][i],
                 'pos': all_steps[-2],
                 'neg': all_steps[-1],
             })
@@ -568,25 +575,57 @@ def build_problem_graph(config, gpus):
     def rewrite_variable(s, var):
         return re.sub('[a-z]', var, s)
 
-    print('Finding distractors...')
-    for e in tqdm(exercises):
+    for p in dataset:
+        p['variables'] = get_variables(p['solution'][0])
+
+    print('Finding distractors for guess_step_exercises...')
+    for e in tqdm(guess_step_exercises):
         p_var = get_variables(e['state'])
         similar = np.flip(step_sim[e['pos']['index'], :].argsort())
         valid = [all_steps[s]
                  for s in similar
-                 if all_steps[s]['problem'] != e['problem']]
+                 if (dataset[e['problem']]['variables'] ==
+                     dataset[all_steps[s]['problem']]['variables'])]
         e['distractors'] = [{ **d, 'step': rewrite_variable(d['step'], p_var)}
-                            for d in valid[:n_distractors]]
+                            for d in valid[:n_distractors]
+                            if d['step-description'] not in
+                              (e['pos']['step-description'],
+                               e['neg']['step-description'])]
         e['pos_neg_sim'] = step_sim[e['pos']['index'], e['neg']['index']]
 
-    problems = [s['solution'][0] for s in dataset]
-    similar_problems = compute_pairwise_similarities(model.embed_problems(problems))
+    guess_step_exercises = [e for e in guess_step_exercises
+                            if len(e['distractors']) > 0]
 
-    for i, s in enumerate(dataset):
-        s['similar_problems'] = np.flip(similar_problems[i].argsort())[1:n_similar_problems + 1].tolist()
+    guess_state_exercises = []
+
+    print('Creating guess_state_exercises...')
+    for i, e in enumerate(tqdm(guess_step_exercises)):
+        ex = {
+            'step-description': e['pos']['step-description'],
+            'correct': e['state'],
+        }
+
+        p_var = get_variables(e['state'])
+        similar = np.flip(step_sim[e['pos']['index'], :].argsort())
+
+        valid = [all_steps[s]
+                 for s in similar
+                 if (dataset[e['problem']]['variables'] ==
+                     dataset[all_steps[s]['problem']]['variables'])]
+
+        ex['distractors'] = [rewrite_variable(d['step'], p_var)
+                             for d in valid[:n_distractors]]
+        ex['distractors'] = [d for d in ex['distractors'] if d != ex['correct']]
+
+        if len(ex['distractors']) > 0:
+            guess_state_exercises.append(ex)
+
+    print(len(guess_step_exercises), '"guess the step" exercises')
+    print(len(guess_state_exercises), '"guess the state" exercises')
 
     with open(config['output'], 'w') as f:
-        json.dump({ 'problems': dataset, 'exercises': exercises }, f)
+        json.dump({ 'guess_step_exercises': guess_step_exercises,
+                    'guess_state_exercises': guess_state_exercises }, f)
 
     print('Wrote', config['output'])
 
