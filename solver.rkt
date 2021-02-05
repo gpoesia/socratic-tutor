@@ -358,7 +358,7 @@
 
 (provide
   Problem? Problem Problem-initial-facts Problem-goals format-problem
-  MCTSNode MCTSResult MCTSNode-facts MCTSResult-terminal MCTSNode-is-leaf? MCTSResult-nodes
+  MCTSNode MCTSResult MCTSNode-facts MCTSNode-value MCTSResult-terminal MCTSNode-is-leaf? MCTSResult-nodes
   SolverResult SolverResult? problem-solved?
   SolverResult-facts
   SolverResult-met-goals

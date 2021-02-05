@@ -315,7 +315,7 @@
    ; AnyNumber
    [(AnyNumber) "?"]
    ; Number
-   [(Number n) (format "~a" n)]
+   [(Number n) (format (if (< n 0) "(~a)" "~a") n)]
    ; Variable
    [(Variable v) (format "~a" v)]
    ; Unary operator
@@ -330,6 +330,34 @@
    ; Marker
    [(Marker t)
     (format "~a~a~a" BEGIN-MARKER (format-term t) END-MARKER)]
+   ))
+
+; Formats a term for displaying in TeX.
+(define format-term-tex
+  (function
+   ; AnyNumber
+   [(AnyNumber) "?"]
+   ; Number
+   [(Number n) (format (if (< n 0) "\\left(~a\\right)" "~a") n)]
+   ; Variable
+   [(Variable v) (format "~a" v)]
+   ; Unary operator
+   [(UnOp op v) (format "~a\\left(~a\\right)" (op->string op) (format-term-tex v))]
+   ; Variable with coefficient
+   [(BinOp op (Number n) (Variable v)) #:if (eq? op op*) (format "~a~a" n v)]
+   ; Generic binary operation.
+   [(BinOp op a b) #:if (eq? op op*)
+     (format "\\left(~a \\times ~a\\right)" (format-term-tex a) (format-term-tex b))]
+   [(BinOp op a b) #:if (eq? op op/)
+     (format "\\frac{~a}{~a}" (format-term-tex a) (format-term-tex b))]
+   [(BinOp op a b)
+     (format "\\left(~a ~a ~a\\right)" (format-term-tex a) (op->string op) (format-term-tex b))]
+   ; Equality.
+   [(Predicate 'Eq (a b))
+    (format "~a = ~a" (format-term a) (format-term-tex b))]
+   ; Marker
+   [(Marker t)
+    (format "~a~a~a" BEGIN-MARKER (format-term-tex t) END-MARKER)]
    ))
 
 ; Returns (format-term t) plus the raw representation of the term.
@@ -349,7 +377,7 @@
 (provide
   simpl-term
   simpl-example
-  format-term format-term-debug
+  format-term format-term-debug format-term-tex
   rewrite-subterm
   filter-subterms
   substitute-term

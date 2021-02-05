@@ -12,6 +12,7 @@
 (require "serialize.rkt")
 (require "facts.rkt")
 (require "terms.rkt")
+(require "questions.rkt")
 (require "value-function.rkt")
 (require "debug.rkt")
 (require "util.rkt")
@@ -27,7 +28,14 @@
   ; find a node that (1) has exactly i steps,
   ; (2) is equal to the solution up to step (i-1), and
   ; (3) differs in step i.
-  (map (lambda (node) (format-step-by-step-terms (MCTSNode-facts node)))
+  (map (lambda (node)
+         (hash 'index (- (length (MCTSNode-facts node)) 1)
+               'step (format-term (Fact-term (last (MCTSNode-facts node))))
+               'step-tex (format-term-tex (Fact-term (last (MCTSNode-facts node))))
+               'step-description (generate-step-description
+                                   (Fact-proof (last (MCTSNode-facts node)))
+                                   (MCTSNode-facts node))
+               'value (MCTSNode-value node)))
     (filter identity
       (map (lambda (n-steps)
              (let ([candidates (filter (lambda (node)
@@ -41,6 +49,22 @@
                                        all-nodes)])
              (car (append (shuffle candidates) (list #f)))))
            (range 2 (+ 1 (length solution)))))))
+
+; Returns a list of values of each step in the solution.
+(define (get-solution-value solution all-nodes)
+  ; For each step i in the solution,
+  ; find a node that (1) has exactly i steps,
+  ; (2) is equal to the solution up to step i.
+  (map (lambda (n-steps)
+    (MCTSNode-value (findf (lambda (node)
+                            (= (length (MCTSNode-facts node)) n-steps) ; (1)
+                            (= n-steps ; (2)
+                                     (length (take-common-prefix
+                                              (MCTSNode-facts node)
+                                              solution
+                                              fact-terms-equal?))))
+                            all-nodes)))
+    (range 1 (+ 1 (length solution)))))
 
 (define SOLVER-TIMEOUT 120)
 
@@ -75,7 +99,14 @@
                 'success #t
                 'problem problem
                 'solution-detailed (format-step-by-step solution axiom->string)
+                'solution-description (map
+                                        (lambda (f)
+                                          (generate-step-description
+                                          (Fact-proof f) solution))
+                                        solution)
                 'solution (format-step-by-step-terms solution)
+                'solution-tex (format-step-by-step-terms-tex solution)
+                'solution-value (get-solution-value solution (MCTSResult-nodes result))
                 'negative-examples negative-examples))
         (hash 'type "Example"
               'success #f
@@ -195,7 +226,7 @@
          neural-value-function?
          value-function-args)
   (let ([result (run-solver-round
-                 (min 16 (processor-count))
+                 (min 8 (processor-count))
                  (current-seconds)
                  n-problems
                  (list)

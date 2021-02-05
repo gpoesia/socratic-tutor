@@ -78,6 +78,9 @@
 (define (format-step-by-step-terms facts)
   (map (lambda (f) (format-term (Fact-term f))) facts))
 
+(define (format-step-by-step-terms-tex facts)
+  (map (lambda (f) (format-term-tex (Fact-term f))) facts))
+
 (define (sort-facts-by-size facts)
   (sort (shuffle facts)
         (lambda (a b) (< (term-size (Fact-term a))
@@ -97,6 +100,7 @@
   format-fact-v
   format-step-by-step
   format-step-by-step-terms
+  format-step-by-step-terms-tex
   fact-terms-equal?
   fact-solves-goal?
   sort-facts-by-size
