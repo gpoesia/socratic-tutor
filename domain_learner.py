@@ -230,8 +230,8 @@ class LearnerValueFunction(pl.LightningModule):
             return torch.optim.Adam(self.parameters(), lr=self.lr,
                                     betas=(0.9, 0.98), eps=1e-9)
 
-def parse_solutions_dataset(path, max_example_size=0):
-    print('Loading', path, '(max_example_size=', max_example_size, ')')
+def parse_solutions_dataset(path):
+    print('Loading', path)
     with open(path) as f:
         d = json.load(f)
 
@@ -243,10 +243,11 @@ def parse_solutions_dataset(path, max_example_size=0):
             solution_lens.append(len(row['solution']))
 
             for i in range(1, len(row['solution'])):
-                examples.append((row['solution'][:i + 1][-max_example_size:], 1))
+                examples.append((row['solution'][:i + 1][-2:], 1))
 
             for neg in row['negative-examples']:
-                examples.append((neg[-max_example_size:], 0))
+                examples.append(([row['solution'][neg['index']],
+                                  neg['step']], 0))
 
     max_solution_len = max(solution_lens)
     len_hist = collections.Counter(solution_lens)
