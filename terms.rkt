@@ -149,6 +149,10 @@
 (define (mark-term t i)
   (rewrite-subterm t Marker i))
 
+; Returns the term that has the given index.
+(define (get-term-by-index t i)
+  (list-ref (enumerate-subterms t) i))
+
 ; Tells whether a binary operator is commutative: a op b = b op a
 (define (is-commutative? op) (if (member op (list op+ op*)) #t #f))
 ; Tells whether operator op1 is associative with over op2: a op1 (b op2 c) = (a op1 b) op2 c
@@ -356,4 +360,5 @@
   Term? Number? Variable? UnOp? BinOp? AnyNumber? Predicate?
   Predicate-type Predicate-terms
   mark-term BEGIN-MARKER END-MARKER
+  get-term-by-index
   Operator? op+ op* op- op/ is-commutative? is-associative? is-distributive? compute-bin-op op->string string->op)

@@ -67,6 +67,46 @@
          (format-fact-i target)))]
     [_ #f]))
 
+(define (generate-step-description fact-proof all-facts)
+  (define-syntax-rule (local-rewrite-description d)
+    (let* ([f (find-fact (first-param fact-proof) all-facts)]
+           [t (get-term-by-index (Fact-term f) (second-param fact-proof))])
+      (format d (format-term t))))
+
+  (match (FactProof-axiom fact-proof)
+    [(== 'Assumption)
+     "Given"]
+    [(or (== a:commutativity) (== a:subtraction-commutativity))
+     (local-rewrite-description "Change the order of operations in ~a")]
+    [(== a:binop-eval)
+     (local-rewrite-description "Calculate ~a")]
+    [(== a:associativity)
+     (local-rewrite-description "Rearrange the parentheses in ~a")]
+    [(== a:add-zero)
+     "Use that adding zero doesn't change the result"]
+    [(== a:mul-zero)
+      "Use that multiplying by zero gives zero"]
+    [(== a:mul-one)
+      "Use that multiplying by one doesn't change the result"]
+    [(== a:subtraction-same)
+      "Use that anything minus itself is zero."]
+    [(== a:flip-equality)
+      "Flip the sides of the equation"]
+    [(== a:distributivity)
+     (local-rewrite-description "Apply the distributivity law in ~a")]
+    [(== a:op-both-sides)
+     (format
+       "~a ~a on both sides"
+       (operation-name-upcase (third-param fact-proof))
+       (format-term (second-param fact-proof)))]
+    [(== a:substitute-both-sides)
+     (let ([source (find-fact (first-param fact-proof) all-facts)])
+       (format
+         "Substitute ~a by ~a"
+         (format-term (first (Predicate-terms (Fact-term source))))
+         (format-term (second (Predicate-terms (Fact-term source))))))]
+    [_ ""]))
+
 (define (generate-term-boundary-string fact t-idx [fmt format-fact-i])
   (let* ([marked-fact (Fact (Fact-id fact) 
                             (mark-term (Fact-term fact) t-idx)
@@ -87,4 +127,14 @@
     [(== op/) "divide by"]
     ))
 
-(provide generate-leading-question)
+(define (operation-name-upcase op)
+  (match op
+    [(== op+) "Add"]
+    [(== op-) "Subtract"]
+    [(== op*) "Multiply by"]
+    [(== op/) "Divide by"]
+    ))
+
+(provide
+  generate-leading-question
+  generate-step-description)

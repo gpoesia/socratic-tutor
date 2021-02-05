@@ -436,8 +436,10 @@
 
 (provide
   a:premise
+  a:flip-equality
   a:commutativity
   a:subtraction-commutativity
+  a:subtraction-same
   a:binop-eval
   a:associativity
   a:add-zero

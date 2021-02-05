@@ -89,7 +89,12 @@
     (apply + (map (lambda (n) (if (MCTSNode-is-leaf? n) 0 1)) (MCTSResult-nodes result)))
     (apply + (map (lambda (n) (if (MCTSNode-is-leaf? n) 1 0)) (MCTSResult-nodes result)))
     (if solution
-        (string-join (map format-fact (MCTSNode-facts solution)) "\n")
+        (string-join (map (lambda (f)
+                            (format "~a [~a]"
+                              (format-fact f)
+                              (generate-step-description
+                                (Fact-proof f) (MCTSNode-facts solution))))
+                                (MCTSNode-facts solution)) "\n")
         "<no solution found>")))
 
 (run-mcts-example (list "x = 1 + 2 + 3 + 4") (list "x = ?"))
