@@ -8,8 +8,6 @@ import { MathComponent as Tex } from 'mathjax-react';
 
 export default function GuessingGame(props) {
   const [problem, setProblem] = useState(null);
-  const [lastExercise, setLastExercise] = useState(null);
-  const [success, setSuccess] = useState(false);
   const [permutation, setPermutation] = useState([]);
   const [optionChosen, setOptionChosen] = useState(false);
 
@@ -18,12 +16,8 @@ export default function GuessingGame(props) {
       const nextProblem = await tutorRequest('next-problem',
                                              {
                                                policy: props.policy,
-                                               lastExercise: lastExercise && lastExercise.id,
-                                               succeded: success,
                                              });
-
       console.log('Got problem:', nextProblem);
-
       setProblem(nextProblem);
       setOptionChosen(false);
       setPermutation(lodash.shuffle(lodash.range(3)));
@@ -39,12 +33,10 @@ export default function GuessingGame(props) {
   }
 
   const nextProblem = () => {
-    setLastExercise(problem);
     setProblem(null);
   };
 
   const makeAttempt = (correct) => {
-    setSuccess(correct);
     setOptionChosen(true);
     setTimeout(() => {
       setOptionChosen(false);
@@ -52,14 +44,39 @@ export default function GuessingGame(props) {
     }, correct ? 500 : 3000);
   };
 
-  const optionsP = [
+  const exercisePrompt = (problem.type === 'guess-step'
+                          ? <div>
+                              <p>If you are solving the equation:</p>
+                              <Tex tex={problem.exercise['state']} />
+                              <p>What would be your next step?</p>
+                            </div>
+                          : <div>
+                              <p>
+                                In which of the equations below would your next step
+                                be <em>"{problem.exercise['step-description']}"</em>?
+                              </p>
+                            </div>);
+
+  const optionsText = (problem.type === 'guess-step'
+                       ? [
+                         problem.exercise['pos']['step-description'],
+                         problem.exercise['neg']['step-description'],
+                         problem.exercise['distractors'][0]['step-description'],
+                       ]
+                       : [
+                         <Tex tex={problem.exercise['correct']} />,
+                         <Tex tex={problem.exercise['distractors'][0]} />,
+                         <Tex tex={problem.exercise['distractors'][1]} />,
+                       ]);
+
+  const optionsB = [
     <button
       key={0}
       disabled={optionChosen}
       className={optionChosen ? styles.correctOption : styles.option}
       onClick={() => makeAttempt(true)}
     >
-      <Tex tex={ problem.pos.step } />
+      {optionsText[0]}
     </button>,
     <button
       key={1}
@@ -67,7 +84,7 @@ export default function GuessingGame(props) {
       className={optionChosen ? styles.incorrectOption : styles.option}
       onClick={() => makeAttempt(false)}
     >
-      <Tex tex={ problem.neg.step } />
+      {optionsText[1]}
     </button>,
     <button
       key={2}
@@ -75,18 +92,16 @@ export default function GuessingGame(props) {
       className={optionChosen ? styles.incorrectOption : styles.option}
       onClick={() => makeAttempt(false)}
     >
-      <Tex tex={ problem.distractors[0].step } />
+      {optionsText[2]}
     </button>
   ];
 
-  const options = lodash.range(3).map(i => optionsP[permutation[i]]);
+  const options = lodash.range(3).map(i => optionsB[permutation[i]]);
 
   return (
     <div className={styles.gameContainer}>
-      <h1>Guess the next step that the AI took!</h1>
+      { exercisePrompt }
       <div className={styles.stepsList}>
-        <span><Tex display={false} tex={"\\mbox{1. }\\enspace " + problem.state } /></span>
-        <p>What should be the next step?</p>
         <div className={styles.options}>
           { options }
         </div>
