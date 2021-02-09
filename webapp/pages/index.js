@@ -1,46 +1,27 @@
-import React, { useState } from 'react';
-// import GuessingGame from './guessing-game.js';
-import dynamic from 'next/dynamic';
-
-const DynGuessingGame = dynamic(() => import('../lib/components/guessing-game.js'),
-                                { ssr: false });
-
-const policies = [
-  { display: "[Choose]" },
-  { display: "Random",
-    policy: "random" },
-  { display: "Curriculum",
-    policy: "curriculum" },
-  { display: "Personalized Curriculum",
-    policy: "personalized_curriculum" },
-];
-
-function ProblemSelection() {
-  const [chosenPolicy, setChosenPolicy] = useState(null);
-
-  if (chosenPolicy) {
-    return (
-      <DynGuessingGame policy={chosenPolicy} />
-    );
-  } else {
-    return (
-      <div className='container'>
-        <h1>Pick a problem selection policy</h1>
-
-        <select onChange={e => setChosenPolicy(policies[e.target.value].policy)}>
-          {
-            policies.map((p, i) => <option key={i} value={i}>
-                                     {p.display}
-                                   </option>)
-          }
-        </select>
-      </div>
-    );
-  }
-}
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import CircularProgress from '@material-ui/core/CircularProgress';
+import { apiRequest } from '../lib/api';
+import useStore from '../lib/state';
 
 export default function App() {
+  const router = useRouter();
+
+  const sessionId = useStore(state => state.id);
+  const setID = useStore(state => state.setID);
+
+  useEffect(async () => {
+    if (!sessionId) {
+      const { id } = await apiRequest('new-session');
+      setID(id);
+    }
+    router.push('/instructions');
+  });
+
   return (
-    <ProblemSelection />
+    <div>
+      <p>Starting your session...</p>
+      <CircularProgress />
+    </div>
   );
 }

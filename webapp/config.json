@@ -1,3 +1,63 @@
 {
-  "levelRange": 2
+  "levelRange": 2,
+  "MONGODB_HOST": "localhost:27017",
+
+  "testProblems": [
+    {
+      "id": 1,
+      "variable": "t",
+      "difficulty": 3,
+      "problem": "16 − 2t = t + 9 + 4t",
+      "solution": 1
+    },
+    {
+      "id": 2,
+      "variable": "x",
+      "difficulty": 3,
+      "problem": "20 - 7x = 6x - 6",
+      "solution": 4
+    },
+    {
+      "id": 3,
+      "variable": "e",
+      "difficulty": 1,
+      "problem": "2e = 2",
+      "solution": 1
+    },
+    {
+      "id": 4,
+      "variable": "s",
+      "difficulty": 1,
+      "problem": "6 = 3s",
+      "solution": 2
+    },
+    {
+      "id": 5,
+      "variable": "b",
+      "difficulty": 2,
+      "problem": "-11b + 7 = 40",
+      "solution": 3
+    },
+    {
+      "id": 6,
+      "variable": "x",
+      "difficulty": 2,
+      "problem": "-30 = 5(x + 1)",
+      "solution": 5
+    },
+    {
+      "id": 7,
+      "variable": "r",
+      "difficulty": 0,
+      "problem": "17 = r + 10",
+      "solution": 7
+    },
+    {
+      "id": 8,
+      "variable": "p",
+      "difficulty": 0,
+      "problem": "p - 18 = 3",
+      "solution": 21
+    }
+  ]
 }

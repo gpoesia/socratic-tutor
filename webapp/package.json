@@ -10,13 +10,20 @@
   "dependencies": {
     "@material-ui/core": "^4.11.1",
     "@material-ui/icons": "^4.9.1",
+    "aws-sdk": "^2.839.0",
     "lodash": "^4.17.20",
     "lodash.shuffle": "^4.2.0",
     "mathjax-react": "^1.0.6",
+    "mongoose": "^5.11.15",
     "next": "10.0.1",
     "react": "17.0.1",
     "react-dom": "17.0.1",
     "react-no-ssr": "^1.1.0",
-    "swr": "^0.3.8"
+    "seedrandom": "^3.0.5",
+    "sprintf-js": "^1.1.2",
+    "swr": "^0.3.8",
+    "uuid": "^8.3.2",
+    "zustand": "^3.3.1",
+    "zustand-persist": "^0.3.0"
   }
 }

@@ -1,0 +1,13 @@
+.content {
+  padding: 3em;
+}
+
+.invisible-list {
+  list-style: none;
+}
+
+.problem {
+  border: 1px solid black;
+  padding: 0.5em;
+  margin-bottom: 1em;
+}

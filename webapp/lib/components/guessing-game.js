@@ -7,42 +7,20 @@ import lodash from 'lodash';
 import { MathComponent as Tex } from 'mathjax-react';
 
 export default function GuessingGame(props) {
-  const [problem, setProblem] = useState(null);
-  const [permutation, setPermutation] = useState([]);
-  const [optionChosen, setOptionChosen] = useState(false);
+  const {
+    problem,
+    permutation,
+    optionChosen,
+    makeAttempt
+  } = props;
 
-  useEffect(async () => {
-    if (problem === null) {
-      const nextProblem = await tutorRequest('next-problem',
-                                             {
-                                               policy: props.policy,
-                                             });
-      console.log('Got problem:', nextProblem);
-      setProblem(nextProblem);
-      setOptionChosen(false);
-      setPermutation(lodash.shuffle(lodash.range(3)));
-    }
-  });
-
-  if (problem === null) {
+  if (problem === undefined) {
     return (
       <div className={styles.gameContainer}>
         <CircularProgress />
       </div>
     );
   }
-
-  const nextProblem = () => {
-    setProblem(null);
-  };
-
-  const makeAttempt = (correct) => {
-    setOptionChosen(true);
-    setTimeout(() => {
-      setOptionChosen(false);
-      nextProblem();
-    }, correct ? 500 : 3000);
-  };
 
   const exercisePrompt = (problem.type === 'guess-step'
                           ? <div>
@@ -74,7 +52,7 @@ export default function GuessingGame(props) {
       key={0}
       disabled={optionChosen}
       className={optionChosen ? styles.correctOption : styles.option}
-      onClick={() => makeAttempt(true)}
+      onClick={() => makeAttempt(0)}
     >
       {optionsText[0]}
     </button>,
@@ -82,7 +60,7 @@ export default function GuessingGame(props) {
       key={1}
       disabled={optionChosen}
       className={optionChosen ? styles.incorrectOption : styles.option}
-      onClick={() => makeAttempt(false)}
+      onClick={() => makeAttempt(1)}
     >
       {optionsText[1]}
     </button>,
@@ -90,7 +68,7 @@ export default function GuessingGame(props) {
       key={2}
       disabled={optionChosen}
       className={optionChosen ? styles.incorrectOption : styles.option}
-      onClick={() => makeAttempt(false)}
+      onClick={() => makeAttempt(2)}
     >
       {optionsText[2]}
     </button>
@@ -108,11 +86,4 @@ export default function GuessingGame(props) {
       </div>
     </div>
   );
-}
-
-async function tutorRequest(endpoint, parameters) {
-  const req = await fetch('/api/' + endpoint + '?params=' + encodeURIComponent(JSON.stringify(parameters)));
-  console.log('Fetched API:', req);
-  const res = await req.json();
-  return res;
 }
