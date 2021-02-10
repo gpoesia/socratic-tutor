@@ -6,7 +6,10 @@ export default async (req, res) => {
 
   const session = new UserSession({ id: newSessionId });
   session.beginTimestamp = new Date();
-  session.testResponses = [];
+  session.preTestResponses = [];
+  session.exerciseResponses = [];
+  session.postTestResponses = [];
+
   await session.save();
 
   res.send({ id: newSessionId });

@@ -1,7 +1,7 @@
 const Mongoose = require('mongoose');
 const Config = require('../config.json');
 
-Mongoose.connect(`mongodb://${Config.MONGODB_HOST}/tutor`,
+Mongoose.connect(`mongodb://${Config.mongodbHost}/tutor`,
                  { useNewUrlParser: true, useUnifiedTopology: true });
 
 module.exports.UserSession = Mongoose.models.UserSession || Mongoose.model(
@@ -13,5 +13,6 @@ module.exports.UserSession = Mongoose.models.UserSession || Mongoose.model(
     preTestResponses: Array,
     postTestResponses: Array,
     exerciseResponses: Array,
+    survey: Object,
   }),
 );

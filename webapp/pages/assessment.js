@@ -47,17 +47,19 @@ const Assessment = () => {
     if (invalid) {
       return alert("Please answer each equation with a number.");
     }
-    const userAnswers = _.map((value, key) => ({ id: key, answer: value }));
-    const success = await apiRequest('save-answers',
-                                     {
-                                       id,
-                                       stage: "assessment-" + router.query.stage,
-                                       answers: userAnswers,
-                                     });
+    console.log('Answers:', answers);
+    const userAnswers = _.map(answers, (value, key) => ({ id: key, answer: parseInt(value) }));
+    console.log('User answers:', userAnswers);
+    const response = await apiRequest('save-answers',
+                                      {
+                                        id,
+                                        stage: "assessment-" + router.query.stage,
+                                        answers: userAnswers,
+                                      });
 
-    console.log('Success?', success);
+    console.log('Response:', response);
 
-    if (success) {
+    if (!response.error) {
       if (router.query.stage == "pre") {
         router.push('/exercises');
       } else {

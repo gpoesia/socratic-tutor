@@ -5,7 +5,8 @@ export default async (req, res) => {
   const params = JSON.parse(req.query.params || '{}');
   const sessionId = params.id;
   const stage = params.stage;
-  const answers = params.answers;
+  const timestamp = _.now();
+  const answers = params.answers.map(a => ({ ...a, timestamp }));
 
   if (!(sessionId && stage)) {
     return res.json({ "error": "No session ID or stage provided." });
@@ -24,6 +25,5 @@ export default async (req, res) => {
   }
 
   await session.save();
-
-  res.json(true);
+  res.json({});
 };

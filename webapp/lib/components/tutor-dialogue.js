@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import IconButton from '@material-ui/core/IconButton';
 import Backspace from '@material-ui/icons/Backspace';
-import styles from '../styles/tutor-dialogue.module.css';
+import styles from '../../styles/tutor-dialogue.module.css';
 
 const useLog = (initial) => {
   initial = initial || [];

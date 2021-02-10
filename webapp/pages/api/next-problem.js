@@ -1,33 +1,32 @@
+const Fs = require('fs');
 const _ = require('lodash');
 const { UserSession } = require('../../lib/data');
+
+const config = require('../../config.json');
+
 const {
   guess_step_exercises,
   guess_state_exercises,
-} = require('../../exercises.json');
+} = JSON.parse(Fs.readFileSync(config['exercises']));
 
 guess_step_exercises.forEach((p, id) => p.id = id);
 guess_state_exercises.forEach((p, id) => p.id = id);
 
-const MIN_SUCCESSES = 5;
-
-const config = require('../../config.json');
-
 export default async (req, res) => {
   const params = JSON.parse(req.query.params || '{}');
   const sessionId = params.id;
-  console.log('Session ID:', sessionId);
+  const minimumCorrect = config['minimumCorrect'];
 
   const session = await UserSession.findOne({ id: sessionId });
-
-  console.log(session.exerciseResponses.length, 'exercise responses.');
   const correct = _.sum(session.exerciseResponses.map(r => (r.response == 0)));
-  console.log(correct, 'correct responses.');
+  console.log(session.exerciseResponses.length, 'exercise responses,', correct);
+  console.log('MIN_SUCCESSES:', minimumCorrect);
+  console.log('Config:', config);
 
-  if (correct >= MIN_SUCCESSES) {
+  if (correct >= minimumCorrect) {
     return res.json({ problem: null, progress: 1.0, done: true });
   }
 
-  const policy = params.policy || 'random';
   let chosen;
 
   if (_.sample(['step', 'state']) == 'step') {
@@ -46,5 +45,5 @@ export default async (req, res) => {
     };
   }
 
-  res.json({ problem: chosen, progress: correct / MIN_SUCCESSES, done: false });
+  res.json({ problem: chosen, progress: correct / minimumCorrect, done: false });
 };

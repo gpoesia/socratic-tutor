@@ -1,6 +1,8 @@
 {
   "levelRange": 2,
-  "MONGODB_HOST": "localhost:27017",
+  "mongodbHost": "127.0.0.1:27017",
+  "exercises": "exercises-30.json",
+  "minimumCorrect": 3,
 
   "testProblems": [
     {
