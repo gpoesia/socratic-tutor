@@ -27,12 +27,15 @@ export default async (req, res) => {
   const seenDifficulties = new Set();
   const problems = [];
 
+  const TestProblemsByID = {};
+  Config.testProblems.forEach(p => { TestProblemsByID[p.id] = p; });
+
   for (let i = 0; i < testProblemsOrder.length; i++) {
     const p = Config.testProblems[testProblemsPermutation[i]];
 
     if (!seenDifficulties.has(p.difficulty) &&
-        _.find(session.testResponses,
-               (r) => r.difficulty == p.difficulty) === undefined) {
+        _.find(session.preTestResponses,
+               (r) => TestProblemsByID[r.id].difficulty == p.difficulty) === undefined) {
       seenDifficulties.add(p.difficulty);
       problems.push({
         id: p.id,
