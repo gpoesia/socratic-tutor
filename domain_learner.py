@@ -629,6 +629,18 @@ def build_problem_graph(config, gpus):
 
     print('Wrote', config['output'])
 
+def sample_exercises(config):
+    with open(config['dataset']) as f:
+        all_exercises = json.load(f)
+
+    exercises = {
+        k: random.sample(v, config['n'])
+        for k, v in all_exercises.items()
+    }
+
+    with open(config['output'], 'w') as f:
+        json.dump(exercises, f)
+
 def batched(seq, b=128):
     i = 0
     while i < len(seq):
@@ -645,6 +657,8 @@ if __name__ == '__main__':
                         help='Make the problem/solution/step graph that is used in the teaching game.')
     parser.add_argument('--serve', action='store_const', default=False, const=True,
                         help='Serve a ranking model')
+    parser.add_argument('--sample', help='Sample exercises.', action='store_const',
+                        default=False, const=True)
     parser.add_argument('--dataset', help='Solutions dataset to use.')
     parser.add_argument('--gpus', help='Number of GPUs to use', type=int, default=0)
     parser.add_argument('--config', help='Path to config file.')
@@ -665,3 +679,5 @@ if __name__ == '__main__':
         learn_domain(config, opt.gpus)
     elif opt.build_graph:
         build_problem_graph(config, opt.gpus)
+    elif opt.sample:
+        sample_exercises(config)
