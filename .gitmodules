@@ -1,0 +1,3 @@
+[submodule "variational-item-response-theory-public"]
+	path = variational-item-response-theory-public
+	url = git@github.com:mhw32/variational-item-response-theory-public.git
