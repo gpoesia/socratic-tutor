@@ -38,14 +38,14 @@
       "variable": "b",
       "difficulty": 2,
       "problem": "-11b + 7 = 40",
-      "solution": 3
+      "solution": -3
     },
     {
       "id": 6,
       "variable": "x",
       "difficulty": 2,
       "problem": "-30 = 5(x + 1)",
-      "solution": 5
+      "solution": -7
     },
     {
       "id": 7,
