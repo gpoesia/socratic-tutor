@@ -2,6 +2,7 @@ import json
 import argparse
 import collections
 import sys
+import random
 
 sys.path.append('variational-item-response-theory-public')
 
@@ -16,12 +17,16 @@ from torch import optim
 import torch.distributions as dist
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import Subset
 import pytorch_lightning as pl
+from pytorch_lightning.metrics.functional.classification \
+    import auroc as pl_auroc, accuracy as pl_accuracy
 
 import pyro
 from pyro.infer import SVI, JitTrace_ELBO, Trace_ELBO
 from pyro.infer import Importance, EmpiricalMarginal
 from pyro.optim import Adam
+import wandb
 
 from src.pyro_core.models import (
     VIBO_3PL,
@@ -168,9 +173,6 @@ class DKVMN_IRT(pl.LightningModule):
 
         filtered_label = torch.gather(label_1d, 0, index)
         filtered_z = torch.gather(pred_z_1d, 0, index)
-        filtered_student_ability = torch.gather(student_ability_1d, 0, index)
-        filtered_question_difficulty = torch.gather(question_difficulty_1d, 0, index)
-
         filtered_pred = torch.sigmoid(filtered_z)
 
         # get prediction probability from logit
@@ -184,16 +186,31 @@ class DKVMN_IRT(pl.LightningModule):
         )
 
         loss = F.binary_cross_entropy_with_logits(filtered_logits, filtered_label)
-        return loss
+        pred_labels = filtered_pred.round()
+        accuracy = pl_accuracy(pred_labels, filtered_label)
+        auroc = pl_auroc(pred_labels, filtered_label)
+        return loss, accuracy, auroc
 
     def training_step(self, batch, batch_idx):
         index, response, problem_id, mask = batch
-
         pred_zs, student_abilities, question_difficulties = self(problem_id, response)
-        loss = self.get_loss(pred_zs, student_abilities, question_difficulties,
-                             torch.ones_like(response))
+        loss, accuracy, auroc = self.get_loss(pred_zs, student_abilities, question_difficulties,
+                                              response)
         self.log('train_loss', loss)
+        self.log('train_accuracy', accuracy)
+        self.log('train_auroc', auroc)
         return loss
+
+    def test_step(self, batch, batch_idx):
+        index, response, problem_id, mask = batch
+        pred_zs, student_abilities, question_difficulties = self(problem_id, response)
+        loss, accuracy, auroc = self.get_loss(pred_zs, student_abilities, question_difficulties,
+                                              response)
+        metrics = { 'loss': loss,
+                    'accuracy': accuracy,
+                    'auroc': auroc }
+        self.log_dict(metrics)
+        return metrics
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=1e-4)
@@ -343,23 +360,41 @@ class DKVMN_Memory(nn.Module):
         # (batch_size, memory_size, memory_state_dim)
         return new_memory
 
+def split_train_test(d, frac):
+    idx = list(range(len(d)))
+    n_train = int(frac * len(d))
+    random.shuffle(idx)
+    train_idx, test_idx = idx[:n_train], idx[n_train:]
+    return Subset(d, train_idx), Subset(d, test_idx)
+
 def run_experiments(config):
     embedding_dim = config.get('embedding_dim', 128)
     batch_size = config.get('batch_size', 32)
     epochs = config.get('epochs', 100)
     device = torch.device('cpu')
 
+    run = wandb.init(reinit=True)
+
     d = dataset.CognitiveTutorDataset(config['dataset'])
 
     irt = DKVMN_IRT(device, batch_size, d.n_problems, 100,
                     embedding_dim, embedding_dim, embedding_dim)
 
-    trainer = pl.Trainer(logger=pl.loggers.wandb.WandbLogger(config.get('name', 'DeepIRT')))
+    trainer = pl.Trainer(logger=pl.loggers.wandb.WandbLogger(config.get('name', 'DeepIRT')),
+                         max_epochs=epochs)
 
-    train_loader = torch.utils.data.DataLoader(d, batch_size=32)
-    trainer.fit(irt, train_loader)
+    training_set, test_set = split_train_test(d, config.get('training_fraction'))
 
-    return irt
+    train_dataloader = torch.utils.data.DataLoader(training_set, batch_size=32)
+    test_dataloader = torch.utils.data.DataLoader(test_set, batch_size=32)
+
+    trainer.fit(irt, train_dataloader)
+    results = trainer.test(test_dataloaders=test_dataloader)
+    print('Test results:', results)
+
+    run.finish()
+
+    return results
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

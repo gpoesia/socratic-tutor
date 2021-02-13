@@ -30,7 +30,7 @@ def parse_cognitive_tutor_log(path, canonicalize_problems=False):
         all_outcomes = set([o['outcome'] for o in v])
         first_timestamp = min([o['timestamp'] for o in v])
         correct = True
-        if len(all_outcomes) > 0 or 'OK' not in all_outcomes:
+        if len(all_outcomes) > 1 or 'OK' not in all_outcomes:
             correct = False
         rows.append({ 'student': k[0],
                       'problem': extract_problem(k[1], canonicalize_problems),
