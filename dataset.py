@@ -1,12 +1,24 @@
 # Dataset wrapper needed to use VIBO on the Cogntive Tutor logs.
 
+import re
 import collections
 import torch
 import numpy as np
 
 def extract_problem(p, canonicalize_problems=False):
-    # TODO handle canonicalize_problems.
-    return p[p.index(' ')+1:]
+    equality = p[p.index(' ')+1:]
+
+    if canonicalize_problems:
+        # Make problems that differ only in numeric values equal
+        # by assigning sequential values to the numbers.
+        idx = 0
+        l = re.split('[0-9.]+', equality)
+        s = l[0]
+        for i, t in enumerate(l[1:]):
+            s += str(i+1) + t
+        return s
+
+    return equality
 
 def parse_cognitive_tutor_log(path, canonicalize_problems=False):
     dataset = collections.defaultdict(list)
@@ -40,11 +52,11 @@ def parse_cognitive_tutor_log(path, canonicalize_problems=False):
     return rows
 
 class CognitiveTutorDataset(torch.utils.data.Dataset):
-    def __init__(self, path):
+    def __init__(self, path, canonicalize_problems=False):
         super().__init__()
 
-        observations = parse_cognitive_tutor_log(path)
-        all_problems = [row['problem'] for row in observations]
+        observations = parse_cognitive_tutor_log(path, canonicalize_problems)
+        all_problems = list(set([row['problem'] for row in observations]))
         problem_id = dict(zip(all_problems, range(len(all_problems))))
         observations.sort(key=lambda row: row['timestamp'])
         data_by_student = collections.defaultdict(list)

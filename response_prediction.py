@@ -206,9 +206,10 @@ class DKVMN_IRT(pl.LightningModule):
         pred_zs, student_abilities, question_difficulties = self(problem_id, response)
         loss, accuracy, auroc = self.get_loss(pred_zs, student_abilities, question_difficulties,
                                               response)
-        metrics = { 'loss': loss,
-                    'accuracy': accuracy,
-                    'auroc': auroc }
+        metrics = { 'test_loss': loss,
+                    'test_accuracy': accuracy,
+                    'test_auroc': auroc }
+
         self.log_dict(metrics)
         return metrics
 
@@ -375,7 +376,11 @@ def run_experiments(config):
 
     run = wandb.init(reinit=True)
 
-    d = dataset.CognitiveTutorDataset(config['dataset'])
+    canonicalize = config.get('canonicalize_problems', False)
+    d = dataset.CognitiveTutorDataset(config['dataset'], canonicalize)
+
+    print(d.n_problems, 'problems ({}canonicalized)'
+          .format('' if canonicalize else 'not '))
 
     irt = DKVMN_IRT(device, batch_size, d.n_problems, 100,
                     embedding_dim, embedding_dim, embedding_dim)
