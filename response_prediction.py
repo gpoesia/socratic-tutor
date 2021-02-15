@@ -38,6 +38,8 @@ from src.utils import AverageMeter, save_checkpoint
 from src.config import OUT_DIR
 
 import dataset
+from domain_learner \
+    import LearnerValueFunction, CharEncoding, PositionalEncoding, collate_concat, batched
 
 ### Models ###
 # Adapted from Mike's code in VIBO repository:
@@ -79,7 +81,7 @@ class DKVMN_IRT(pl.LightningModule):
             self.init_value_memory.unsqueeze(0).repeat(batch_size, 1, 1),
         )
         self.q_embed_matrix = nn.Embedding(
-            self.n_questions + 1,
+            self.n_questions,
             self.memory_key_state_dim,
         )
         self.qa_embed_matrix = nn.Embedding(
@@ -384,6 +386,19 @@ def run_experiments(config):
 
     irt = DKVMN_IRT(device, batch_size, d.n_problems, 100,
                     embedding_dim, embedding_dim, embedding_dim)
+
+    if config.get('initialize_embeddings'):
+        emb_model = LearnerValueFunction.load(config['embeddings_model'], map_location=device)
+        emb_model.to(device)
+
+        print('Embedding problems...')
+        problem_embeddings = []
+        for b in batched(d.problems):
+            problem_embeddings.append(emb_model.embed_problems(b))
+        problem_embeddings = torch.cat(problem_embeddings)
+        print('Embeddings dimension:', problem_embeddings.shape)
+        irt.q_embed_matrix = nn.Embedding.from_pretrained(problem_embeddings)
+        print('Done!')
 
     trainer = pl.Trainer(logger=pl.loggers.wandb.WandbLogger(config.get('name', 'DeepIRT')),
                          max_epochs=epochs)

@@ -230,6 +230,10 @@ class LearnerValueFunction(pl.LightningModule):
             return torch.optim.Adam(self.parameters(), lr=self.lr,
                                     betas=(0.9, 0.98), eps=1e-9)
 
+    @staticmethod
+    def load(*args, **kwargs):
+        return torch.load(*args, **kwargs)
+
 def parse_solutions_dataset(path):
     print('Loading', path)
     with open(path) as f:
