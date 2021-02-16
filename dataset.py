@@ -4,6 +4,9 @@ import re
 import collections
 import torch
 import numpy as np
+import argparse
+import json
+import subprocess
 
 def extract_problem(p, canonicalize_problems=False):
     equality = p[p.index(' ')+1:]
@@ -52,10 +55,12 @@ def parse_cognitive_tutor_log(path, canonicalize_problems=False):
     return rows
 
 class CognitiveTutorDataset(torch.utils.data.Dataset):
-    def __init__(self, path, canonicalize_problems=False):
+    def __init__(self, path):
         super().__init__()
 
-        observations = parse_cognitive_tutor_log(path, canonicalize_problems)
+        with open(path) as f:
+            observations = json.load(f)
+
         all_problems = list(set([row['problem'] for row in observations]))
         problem_id = dict(zip(all_problems, range(len(all_problems))))
         observations.sort(key=lambda row: row['timestamp'])
@@ -85,3 +90,35 @@ class CognitiveTutorDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         return index, self.response[index], self.problem_id[index], self.response_mask[index]
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser('Dataset utils')
+    parser.add_argument('--path', help='Path to the Cognitive Tutor log')
+    parser.add_argument('--canonicalize', help='Whether to canonicalize problems.',
+                        action='store_true')
+    parser.add_argument('--reformat', help='Reformat the problems using our parser.',
+                        action='store_true')
+    parser.add_argument('--output', help='Path to the output.')
+
+    opt = parser.parse_args()
+
+    ds = parse_cognitive_tutor_log(opt.path, opt.canonicalize)
+
+    if opt.reformat:
+        # Call Racket util to reformat problems as we do.
+        problems = set()
+        for entry in ds:
+            problems.add(entry['problem'])
+        problems = list(problems)
+        with open('input.txt', 'w') as f:
+            f.write('\n'.join(problems))
+        print('Making terms canonical...')
+        p = subprocess.run(['racket', '-tm', 'canonicalize-terms.rkt'],
+                           capture_output=True)
+        canonical_terms = dict(zip(problems, p.stdout.decode('utf8').split('\n')[:-1]))
+        print('Done. example:', repr(problems[0]), '==>', repr(canonical_terms[problems[0]]))
+        for entry in ds:
+            entry['problem'] = canonical_terms[entry['problem']]
+    with open(opt.output, 'w') as f:
+        json.dump(ds, f)
+    print('Wrote', opt.output)

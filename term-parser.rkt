@@ -40,8 +40,10 @@
            (Number n)]
          [`(any_number ,_)
            (AnyNumber)]
-         [`(number ,_ ,n)
+         [`(neg_number ,_ ,n)
            (Number (- n))]
+         [`(neg_var ,_ ,v)
+           (BinOp op* (Number -1) (Variable v))]
          [`(variable ,v)
            (Variable v)]))
 
@@ -53,7 +55,7 @@
              [")" (token 'RIGHT_PAREN)]
              ["=" (token 'REL_EQ)]
              ["+" (token 'OP_PLUS)]
-             [(concatenation "-" (repetition 1 +inf.0 numeric))
+             [(repetition 1 +inf.0 numeric)
               (token 'INTEGER (string->number lexeme))]
              ["-" (token 'OP_MINUS)]
              ["*" (token 'OP_TIMES)]
