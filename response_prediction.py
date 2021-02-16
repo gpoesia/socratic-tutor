@@ -4,7 +4,7 @@ import collections
 import sys
 import random
 
-sys.path.append('variational-item-response-theory-public')
+# sys.path.append('variational-item-response-theory-public')
 
 import os
 import time
@@ -21,21 +21,22 @@ from torch.utils.data import Subset
 import pytorch_lightning as pl
 from pytorch_lightning.metrics.functional.classification \
     import auroc as pl_auroc, accuracy as pl_accuracy
+import GPUtil
 
-import pyro
-from pyro.infer import SVI, JitTrace_ELBO, Trace_ELBO
-from pyro.infer import Importance, EmpiricalMarginal
-from pyro.optim import Adam
+# import pyro
+# from pyro.infer import SVI, JitTrace_ELBO, Trace_ELBO
+# from pyro.infer import Importance, EmpiricalMarginal
+# from pyro.optim import Adam
 import wandb
 
-from src.pyro_core.models import (
-    VIBO_3PL,
-    VIBO_2PL,
-    VIBO_1PL,
-)
-from src.datasets import load_dataset
-from src.utils import AverageMeter, save_checkpoint
-from src.config import OUT_DIR
+#from src.pyro_core.models import (
+#    VIBO_3PL,
+#    VIBO_2PL,
+#    VIBO_1PL,
+#)
+#from src.datasets import load_dataset
+#from src.utils import AverageMeter, save_checkpoint
+#from src.config import OUT_DIR
 
 import dataset
 from domain_learner \
@@ -53,6 +54,7 @@ class DKVMN_IRT(pl.LightningModule):
 
     def __init__(
             self,
+            config,
             device,
             batch_size,
             n_questions,
@@ -100,6 +102,7 @@ class DKVMN_IRT(pl.LightningModule):
             self.memory_key_state_dim,
             1,
         )
+        self.lr = config.get('lr', 0.001)
 
     def forward(self, q_data, qa_data):
         """
@@ -112,10 +115,12 @@ class DKVMN_IRT(pl.LightningModule):
         if batch_size < self.max_batch_size:
             q_data = torch.cat([q_data,
                                 torch.zeros((self.max_batch_size - batch_size,
-                                             q_data.shape[1]))])
+                                             q_data.shape[1]),
+                                             device=q_data.device)])
             qa_data = torch.cat([qa_data,
                                  torch.zeros((self.max_batch_size - batch_size,
-                                              qa_data.shape[1]))])
+                                              qa_data.shape[1]),
+                                              device=q_data.device)])
 
         q_embed_data  = self.q_embed_matrix(q_data.long())
         qa_embed_data = self.qa_embed_matrix((2*q_data + qa_data.relu()).long())
@@ -190,11 +195,14 @@ class DKVMN_IRT(pl.LightningModule):
         loss = F.binary_cross_entropy_with_logits(filtered_logits, filtered_label)
         pred_labels = filtered_pred.round()
         accuracy = pl_accuracy(pred_labels, filtered_label)
-        auroc = pl_auroc(pred_labels, filtered_label)
+        auroc = pl_auroc(filtered_pred, filtered_label)
         return loss, accuracy, auroc
 
     def training_step(self, batch, batch_idx):
         index, response, problem_id, mask = batch
+        response = response.to(self.device)
+        problem_id = problem_id.to(self.device)
+        mask = mask.to(self.device)
         pred_zs, student_abilities, question_difficulties = self(problem_id, response)
         loss, accuracy, auroc = self.get_loss(pred_zs, student_abilities, question_difficulties,
                                               response)
@@ -206,8 +214,11 @@ class DKVMN_IRT(pl.LightningModule):
     def validation_step(self, batch, idx):
         return self.test_step(batch, idx, 'val')
 
-    def test_step(self, batch, batch_idx, prefix='test'):
+    def test_step(self, batch, batch_idx, prefix='test', log=True):
         index, response, problem_id, mask = batch
+        response = response.to(self.device)
+        problem_id = problem_id.to(self.device)
+        mask = mask.to(self.device)
         pred_zs, student_abilities, question_difficulties = self(problem_id, response)
         loss, accuracy, auroc = self.get_loss(pred_zs, student_abilities, question_difficulties,
                                               response)
@@ -219,7 +230,7 @@ class DKVMN_IRT(pl.LightningModule):
         return metrics
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=1e-4)
+        return torch.optim.Adam(self.parameters(), lr=self.lr)
 
 
 class DKVMN(nn.Module):
@@ -377,7 +388,10 @@ def run_experiments(config):
     embedding_dim = config.get('embedding_dim', 128)
     batch_size = config.get('batch_size', 32)
     epochs = config.get('epochs', 100)
-    device = torch.device('cpu')
+
+    gpus = GPUtil.getAvailable(order='memory', maxLoad=0.3, maxMemory=0.2)[:1]
+    device = torch.device(gpus[0] if len(gpus) else 'cpu')
+    print('Using device', device)
 
     run = wandb.init(reinit=True)
 
@@ -387,8 +401,10 @@ def run_experiments(config):
     print(d.n_problems, 'problems ({}canonicalized)'
           .format('' if canonicalize else 'not '))
 
-    irt = DKVMN_IRT(device, batch_size, d.n_problems, 100,
+    irt = DKVMN_IRT(config,
+                    device, batch_size, d.n_problems, 100,
                     embedding_dim, embedding_dim, embedding_dim)
+    irt.to(device)
 
     if config.get('initialize_embeddings'):
         emb_model = LearnerValueFunction.load(config['embeddings_model'], map_location=device)
@@ -397,17 +413,18 @@ def run_experiments(config):
         print('Embedding problems...')
         with torch.no_grad():
             problem_embeddings = []
-            for b in batched(d.problems, 16):
+            for b in batched(d.problems, batch_size):
                 problem_embeddings.append(emb_model.embed_problems(b))
             problem_embeddings = torch.cat(problem_embeddings)
             print('Embeddings dimension:', problem_embeddings.shape)
             if config.get('normalize_embeddings'):
                 problem_embeddings /= (problem_embeddings**2).sum(dim=1)[:, None]
             irt.q_embed_matrix = nn.Embedding.from_pretrained(problem_embeddings,
-                                                              freeze=config.get('freeze_embeddings'))
+                                                              freeze=config.get('freeze_embeddings', True))
             print('Done!')
 
-    trainer = pl.Trainer(logger=pl.loggers.wandb.WandbLogger(config.get('name', 'DeepIRT')),
+    trainer = pl.Trainer(gpus=gpus,
+                         logger=pl.loggers.wandb.WandbLogger(config.get('name', 'DeepIRT')),
                          max_epochs=epochs)
 
     training_set, test_set = split_train_test(d, config.get('training_fraction'))
