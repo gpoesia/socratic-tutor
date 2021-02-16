@@ -75,7 +75,7 @@ class CognitiveTutorDataset(torch.utils.data.Dataset):
         self.n_problems = len(all_problems)
 
         self.problems = all_problems
-        self.response = np.zeros((self.n_students, self.max_observations), dtype=float) - 1
+        self.response = np.zeros((self.n_students, self.max_observations), dtype=int) - 1
         self.problem_id = np.zeros((self.n_students, self.max_observations), dtype=int)
         self.response_mask = np.zeros((self.n_students, self.max_observations), dtype=bool)
 

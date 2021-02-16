@@ -45,37 +45,49 @@ from domain_learner \
 ### Models ###
 
 class DKT(pl.LightningModule):
-    def __init__(self, config):
+    def __init__(self, config, n_questions):
         super().__init__()
 
-        n_questions = config['n_questions']
-        hidden_dim = config.get('hidden_dim', 128)
+        hidden_dim = config.get('hidden_size', 128)
 
-        self.q_embedding = nn.Embedding(n_questions, hidden_dim)
+        self.q_embed_matrix = nn.Embedding(n_questions, hidden_dim)
         self.a_embedding = nn.Embedding(2, hidden_dim)
 
         self.lstm = nn.LSTMCell(2*hidden_dim, hidden_dim)
         self.output = nn.Linear(hidden_dim, n_questions)
+        self.lr = config.get('lr', 1e-3)
 
-    def forward(self, q_data, qa_data, mask):
+    def forward(self, q_data, qa_data):
         L, B = q_data.shape
 
         pred = []
 
-        q_emb = self.q_embedding(q_data)
+        q_emb = self.q_embed_matrix(q_data)
         a_emb = self.a_embedding(qa_data.relu())
 
-        h, c = None, None
+        hc = None
 
         for i in range(L):
-            X_i = torch.cat([q_emb[i, :, :], a_emb[i, :, :]], dim=2)
-            h, c = self.lstm(X_i, h, c)
-            pred.append(self.output(h).sigmoid().unsqueeze(0))
+            X_i = torch.cat([q_emb[i, :, :], a_emb[i, :, :]], dim=1)
+            hc = (h, c) = self.lstm(X_i, hc)
+            pred.append(self.output(h).unsqueeze(0))
 
         return torch.cat(pred)
 
     def get_loss(self, preds, qs, response, mask):
-        pred_q = torch.gather(preds, 2, qs.unsqueeze(2)).squeeze(2)
+        pred_q = torch.gather(preds, 2, qs.unsqueeze(2)).squeeze(2)[:, :-1].reshape(-1)
+        response = response[:, 1:].reshape(-1)
+        mask = mask[:, 1:].reshape(-1)
+        index = torch.where(mask)[0]
+
+        pred_q = torch.gather(pred_q, 0, index)
+        response = torch.gather(response, 0, index)
+
+        loss = F.binary_cross_entropy_with_logits(pred_q, response.float())
+        acc = pl_accuracy(pred_q.sigmoid().round(), response)
+        auroc = pl_auroc(pred_q.sigmoid(), response)
+
+        return loss, acc, auroc
 
     def training_step(self, batch, batch_idx):
         index, response, problem_id, mask = batch
@@ -84,13 +96,32 @@ class DKT(pl.LightningModule):
         mask = mask.to(self.device)
         preds = self(problem_id, response)
 
-        loss, accuracy, auroc = self.get_loss(preds, q_data, response, mask)
+        loss, accuracy, auroc = self.get_loss(preds, problem_id, response, mask)
 
         self.log('train_loss', loss)
         self.log('train_accuracy', accuracy)
         self.log('train_auroc', auroc)
 
         return loss
+
+    def validation_step(self, batch, batch_idx):
+        return self.test_step(batch, batch_idx, 'val')
+
+    def test_step(self, batch, batch_idx, prefix='test'):
+        index, response, problem_id, mask = batch
+        response = response.to(self.device)
+        problem_id = problem_id.to(self.device)
+        mask = mask.to(self.device)
+        preds = self(problem_id, response)
+
+        _, accuracy, auroc = self.get_loss(preds, problem_id, response, mask)
+        metrics = { f'{prefix}_accuracy': accuracy, f'{prefix}_auroc': auroc }
+        self.log_dict(metrics)
+
+        return metrics
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.lr)
 
 # Adapted from Mike's code in VIBO repository:
 #
@@ -108,18 +139,15 @@ class DKVMN_IRT(pl.LightningModule):
             batch_size,
             n_questions,
             memory_size,
-            memory_key_state_dim,
-            memory_value_state_dim,
-            summary_vector_output_dim,
         ):
         super().__init__()
 
         self.max_batch_size = batch_size
         self.n_questions = n_questions
         self.memory_size = memory_size
-        self.memory_key_state_dim = memory_key_state_dim
-        self.memory_value_state_dim = memory_value_state_dim
-        self.summary_vector_output_dim = summary_vector_output_dim
+        self.memory_key_state_dim = config['hidden_size']
+        self.memory_value_state_dim = config['hidden_size']
+        self.summary_vector_output_dim = config['hidden_size']
 
         self.init_key_memory = torch.randn(self.memory_size, self.memory_key_state_dim).to(device)
         self.init_value_memory = torch.randn(self.memory_size, self.memory_value_state_dim).to(device)
@@ -281,7 +309,6 @@ class DKVMN_IRT(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
-
 
 class DKVMN(nn.Module):
     """Adapted from the TensorFlow implementation.
@@ -452,12 +479,11 @@ def evaluate(model, test_dataloader):
     return { **metrics, 'n': n }
 
 def run_experiments(config):
-    embedding_dim = config.get('embedding_dim', 128)
     batch_size = config.get('batch_size', 32)
     epochs = config.get('epochs', 100)
 
-    gpus = GPUtil.getAvailable(order='memory', maxLoad=0.3, maxMemory=0.2)[:1]
-    device = torch.device(gpus[0] if len(gpus) else 'cpu')
+    gpus = GPUtil.getAvailable(order='memory', maxLoad=0.3, maxMemory=0.2)[:1] or None
+    device = torch.device(gpus[0] if gpus else 'cpu')
     print('Using device', device)
 
     run = wandb.init(reinit=True, config=config)
@@ -466,9 +492,11 @@ def run_experiments(config):
 
     print(d.n_problems, 'problems.')
 
-    irt = DKVMN_IRT(config,
-                    device, batch_size, d.n_problems, 100,
-                    embedding_dim, embedding_dim, embedding_dim)
+    if config['model']['type'] == 'DKVMN':
+        irt = DKVMN_IRT(config['model'], device, batch_size, d.n_problems, 100)
+    else:
+        irt = DKT(config['model'], d.n_problems)
+
     irt.to(device)
 
     if config.get('initialize_embeddings'):
@@ -505,18 +533,9 @@ def run_experiments(config):
     val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=batch_size)
     test_dataloader = torch.utils.data.DataLoader(test_set, batch_size=batch_size)
 
-    from pytorch_lightning.callbacks import Callback
-
-    class PrintCallback(Callback):
-        def on_epoch_end(self, trainer, model):
-            print('Model results on val:', evaluate(model, val_dataloader))
-            print('Model results on test:', evaluate(model, test_dataloader))
-
     trainer = pl.Trainer(gpus=gpus,
                          logger=pl.loggers.wandb.WandbLogger(config.get('name', 'DeepIRT')),
-                         max_epochs=epochs,
-                         callbacks=[PrintCallback()],
-                         )
+                         max_epochs=epochs)
 
     trainer.fit(irt, train_dataloader, val_dataloader)
     results = trainer.test(test_dataloaders=test_dataloader)
