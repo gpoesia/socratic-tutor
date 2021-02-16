@@ -43,6 +43,55 @@ from domain_learner \
     import LearnerValueFunction, CharEncoding, PositionalEncoding, collate_concat, batched
 
 ### Models ###
+
+class DKT(pl.LightningModule):
+    def __init__(self, config):
+        super().__init__()
+
+        n_questions = config['n_questions']
+        hidden_dim = config.get('hidden_dim', 128)
+
+        self.q_embedding = nn.Embedding(n_questions, hidden_dim)
+        self.a_embedding = nn.Embedding(2, hidden_dim)
+
+        self.lstm = nn.LSTMCell(2*hidden_dim, hidden_dim)
+        self.output = nn.Linear(hidden_dim, n_questions)
+
+    def forward(self, q_data, qa_data, mask):
+        L, B = q_data.shape
+
+        pred = []
+
+        q_emb = self.q_embedding(q_data)
+        a_emb = self.a_embedding(qa_data.relu())
+
+        h, c = None, None
+
+        for i in range(L):
+            X_i = torch.cat([q_emb[i, :, :], a_emb[i, :, :]], dim=2)
+            h, c = self.lstm(X_i, h, c)
+            pred.append(self.output(h).sigmoid().unsqueeze(0))
+
+        return torch.cat(pred)
+
+    def get_loss(self, preds, qs, response, mask):
+        pred_q = torch.gather(preds, 2, qs.unsqueeze(2)).squeeze(2)
+
+    def training_step(self, batch, batch_idx):
+        index, response, problem_id, mask = batch
+        response = response.to(self.device)
+        problem_id = problem_id.to(self.device)
+        mask = mask.to(self.device)
+        preds = self(problem_id, response)
+
+        loss, accuracy, auroc = self.get_loss(preds, q_data, response, mask)
+
+        self.log('train_loss', loss)
+        self.log('train_accuracy', accuracy)
+        self.log('train_auroc', auroc)
+
+        return loss
+
 # Adapted from Mike's code in VIBO repository:
 #
 # https://github.com/mhw32/variational-item-response-theory-public
@@ -87,7 +136,7 @@ class DKVMN_IRT(pl.LightningModule):
             self.memory_key_state_dim,
         )
         self.qa_embed_matrix = nn.Embedding(
-            2 * self.n_questions + 1,
+            2, # * self.n_questions + 1,
             self.memory_value_state_dim,
         )
         self.summary_vector_fc = nn.Linear(
@@ -123,7 +172,7 @@ class DKVMN_IRT(pl.LightningModule):
                                               device=q_data.device)])
 
         q_embed_data  = self.q_embed_matrix(q_data.long())
-        qa_embed_data = self.qa_embed_matrix((2*q_data + qa_data.relu()).long())
+        qa_embed_data = self.qa_embed_matrix((0*q_data + qa_data.relu()).long())
 
         sliced_q_embed_data = torch.chunk(q_embed_data, seq_len, dim=1)
         sliced_qa_embed_data = torch.chunk(qa_embed_data, seq_len, dim=1)
@@ -215,19 +264,20 @@ class DKVMN_IRT(pl.LightningModule):
         return self.test_step(batch, idx, 'val')
 
     def test_step(self, batch, batch_idx, prefix='test', log=True):
-        index, response, problem_id, mask = batch
-        response = response.to(self.device)
-        problem_id = problem_id.to(self.device)
-        mask = mask.to(self.device)
-        pred_zs, student_abilities, question_difficulties = self(problem_id, response)
-        loss, accuracy, auroc = self.get_loss(pred_zs, student_abilities, question_difficulties,
-                                              response)
-        metrics = { f'{prefix}_loss': loss,
-                    f'{prefix}_accuracy': accuracy,
-                    f'{prefix}_auroc': auroc }
+        with torch.no_grad():
+            index, response, problem_id, mask = batch
+            response = response.to(self.device)
+            problem_id = problem_id.to(self.device)
+            mask = mask.to(self.device)
+            pred_zs, student_abilities, question_difficulties = self(problem_id, response)
+            loss, accuracy, auroc = self.get_loss(pred_zs, student_abilities, question_difficulties,
+                                                  response)
+            metrics = { f'{prefix}_loss': loss,
+                        f'{prefix}_accuracy': accuracy,
+                        f'{prefix}_auroc': auroc }
 
-        self.log_dict(metrics)
-        return metrics
+            self.log_dict(metrics)
+            return metrics
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
@@ -377,12 +427,29 @@ class DKVMN_Memory(nn.Module):
         # (batch_size, memory_size, memory_state_dim)
         return new_memory
 
-def split_train_test(d, frac):
+def split_train_val_test(d, frac_train, frac_val, split_seed=0):
     idx = list(range(len(d)))
-    n_train = int(frac * len(d))
+    n_train = int(frac_train * len(d))
+    n_val = int(frac_val * len(d))
+    random.seed(split_seed)
     random.shuffle(idx)
-    train_idx, test_idx = idx[:n_train], idx[n_train:]
-    return Subset(d, train_idx), Subset(d, test_idx)
+    train_idx, val_idx, test_idx = (idx[:n_train],
+                                    idx[n_train:n_train+n_val],
+                                    idx[n_train+n_val:])
+    return Subset(d, train_idx), Subset(d, val_idx), Subset(d, test_idx)
+
+def evaluate(model, test_dataloader):
+    metrics = collections.defaultdict(float)
+    n = 0
+    for i, batch in enumerate(test_dataloader):
+        n += len(batch[0])
+        m = model.test_step(batch, i)
+        for k, v in m.items():
+            metrics[k] += len(batch[0]) * v
+
+    for k, v in m.items():
+        metrics[k] /= n
+    return { **metrics, 'n': n }
 
 def run_experiments(config):
     embedding_dim = config.get('embedding_dim', 128)
@@ -393,13 +460,11 @@ def run_experiments(config):
     device = torch.device(gpus[0] if len(gpus) else 'cpu')
     print('Using device', device)
 
-    run = wandb.init(reinit=True)
+    run = wandb.init(reinit=True, config=config)
 
-    canonicalize = config.get('canonicalize_problems', False)
-    d = dataset.CognitiveTutorDataset(config['dataset'], canonicalize)
+    d = dataset.CognitiveTutorDataset(config['dataset'])
 
-    print(d.n_problems, 'problems ({}canonicalized)'
-          .format('' if canonicalize else 'not '))
+    print(d.n_problems, 'problems.')
 
     irt = DKVMN_IRT(config,
                     device, batch_size, d.n_problems, 100,
@@ -418,23 +483,43 @@ def run_experiments(config):
             problem_embeddings = torch.cat(problem_embeddings)
             print('Embeddings dimension:', problem_embeddings.shape)
             if config.get('normalize_embeddings'):
-                problem_embeddings /= (problem_embeddings**2).sum(dim=1)[:, None]
-            irt.q_embed_matrix = nn.Embedding.from_pretrained(problem_embeddings,
-                                                              freeze=config.get('freeze_embeddings', True))
+                problem_embeddings /= (problem_embeddings**2).sum(dim=1).sqrt()[:, None]
+            alpha = config.get('embeddings_alpha', 1.0)
+            irt.q_embed_matrix = nn.Embedding.from_pretrained(
+                    0.5 * problem_embeddings * alpha +
+                    0.5 * irt.q_embed_matrix.weight)
             print('Done!')
+
+    print('Average embedding L2-norm:',
+          (irt.q_embed_matrix.weight**2).sum(dim=1).sqrt().mean())
+
+    irt.q_embed_matrix.weight.requires_grad = not config.get('freeze_embeddings', False)
+
+    training_set, val_set, test_set = split_train_val_test(
+            d,
+            config['training_fraction'],
+            config['val_fraction'],
+            config['split_seed'])
+
+    train_dataloader = torch.utils.data.DataLoader(training_set, batch_size=batch_size)
+    val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=batch_size)
+    test_dataloader = torch.utils.data.DataLoader(test_set, batch_size=batch_size)
+
+    from pytorch_lightning.callbacks import Callback
+
+    class PrintCallback(Callback):
+        def on_epoch_end(self, trainer, model):
+            print('Model results on val:', evaluate(model, val_dataloader))
+            print('Model results on test:', evaluate(model, test_dataloader))
 
     trainer = pl.Trainer(gpus=gpus,
                          logger=pl.loggers.wandb.WandbLogger(config.get('name', 'DeepIRT')),
-                         max_epochs=epochs)
+                         max_epochs=epochs,
+                         callbacks=[PrintCallback()],
+                         )
 
-    training_set, test_set = split_train_test(d, config.get('training_fraction'))
-
-    train_dataloader = torch.utils.data.DataLoader(training_set, batch_size=32)
-    test_dataloader = torch.utils.data.DataLoader(test_set, batch_size=32)
-
-    trainer.fit(irt, train_dataloader, test_dataloader)
+    trainer.fit(irt, train_dataloader, val_dataloader)
     results = trainer.test(test_dataloaders=test_dataloader)
-    print('Test results:', results)
 
     run.finish()
 
