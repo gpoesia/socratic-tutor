@@ -203,14 +203,17 @@ class DKVMN_IRT(pl.LightningModule):
         self.log('train_auroc', auroc)
         return loss
 
-    def test_step(self, batch, batch_idx):
+    def validation_step(self, batch, idx):
+        return self.test_step(batch, idx, 'val')
+
+    def test_step(self, batch, batch_idx, prefix='test'):
         index, response, problem_id, mask = batch
         pred_zs, student_abilities, question_difficulties = self(problem_id, response)
         loss, accuracy, auroc = self.get_loss(pred_zs, student_abilities, question_difficulties,
                                               response)
-        metrics = { 'test_loss': loss,
-                    'test_accuracy': accuracy,
-                    'test_auroc': auroc }
+        metrics = { f'{prefix}_loss': loss,
+                    f'{prefix}_accuracy': accuracy,
+                    f'{prefix}_auroc': auroc }
 
         self.log_dict(metrics)
         return metrics
@@ -392,13 +395,17 @@ def run_experiments(config):
         emb_model.to(device)
 
         print('Embedding problems...')
-        problem_embeddings = []
-        for b in batched(d.problems):
-            problem_embeddings.append(emb_model.embed_problems(b))
-        problem_embeddings = torch.cat(problem_embeddings)
-        print('Embeddings dimension:', problem_embeddings.shape)
-        irt.q_embed_matrix = nn.Embedding.from_pretrained(problem_embeddings)
-        print('Done!')
+        with torch.no_grad():
+            problem_embeddings = []
+            for b in batched(d.problems, 16):
+                problem_embeddings.append(emb_model.embed_problems(b))
+            problem_embeddings = torch.cat(problem_embeddings)
+            print('Embeddings dimension:', problem_embeddings.shape)
+            if config.get('normalize_embeddings'):
+                problem_embeddings /= (problem_embeddings**2).sum(dim=1)[:, None]
+            irt.q_embed_matrix = nn.Embedding.from_pretrained(problem_embeddings,
+                                                              freeze=config.get('freeze_embeddings'))
+            print('Done!')
 
     trainer = pl.Trainer(logger=pl.loggers.wandb.WandbLogger(config.get('name', 'DeepIRT')),
                          max_epochs=epochs)
@@ -408,7 +415,7 @@ def run_experiments(config):
     train_dataloader = torch.utils.data.DataLoader(training_set, batch_size=32)
     test_dataloader = torch.utils.data.DataLoader(test_set, batch_size=32)
 
-    trainer.fit(irt, train_dataloader)
+    trainer.fit(irt, train_dataloader, test_dataloader)
     results = trainer.test(test_dataloaders=test_dataloader)
     print('Test results:', results)
 
