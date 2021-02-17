@@ -9,7 +9,8 @@ import json
 import subprocess
 
 def extract_problem(p, canonicalize_problems=False):
-    equality = p[p.index(' ')+1:]
+    equality = re.sub('(\\.[0-9]+)', '', p)
+#    equality = p # [p.index(' ')+1:]
 
     if canonicalize_problems:
         # Make problems that differ only in numeric values equal
@@ -35,7 +36,7 @@ def parse_cognitive_tutor_log(path, canonicalize_problems=False):
                 col = {c:i for i, c in enumerate(l)}
             else:
                 student = l[col['Anon Student Id']]
-                problem = l[col['Problem Name']]
+                problem = l[col['Step Name']]
 
                 dataset[student, problem].append({ 'timestamp': l[col['Time']],
                                                    'outcome': l[col['Outcome']] })
@@ -70,6 +71,8 @@ class CognitiveTutorDataset(torch.utils.data.Dataset):
             data_by_student[row['student']].append((problem_id[row['problem']],
                                                     int(row['correct'])))
 
+        self.obs_by_student = data_by_student
+        self.student_ids = list(data_by_student.keys())
         self.max_observations = max(len(s_obs) for s_obs in data_by_student.values())
         self.n_students = len(data_by_student)
         self.n_problems = len(all_problems)

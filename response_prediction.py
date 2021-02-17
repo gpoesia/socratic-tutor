@@ -44,21 +44,110 @@ from domain_learner \
 
 ### Models ###
 
-class DKT(pl.LightningModule):
+def cos_similarity(v1, v2):
+    return (v1 * v2).sum() / (v1**2).sum().sqrt() / (v2**2).sum().sqrt()
+
+class EKT(pl.LightningModule):
     def __init__(self, config, n_questions):
         super().__init__()
 
         hidden_dim = config.get('hidden_size', 128)
 
         self.q_embed_matrix = nn.Embedding(n_questions, hidden_dim)
-        self.a_embedding = nn.Embedding(2, hidden_dim)
+        self.k = config.get('k', 3)
 
         self.lstm = nn.LSTMCell(2*hidden_dim, hidden_dim)
         self.output = nn.Linear(hidden_dim, n_questions)
         self.lr = config.get('lr', 1e-3)
 
+    def predict_student(self, questions, responses):
+        preds = []
+
+        for i, (q, r) in enumerate(zip(questions, responses)):
+            p, sd, sc = torch.tensor(0.0), 1e-6, 0
+            e_i = self.q_embed_matrix.weight[q, :]
+
+            neighbors = [(-np.inf, 0.5)]
+
+            for pq in range(i):
+                e_pq = self.q_embed_matrix.weight[pq, :]
+                d = cos_similarity(e_i, e_pq)
+                neighbors.append((d, responses[pq]))
+
+            neighbors.sort(key=lambda it: -it[0])
+            preds.append(np.mean([float(r) for d, r in neighbors[:self.k]]))
+
+        return preds
+
     def forward(self, q_data, qa_data):
-        L, B = q_data.shape
+        B, L = q_data.shape
+        preds = []
+
+        for j in range(B):
+            preds.append(self.predict_student(q_data[j, :], qa_data[j, :]))
+
+        return torch.tensor(preds)
+
+    def get_loss(self, preds, qs, response, mask):
+        pred_q = preds.reshape(-1)
+        response = response[:, 1:].reshape(-1)
+        mask = mask[:, 1:].reshape(-1)
+        index = torch.where(mask)[0]
+
+        pred_q = torch.gather(pred_q, 0, index)
+        response = torch.gather(response, 0, index)
+
+        loss = F.binary_cross_entropy_with_logits(pred_q, response.float())
+        acc = pl_accuracy(pred_q.sigmoid().round(), response)
+        auroc = pl_auroc(pred_q.sigmoid(), response)
+
+        return loss, acc, auroc
+
+    def training_step(self, batch, batch_idx):
+        index, response, problem_id, mask = batch
+        response = response.to(self.device)
+        problem_id = problem_id.to(self.device)
+        mask = mask.to(self.device)
+        preds = self(problem_id, response)
+
+        loss, accuracy, auroc = self.get_loss(preds, problem_id, response, mask)
+
+        self.log('train_loss', loss)
+        self.log('train_accuracy', accuracy)
+        self.log('train_auroc', auroc)
+
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        return self.test_step(batch, batch_idx, 'val')
+
+    def test_step(self, batch, batch_idx, prefix='test'):
+        index, response, problem_id, mask = batch
+        response = response.to(self.device)
+        problem_id = problem_id.to(self.device)
+        mask = mask.to(self.device)
+        preds = self(problem_id, response)
+
+        _, accuracy, auroc = self.get_loss(preds, problem_id, response, mask)
+        metrics = { f'{prefix}_accuracy': accuracy, f'{prefix}_auroc': auroc }
+        self.log_dict(metrics)
+
+        return metrics
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.lr)
+
+class Marginal(pl.LightningModule):
+    def __init__(self, config, n_questions):
+        super().__init__()
+
+        hidden_dim = config.get('hidden_size', 128)
+
+        self.q_embed_matrix = nn.Embedding(n_questions, hidden_dim)
+        self.q_freq =
+
+    def forward(self, q_data, qa_data):
+        B, L = q_data.shape
 
         pred = []
 
@@ -68,11 +157,11 @@ class DKT(pl.LightningModule):
         hc = None
 
         for i in range(L):
-            X_i = torch.cat([q_emb[i, :, :], a_emb[i, :, :]], dim=1)
+            X_i = torch.cat([q_emb[:, i, :], a_emb[:, i, :]], dim=1)
             hc = (h, c) = self.lstm(X_i, hc)
-            pred.append(self.output(h).unsqueeze(0))
+            pred.append(self.output(h).unsqueeze(1))
 
-        return torch.cat(pred)
+        return torch.cat(pred, dim=1)
 
     def get_loss(self, preds, qs, response, mask):
         pred_q = torch.gather(preds, 2, qs.unsqueeze(2)).squeeze(2)[:, :-1].reshape(-1)
@@ -122,6 +211,88 @@ class DKT(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
+
+
+
+class DKT(pl.LightningModule):
+    def __init__(self, config, n_questions):
+        super().__init__()
+
+        hidden_dim = config.get('hidden_size', 128)
+
+        self.q_embed_matrix = nn.Embedding(n_questions, hidden_dim)
+        self.a_embedding = nn.Embedding(2, hidden_dim)
+
+        self.lstm = nn.LSTMCell(2*hidden_dim, hidden_dim)
+        self.output = nn.Linear(hidden_dim, n_questions)
+        self.lr = config.get('lr', 1e-3)
+
+    def forward(self, q_data, qa_data):
+        B, L = q_data.shape
+
+        pred = []
+
+        q_emb = self.q_embed_matrix(q_data)
+        a_emb = self.a_embedding(qa_data.relu())
+
+        hc = None
+
+        for i in range(L):
+            X_i = torch.cat([q_emb[:, i, :], a_emb[:, i, :]], dim=1)
+            hc = (h, c) = self.lstm(X_i, hc)
+            pred.append(self.output(h).unsqueeze(1))
+
+        return torch.cat(pred, dim=1)
+
+    def get_loss(self, preds, qs, response, mask):
+        pred_q = torch.gather(preds, 2, qs.unsqueeze(2)).squeeze(2)[:, :-1].reshape(-1)
+        response = response[:, 1:].reshape(-1)
+        mask = mask[:, 1:].reshape(-1)
+        index = torch.where(mask)[0]
+
+        pred_q = torch.gather(pred_q, 0, index)
+        response = torch.gather(response, 0, index)
+
+        loss = F.binary_cross_entropy_with_logits(pred_q, response.float())
+        acc = pl_accuracy(pred_q.sigmoid().round(), response)
+        auroc = pl_auroc(pred_q.sigmoid(), response)
+
+        return loss, acc, auroc
+
+    def training_step(self, batch, batch_idx):
+        index, response, problem_id, mask = batch
+        response = response.to(self.device)
+        problem_id = problem_id.to(self.device)
+        mask = mask.to(self.device)
+        preds = self(problem_id, response)
+
+        loss, accuracy, auroc = self.get_loss(preds, problem_id, response, mask)
+
+        self.log('train_loss', loss)
+        self.log('train_accuracy', accuracy)
+        self.log('train_auroc', auroc)
+
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        return self.test_step(batch, batch_idx, 'val')
+
+    def test_step(self, batch, batch_idx, prefix='test'):
+        index, response, problem_id, mask = batch
+        response = response.to(self.device)
+        problem_id = problem_id.to(self.device)
+        mask = mask.to(self.device)
+        preds = self(problem_id, response)
+
+        _, accuracy, auroc = self.get_loss(preds, problem_id, response, mask)
+        metrics = { f'{prefix}_accuracy': accuracy, f'{prefix}_auroc': auroc }
+        self.log_dict(metrics)
+
+        return metrics
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.lr)
+
 
 # Adapted from Mike's code in VIBO repository:
 #
@@ -463,19 +634,22 @@ def split_train_val_test(d, frac_train, frac_val, split_seed=0):
     train_idx, val_idx, test_idx = (idx[:n_train],
                                     idx[n_train:n_train+n_val],
                                     idx[n_train+n_val:])
+    print(n_train, 'train,', n_val, 'val,', len(idx) - n_train - n_val, 'test')
     return Subset(d, train_idx), Subset(d, val_idx), Subset(d, test_idx)
 
 def evaluate(model, test_dataloader):
     metrics = collections.defaultdict(float)
     n = 0
     for i, batch in enumerate(test_dataloader):
-        n += len(batch[0])
+        n_i = batch[3].sum()
+        n += n_i
         m = model.test_step(batch, i)
         for k, v in m.items():
-            metrics[k] += len(batch[0]) * v
+            metrics[k] += n_i * v
 
     for k, v in m.items():
         metrics[k] /= n
+
     return { **metrics, 'n': n }
 
 def run_experiments(config):
@@ -492,10 +666,15 @@ def run_experiments(config):
 
     print(d.n_problems, 'problems.')
 
+    needs_training = True
+
     if config['model']['type'] == 'DKVMN':
         irt = DKVMN_IRT(config['model'], device, batch_size, d.n_problems, 100)
-    else:
+    elif config['model']['type'] == 'DKT':
         irt = DKT(config['model'], d.n_problems)
+    else:
+        irt = EKT(config['model'], d.n_problems)
+        needs_training = False
 
     irt.to(device)
 
@@ -513,10 +692,15 @@ def run_experiments(config):
             if config.get('normalize_embeddings'):
                 problem_embeddings /= (problem_embeddings**2).sum(dim=1).sqrt()[:, None]
             alpha = config.get('embeddings_alpha', 1.0)
-            irt.q_embed_matrix = nn.Embedding.from_pretrained(
-                    0.5 * problem_embeddings * alpha +
-                    0.5 * irt.q_embed_matrix.weight)
+            irt.q_embed_matrix = nn.Embedding.from_pretrained(alpha * problem_embeddings)
             print('Done!')
+
+            if config.get('dump_similarities'):
+                torch.save({
+                    'embeddings': irt.q_embed_matrix.weight,
+                    'similarity': irt.q_embed_matrix.weight.matmul(irt.q_embed_matrix.weight.T),
+                    }, config['dump_similarities'])
+                print('Dumped similarity matrix.')
 
     print('Average embedding L2-norm:',
           (irt.q_embed_matrix.weight**2).sum(dim=1).sqrt().mean())
@@ -537,8 +721,12 @@ def run_experiments(config):
                          logger=pl.loggers.wandb.WandbLogger(config.get('name', 'DeepIRT')),
                          max_epochs=epochs)
 
-    trainer.fit(irt, train_dataloader, val_dataloader)
-    results = trainer.test(test_dataloaders=test_dataloader)
+    if needs_training:
+        trainer.fit(irt, train_dataloader, val_dataloader)
+        trainer.test(test_dataloaders=test_dataloader)
+
+    results = evaluate(irt, test_dataloader)
+    print('Manually evaluating on test set:', results)
 
     run.finish()
 
