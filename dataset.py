@@ -66,12 +66,17 @@ class CognitiveTutorDataset(torch.utils.data.Dataset):
         problem_id = dict(zip(all_problems, range(len(all_problems))))
         observations.sort(key=lambda row: row['timestamp'])
         data_by_student = collections.defaultdict(list)
+        data_by_problem = collections.defaultdict(list)
 
         for row in observations:
             data_by_student[row['student']].append((problem_id[row['problem']],
                                                     int(row['correct'])))
+            data_by_problem[row['problem']].append((row['student'],
+                                                    int(row['correct'])))
 
+        self.observations = observations
         self.obs_by_student = data_by_student
+        self.obs_by_problem = data_by_problem
         self.student_ids = list(data_by_student.keys())
         self.max_observations = max(len(s_obs) for s_obs in data_by_student.values())
         self.n_students = len(data_by_student)

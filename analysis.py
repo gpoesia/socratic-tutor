@@ -4,6 +4,7 @@ import json
 import pymongo
 import numpy as np
 import collections
+from scipy.stats import norm
 
 def load_data(config):
     client = pymongo.MongoClient()
@@ -72,3 +73,48 @@ def aggregate_exercise_statistic(f, data):
         scores.append(f(k, v, data))
 
     return compute_statistics(scores)
+
+def ith_question(i, question, response, state):
+    return True, i // 2, state
+
+def ith_question_with_op(op, n=1):
+    def criterion(i, question, response, state):
+        if question.count(op) < n:
+            return False, None, None
+        return True, i // 2, state
+    return criterion
+
+def bernoulli_ci(values):
+    p = np.mean(values)
+    return (p, norm.ppf(0.975) * np.sqrt(p * (1 - p) / len(values)), len(values))
+
+def analyze_student_success_rate(dataset, criterion):
+    results = collections.defaultdict(list)
+
+    for st in dataset.obs_by_student.values():
+        student_state = {}
+        i = 0
+        for q, r in st:
+            use, key, student_state = criterion(i, dataset.problems[q], r, student_state)
+            if use:
+                i += 1
+                results[key].append(r)
+
+    return { k:bernoulli_ci(v)  for k, v in results.items() }
+
+def question_difficulty(q, r):
+    return True, q
+
+def question_length(q, r):
+    return True, len(q)
+
+def analyze_question_difficulty(dataset, criterion):
+    results = collections.defaultdict(list)
+
+    for k, v in dataset.obs_by_problem.items():
+        for st, r in v:
+            use, key = criterion(k, r)
+            if use:
+                results[key].append(r)
+
+    return { k:bernoulli_ci(v)  for k, v in results.items() }
