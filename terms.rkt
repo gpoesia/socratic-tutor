@@ -3,16 +3,22 @@
 (require algebraic/function)
 (require algebraic/racket/base/forms)
 (require racket/match)
+(require racket/string)
 (require rebellion/type/enum)
 (require "debug.rkt")
 
 ; A mathematical term.
-; A Marker is a "fake" wrapper term, only used for doing formatting
-; tricks (e.g. see generate-term-boundary-string in questions.rkt).
-; The parser (term-parser.rkt) never returns markers, and general functions
-; that are manipulating terms are not supposed to handle or produce them.
-(data Term (Number Variable UnOp BinOp AnyNumber Predicate
-            Marker))
+
+(data Term
+      ; Equations domain.
+      (Number Variable UnOp BinOp AnyNumber Predicate
+      ; Ternary addition domain.
+      TernaryNumber TernaryDigit
+      ; A Marker is a "fake" wrapper term, only used for doing formatting
+      ; tricks (e.g. see generate-term-boundary-string in questions.rkt).
+      ; The parser (term-parser.rkt) never returns markers, and general functions
+      ; that are manipulating terms are not supposed to handle or produce them.
+      Marker))
 (define-enum-type Operator (op+ op- op* op/))
 
 (define BEGIN-MARKER "[-[-[")
@@ -29,6 +35,8 @@
 
 (define Predicate-type (phi (Predicate type _) type))
 (define Predicate-terms (phi (Predicate _ terms) terms))
+
+(define TernaryNumber-digits (phi (TernaryNumber ds) ds))
 
 (define (compute-bin-op op a b)
   (match op
@@ -48,6 +56,7 @@
     [(UnOp op t1) (+ 1 (term-size t1))]
     [(BinOp op t1 t2) (+ 1 (term-size t1) (term-size t2))]
     [(Predicate type terms) (foldl + 1 (map term-size terms))]
+    [(TernaryNumber digits) (length digits)]
     ))
 
 ; Returns a list with the direct subterms of `t`.
@@ -114,7 +123,7 @@
   (if
     (= index 0)
     (or (transform term) term)
-    (replace-subterms 
+    (replace-subterms
       term
       (car (foldl
              ; Finds the sub-term whose sub-tree contains the index we are
@@ -137,7 +146,7 @@
                    (let ([s (term-size st)])
                      (if (< idx s)
                        ; The term to rewrite is in st - rewrite.
-                       (cons (append sts 
+                       (cons (append sts
                                      (list (rewrite-subterm st transform idx)))
                                      #f)
                        ; The term to rewrite is not in st - update index.
@@ -161,12 +170,12 @@
     (and (eq? op1 op+) (or (eq? op2 op+) (eq? op2 op-)))
     (and (eq? op1 op*) (or (eq? op2 op*) (eq? op2 op/)))))
 ; Tells whether operator op1 distributes over op2: a op1 (b op2 c) = (a op1 b) op2 (a op1 c)
-(define (is-distributive? op1 op2) 
+(define (is-distributive? op1 op2)
   (and (or (eq? op1 op*) (eq? op1 op/))
        (or (eq? op2 op+) (eq? op2 op-))))
 
 ; Locally simplify the term with simple rewrite rules.
-; These rules don't need to cover symmetric cases because we combine 
+; These rules don't need to cover symmetric cases because we combine
 ; them with random search to get a global simplification procedure.
 ; For example, they simplify (2*3)*x to 6x, but they don't match 2*(3x).
 ; However, during random search, we'll use multiplication's associativity
@@ -274,8 +283,8 @@
                                  (let* ([step-result (random-step t)]
                                         [tstep (car step-result)]
                                         [tstep-best (cdr step-result)]
-                                        [next-best (if (< (objective tstep-best) 
-                                                          (objective best)) 
+                                        [next-best (if (< (objective tstep-best)
+                                                          (objective best))
                                                      tstep-best best)]
                                         [progress (not (eq? next-best best))])
                                    ; If made progress, reset budget, else decrement it.
@@ -305,6 +314,15 @@
     [(== "/") op/]
     ))
 
+(define (number-to-ternary-number n)
+  (if (= n 0)
+      (TernaryNumber (list))
+      (let ([d (modulo n 3)]
+            [rn (number-to-ternary-number (quotient n 3))])
+        (TernaryNumber (cons (TernaryDigit d 0)
+                             (map (phi (TernaryDigit c p) (TernaryDigit c (+ 1 p)))
+                                  (TernaryNumber-digits rn)))))))
+
 ; Compact form of printing a term.
 ; transform is a function that takes the generated string for a term
 ; and the term's index and transforms it. By default, it just returns
@@ -327,6 +345,11 @@
    ; Equality.
    [(Predicate 'Eq (a b))
     (format "~a = ~a" (format-term a) (format-term b))]
+   ; Ternary number as a list of digits
+   [(TernaryNumber l)
+    (format "#(~a)" (string-join (map format-term l) " "))]
+   [(TernaryDigit d p)
+    (format "~a~a" (list-ref (list "a" "b" "c") d) p)]
    ; Marker
    [(Marker t)
     (format "~a~a~a" BEGIN-MARKER (format-term t) END-MARKER)]
@@ -384,9 +407,10 @@
   enumerate-subterms
   term-size
   goal-matches?
-  Number Variable UnOp BinOp AnyNumber Predicate
+  Number Variable UnOp BinOp AnyNumber Predicate TernaryNumber TernaryDigit
   Term? Number? Variable? UnOp? BinOp? AnyNumber? Predicate?
   Predicate-type Predicate-terms
+  TernaryNumber-digits
   mark-term BEGIN-MARKER END-MARKER
   get-term-by-index
   Operator? op+ op* op- op/ is-commutative? is-associative? is-distributive? compute-bin-op op->string string->op)

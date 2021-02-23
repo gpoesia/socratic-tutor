@@ -1,6 +1,6 @@
 #lang brag
 
-term       : predicate | expr
+term       : predicate | expr | ternary_number
 
 predicate  : equality
 equality   : expr REL_EQ expr
@@ -11,8 +11,8 @@ sum        : expr_l1 OP_PLUS expr_l2
 sub        : expr_l1 OP_MINUS expr_l2
 
 expr_l2    : prod | div | expr_l3
-prod       : expr_l2 OP_TIMES expr_l3 
-             | paren-expr paren-expr 
+prod       : expr_l2 OP_TIMES expr_l3
+             | paren-expr paren-expr
 varcoeff   : number expr_l4 | neg_number expr_l4
 div        : expr_l2 OP_DIV expr_l3
 
@@ -24,3 +24,9 @@ neg_var    : OP_MINUS VARIABLE
 any_number : ANY_NUMBER
 neg_number : OP_MINUS INTEGER
 number     : INTEGER
+
+ternary_number : TERNARY_MARK LEFT_PAREN ternary_digits
+ternary_digits : ternary_end | ternary_cons
+ternary_cons   : ternary_digit ternary_digits
+ternary_digit  : VARIABLE INTEGER
+ternary_end    : RIGHT_PAREN

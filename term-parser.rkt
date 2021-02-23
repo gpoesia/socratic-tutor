@@ -22,7 +22,7 @@
          [`(expr_l3 ,e) (parse-tree-to-term e)]
          [`(expr_l4 ,e) (parse-tree-to-term e)]
          [`(equality ,e1 ,_ ,e2)
-           (Predicate 
+           (Predicate
              'Eq (list (parse-tree-to-term e1) (parse-tree-to-term e2)))]
          [`(sum ,e1 ,_ ,e2)
            (BinOp op+ (parse-tree-to-term e1) (parse-tree-to-term e2))]
@@ -38,6 +38,13 @@
            (BinOp op/ (parse-tree-to-term e1) (parse-tree-to-term e2))]
          [`(number ,n)
            (Number n)]
+         [`(ternary_number ,_ ,_ ,ds) (TernaryNumber (parse-tree-to-term ds))]
+         [`(ternary_digits ,ds) (parse-tree-to-term ds)]
+         [`(ternary_cons ,d ,ds) (cons (parse-tree-to-term d) (parse-tree-to-term ds))]
+         [`(ternary_digit ,v ,i) (TernaryDigit (- (char->integer (car (string->list v)))
+                                                  (char->integer #\a))
+                                               i)]
+         [`(ternary_end ,_) empty]
          [`(any_number ,_)
            (AnyNumber)]
          [`(neg_number ,_ ,n)
@@ -61,6 +68,7 @@
              ["*" (token 'OP_TIMES)]
              ["/" (token 'OP_DIV)]
              ["?" (token 'ANY_NUMBER)]
+             ["#" (token 'TERNARY_MARK)]
              [(repetition 1 +inf.0 numeric)
               (token 'INTEGER (string->number lexeme))]
              [(repetition 1 +inf.0 alphabetic)
