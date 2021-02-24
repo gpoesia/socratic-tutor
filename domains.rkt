@@ -1,11 +1,10 @@
 #lang racket
 
+(require "solver.rkt")
 (require "facts.rkt")
 (require "generation.rkt")
 (require "tactics.rkt")
 (require "ternary.rkt")
-
-(struct Domain (name generator verifier step) #:transparent)
 
 (define EquationsDomain
   (Domain
@@ -29,10 +28,6 @@
    (raise-user-error (format "Cannot find domain '~a'" name))))
 
 (provide
- Domain-name
- Domain-generator
- Domain-verifier
- Domain-step
  EquationsDomain
  TernaryAdditionDomain
  AllDomains

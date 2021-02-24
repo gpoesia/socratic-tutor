@@ -1,17 +1,15 @@
 ; Axioms and tactics used by the "ternary numbers domain" solver.
 #lang algebraic/racket/base
 
-(require algebraic/data)
-(require algebraic/function)
-(require algebraic/racket/base/forms)
+(require "terms.rkt")
+
 (require racket/list)
 (require racket/string)
 (require racket/function)
 (require racket/match)
-(require rebellion/type/enum)
-(require "terms.rkt")
+
 (require "facts.rkt")
-(require "debug.rkt")
+(require "solver.rkt")
 
 ; ==============================
 ; ========   Axioms  ===========
@@ -116,5 +114,14 @@
   (filter (lambda (f) (not (member f facts fact-terms-equal?)))
           (td:all (last facts))))
 
+; Generates a random ternary addition problem by generating random digits.
+(define (generate-ternary-addition-problem [max-difficulty 15] [max-power 5])
+  (Problem
+   (list (assumption (TernaryNumber (map (lambda (_) (TernaryDigit (random 0 3)
+                                                                   (random 0 max-power)))
+                                         (range (random 1 max-difficulty))))))
+   (list (AnyNumber))))
+
 (provide
-  d:ternary)
+ d:ternary
+ generate-ternary-addition-problem)

@@ -14,6 +14,8 @@
 (require "tactics.rkt")
 (require "debug.rkt")
 
+(struct Domain (name generator verifier step) #:transparent)
+
 (struct Problem (initial-facts goals) #:transparent)
 
 (define (format-problem p)
@@ -301,6 +303,7 @@
           new-facts)))))
 
 (provide
+  Domain Domain-name Domain-generator Domain-verifier Domain-step
   Problem? Problem Problem-initial-facts Problem-goals format-problem
   MCTSNode MCTSResult MCTSNode-facts MCTSNode-value MCTSResult-terminal MCTSNode-is-leaf? MCTSResult-nodes
   SolverResult SolverResult? problem-solved?
@@ -310,7 +313,6 @@
   SolverResult-contradiction
   find-solution
   solve-problem
-  solve-problem-mcts
   solve-problem-smc
   inverse-term-size-value-function
   random-value-function
