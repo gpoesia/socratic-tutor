@@ -277,8 +277,7 @@ def collate_concat(l):
 
 def train_domain_learner(config, gpus=0, logger=None):
     print('Training on', config['dataset'])
-    _, examples, _ = parse_solutions_dataset(config['dataset'],
-                                             config.get('max_example_size', 0))
+    _, examples, _ = parse_solutions_dataset(config['dataset'])
 
     if config.get('max_examples'):
         print('Limiting number of examples to', config['max_examples'])
