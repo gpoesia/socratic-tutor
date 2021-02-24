@@ -99,57 +99,7 @@
           prune
           (- depth 1))))))
 
-(define (exploration-term n h) (/ 1 (log (+ 2 h))))
-
-; Searches for a solution using a MCTS simplified variant.
-(define (find-solution-mcts-loop
-         nodes
-         goals
-         domain
-         value-function
-         max-steps
-         [n-step 0])
-  (printf "Here: ~a/~a states visited.\n" n-step max-steps)
-  ; If timed out, return.
-  (if (> n-step max-steps)
-    (MCTSResult nodes #f)
-    ; Find leaf with max value.
-    (let* ([selected-node (argmax (lambda (n) (if (MCTSNode-is-leaf? n)
-                                                  (* (MCTSNode-value n)
-                                                     (exploration-term n-step (length (MCTSNode-facts n))))
-                                                  -1)) nodes)]
-           [selected-node-facts (MCTSNode-facts selected-node)]
-           [_ (printf "Selected node: ~a\n"
-                      (string-join (map format-fact
-                                        (MCTSNode-facts selected-node)) "; "))]
-           ; Find potential next facts.
-           [derived-facts (filter (lambda (f) (not (member f selected-node-facts fact-terms-equal?)))
-                                  (domain (MCTSNode-facts selected-node)))]
-           ; Create children nodes.
-           [children-nodes (map (lambda (f) (MCTSNode (append (MCTSNode-facts selected-node) (list f))
-                                                      0.0
-                                                      #t)) derived-facts)]
-           ; For each child node, check whether it solves all goals.
-           [terminal-nodes (filter (lambda (node) (solves-problem? goals (MCTSNode-facts node)))
-                                   children-nodes)]
-           ; For each child node, check whether it solves all goals.
-           ; Compute value estimates using value function.
-           [children-values (if (empty? terminal-nodes) (value-function children-nodes) (list))]
-           ; Create other nodes.
-           [next-nodes (append nodes children-nodes)])
-      ; Expanded node is not a leaf anymore; update it.
-      (set-MCTSNode-is-leaf?! selected-node #f)
-      (if (not (empty? terminal-nodes))
-        ; Found a solution!
-        (MCTSResult next-nodes (car terminal-nodes))
-        ; Otherwise, recurse.
-        (begin
-          ; Update computed values.
-          (for-each (lambda (node value) (set-MCTSNode-value! node value))
-                    children-nodes children-values)
-          (find-solution-mcts-loop next-nodes goals domain value-function max-steps (+ 1 n-step)))))))
-
-; Searches for a solution using Sequential Monte Carlo.
+; Searches for a solution using a simple Beam Search.
 (define (find-solution-smc-loop
          nodes
          goals
@@ -171,10 +121,12 @@
                                            (MCTSNode (append (MCTSNode-facts n) (list f))
                                                       (MCTSNode-value n)
                                                       #t))
-                                         (domain (MCTSNode-facts n))))
+                                         ((Domain-step domain) (MCTSNode-facts n))))
                                   leaves))]
            ; For each child node, check whether it solves all goals.
-           [terminal-nodes (filter (lambda (node) (solves-problem? goals (MCTSNode-facts node)))
+           [terminal-nodes (filter (lambda (node) (solves-problem? goals
+                                                                   (MCTSNode-facts node)
+                                                                   (Domain-verifier domain)))
                                    proposals)]
            ; Compute value estimates using value function.
            [proposal-values (if (empty? terminal-nodes) (value-function proposals) (list))]
@@ -198,14 +150,6 @@
 
 (define (random-value-function nodes)
   (map (lambda (node) (random)) nodes))
-
-(define (solve-problem-mcts problem domain value-function max-states)
-  (find-solution-mcts-loop
-    (list (MCTSNode (Problem-initial-facts problem) 0.0 #t))
-    (Problem-goals problem)
-    domain
-    value-function
-    max-states))
 
 (define (solve-problem-smc problem domain value-function n-samples max-depth)
   (find-solution-smc-loop
@@ -236,20 +180,20 @@
                  strategy prune depth))
 
 ; Returns whether the list of facts given solves all goals.
-(define (solves-problem? goals facts)
-  (let-values ([(_ unmet) (match-goals empty goals facts)])
+(define (solves-problem? goals facts [check fact-solves-goal?])
+  (let-values ([(_ unmet) (match-goals empty goals facts check)])
     (empty? unmet)))
 
 ; Checks whether all goals in unmet-goals match any of the facts.
 ; Returns a pair (met-goals . unmet-goals).
-(define (match-goals met-goals unmet-goals facts)
+(define (match-goals met-goals unmet-goals facts [check fact-solves-goal?])
   (if (empty? unmet-goals)
     (values met-goals unmet-goals)
     (let*-values ([(g rest) (values (car unmet-goals) (cdr unmet-goals))]
-                  [(met-goals-r unmet-goals-r) (match-goals met-goals rest facts)])
+                  [(met-goals-r unmet-goals-r) (match-goals met-goals rest facts check)])
       ; If g matches any of the facts, add it to met goals. Otherwise,
       ; to unmet goals.
-      (if (ormap (lambda (f) (fact-solves-goal? f g)) facts)
+      (if (ormap (lambda (f) (check f g)) facts)
         (values (cons g met-goals-r) unmet-goals-r)
         (values met-goals-r (cons g unmet-goals-r))))))
 

@@ -38,7 +38,8 @@
            (BinOp op/ (parse-tree-to-term e1) (parse-tree-to-term e2))]
          [`(number ,n)
            (Number n)]
-         [`(ternary_number ,_ ,_ ,ds) (TernaryNumber (parse-tree-to-term ds))]
+         [`(ternary_number ,_ ,_ ,ds)
+          (TernaryNumber (parse-tree-to-term ds))]
          [`(ternary_digits ,ds) (parse-tree-to-term ds)]
          [`(ternary_cons ,d ,ds) (cons (parse-tree-to-term d) (parse-tree-to-term ds))]
          [`(ternary_digit ,v ,i) (TernaryDigit (- (char->integer (car (string->list v)))

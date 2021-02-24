@@ -6,7 +6,8 @@
 (define n-problems (make-parameter 1000))
 (define negatives (make-parameter 5))
 (define depth (make-parameter 5))
-(define use-value-function (make-parameter #f))
+(define domain (make-parameter "equations"))
+(define policy (make-parameter "random"))
 (define beam-width (make-parameter 10))
 (define server (make-parameter "http://127.0.0.1:9911/"))
 
@@ -22,9 +23,15 @@
   [("-p" "--problems") p
    "Number of problems to solve successfully before stopping."
    (n-problems (string->number p))]
+  [("-P" "--policy") P
+   "Which search policy to use ('random', 'smallest' or 'neural')"
+   (policy P)]
   [("-d" "--depth") d
    "Max search depth."
    (depth (string->number d))]
+  [("-D" "--domain") D
+   "Domain ('equations' or 'ternary-addition')."
+   (domain D)]
   [("-n" "--negatives") n
    "Number of negative examples to extract."
    (negatives (string->number n))]
@@ -35,6 +42,6 @@
    "Path to output file"
    (output-file o)])
 
-(run-equation-solver-round (n-problems) (depth) (negatives) (beam-width)
-                           (output-file) (use-value-function)
-                           (if (use-value-function) (list (server)) empty))
+(run-solver-round (domain) (n-problems) (depth) (negatives) (beam-width)
+                  (output-file) policy
+                  (if (eq? policy "neural") (list (server)) empty))

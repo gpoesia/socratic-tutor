@@ -117,5 +117,4 @@
           (td:all (last facts))))
 
 (provide
-
   d:ternary)

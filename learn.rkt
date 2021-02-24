@@ -9,6 +9,7 @@
 (require "solver.rkt")
 (require "tactics.rkt")
 (require "generation.rkt")
+(require "domains.rkt")
 (require "serialize.rkt")
 (require "facts.rkt")
 (require "terms.rkt")
@@ -70,21 +71,20 @@
 
 (define (generate-and-solve-problems
          channel
-         generator-name
          domain-name
-         value-fn-name
-         value-fn-args
+         policy-name
+         policy-args
          beam-size
          depth
          n-negative-examples)
- (let* ([generate-problem-fn (get-problem-generator-by-name generator-name)]
-        [domain (get-domain-by-name domain-name)]
-        [value-fn (get-value-fn-by-name value-fn-name value-fn-args)]
+ (let* ([domain (get-domain-by-name domain-name)]
+        [generate-problem-fn (Domain-generator domain)]
+        [policy (get-policy-by-name policy-name policy-args)]
         [problem (generate-problem-fn)]
         [e (engine (lambda (_) (solve-problem-smc
                                 problem
                                 domain
-                                value-fn
+                                policy
                                 beam-size
                                 depth)))]
         [success? (engine-run (* 1000 SOLVER-TIMEOUT) e)]
@@ -111,22 +111,21 @@
         (hash 'type "Example"
               'success #f
               'problem problem))))
-    (generate-and-solve-problems channel generator-name domain-name
-                                 value-fn-name value-fn-args beam-size depth n-negative-examples)))
+    (generate-and-solve-problems channel domain-name
+                                 policy-name policy-args beam-size depth n-negative-examples)))
 
 ; Runs the solver until it is able to successfully solve n problems.
-(define (run-solver-round
+(define (run-solver-loop
          n-threads
          begin-time
          total-problems
          solver-places
          place-dead-evts
-         generate-problem-fn
-         strategy-name
+         domain-name
          n-problems
          n-negative-examples
-         ranking-fn-name
-         value-fn-args
+         policy-name
+         policy-args
          beam-size
          depth
          solutions)
@@ -143,26 +142,24 @@
        (let ([p (place/context ch
                   (generate-and-solve-problems
                    ch
-                   generate-problem-fn
-                   strategy-name
-                   ranking-fn-name
-                   value-fn-args
+                   domain-name
+                   policy-name
+                   policy-args
                    beam-size
                    depth
                    n-negative-examples))])
           (log-debug "Starting new solver thread...\n")
-          (run-solver-round
+          (run-solver-loop
             n-threads
             begin-time
             total-problems
             (cons p solver-places)
             (cons (place-dead-evt p) place-dead-evts)
-            generate-problem-fn
-            strategy-name
+            domain-name
             n-problems
             n-negative-examples
-            ranking-fn-name
-            value-fn-args
+            policy-name
+            policy-args
             beam-size
             depth
             solutions))]
@@ -173,18 +170,17 @@
         (if (evt? next-evt)
           (let ([i (index-of place-dead-evts next-evt)])
             (log-debug "Solver thread ~a died.\n" i)
-            (run-solver-round
+            (run-solver-loop
               n-threads
               begin-time
               total-problems
               (remove (list-ref solver-places i) solver-places)
               (remove next-evt place-dead-evts)
-              generate-problem-fn
-              strategy-name
+              domain-name
               n-problems
               n-negative-examples
-              ranking-fn-name
-              value-fn-args
+              policy-name
+              policy-args
               beam-size
               depth
               solutions))
@@ -201,63 +197,53 @@
                              (+ 1 (length solutions)))
                      (flush-output))
               (void))
-            (run-solver-round
+            (run-solver-loop
              n-threads
              begin-time
              total-problems
              solver-places
              place-dead-evts
-             generate-problem-fn
-             strategy-name
+             domain-name
              remaining-problems
              n-negative-examples
-             ranking-fn-name
-             value-fn-args
+             policy-name
+             policy-args
              beam-size
              depth
              (cons next-evt solutions)))))])))
 
-(define (run-equation-solver-round
+(define (run-solver-round
+         domain-name
          n-problems
          depth
          negative-examples
          beam-width
          output-file
-         neural-value-function?
-         value-function-args)
-  (let ([result (run-solver-round
-                 (min 8 (processor-count))
+         policy-name
+         policy-args
+         max-threads)
+  (let ([result (run-solver-loop
+                 (min max-threads (processor-count))
                  (current-seconds)
                  n-problems
                  (list)
                  (list)
-                 'equations:gen
-                 'd:equations
+                 domain-name
                  n-problems
                  negative-examples
-                 (if neural-value-function?
-                     'neural-value-function
-                     'smallest)
-                 value-function-args
+                 policy-name
+                 policy-args
                  beam-width
                  depth
                  (list))])
     (call-with-output-file output-file (lambda (out) (to-json result out)) #:exists 'replace)
     (printf "\nWrote ~a\n" output-file)))
 
-(define (get-value-fn-by-name name args)
+(define (get-policy-by-name name args)
   (match name
     [(== 'smallest) inverse-term-size-value-function]
-    [(== 'shuffle) random-value-function]
-    [(== 'neural-value-function) (apply make-neural-value-function args)]))
-
-(define (get-domain-by-name name)
-  (match name
-    [(== 'd:equations) d:equations]))
-
-(define (get-problem-generator-by-name name)
-  (match name
-    [(== 'equations:gen) generate-problem]))
+    [(== 'random) random-value-function]
+    [(== 'neural) (apply make-neural-value-function args)]))
 
 (provide
-  run-equation-solver-round)
+  run-solver-round)
