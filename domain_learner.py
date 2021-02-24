@@ -387,7 +387,12 @@ def now():
     return datetime.datetime.now().isoformat(timespec='seconds')
 
 def learn_domain(config, gpus):
-    wandb_run = wandb.init(config=config, project=f'domain-learner-{config["domain"]}')
+    domain = config["domain"]
+    initial_policy = config["initial_policy"]
+
+    print('Learning to solve', domain, 'starting with', initial_policy, 'policy')
+
+    wandb_run = wandb.init(config=config, project=f'domain-learner-{domain}-{initial_policy}')
 
     dataset = []
     stats = []
@@ -424,6 +429,7 @@ def learn_domain(config, gpus):
 
             print(now(), 'Running solver...')
             args = ['racket', 'run-learn.rkt',
+                    '-D', domain,
                     '-o', solver_output,
                     '-d', str(min(config['initial_depth'] + r*step,
                                   config.get('max_depth', 100))),
@@ -432,7 +438,10 @@ def learn_domain(config, gpus):
                     '-b', str(config['beam_width'])]
             if use_value_function:
                 # Use value function after bootstrap round.
-                args.append('-V')
+                args.append('-P', 'neural')
+            else:
+                args.append('-P', initial_policy)
+
             print(now(), '$', ' '.join(args))
             subprocess.run(args)
 
