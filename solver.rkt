@@ -154,13 +154,16 @@
   (map (lambda (node) (random)) nodes))
 
 (define (solve-problem-smc problem domain value-function n-samples max-depth)
-  (find-solution-smc-loop
-    (list (MCTSNode (Problem-initial-facts problem) 0.0 #t))
-    (Problem-goals problem)
-    domain
-    value-function
-    n-samples
-    max-depth))
+  (let ([initial-node (MCTSNode (Problem-initial-facts problem) 0.0 #t)])
+    (if (solves-problem? (Problem-goals problem) (MCTSNode-facts initial-node) (Domain-verifier domain))
+        (MCTSResult (list initial-node) initial-node)
+        (find-solution-smc-loop
+         (list initial-node)
+         (Problem-goals problem)
+         domain
+         value-function
+         n-samples
+         max-depth))))
 
 (define is-contradiction?
   (function
