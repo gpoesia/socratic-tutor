@@ -435,12 +435,15 @@ def learn_domain(config, gpus):
                                   config.get('max_depth', 100))),
                     '-p', str(config['problems_per_round']),
                     '-S', server_address,
-                    '-b', str(config['beam_width'])]
+                    '-T', str(config.get('solver_threads', 8)),
+                    '-b', str(config['beam_width']),
+                    '-P', # <-- Policy, specified below depending on the case.
+                    ]
             if use_value_function:
-                # Use value function after bootstrap round.
-                args.append('-P', 'neural')
+                # Use learned policy after bootstrap round.
+                args.append('neural')
             else:
-                args.append('-P', initial_policy)
+                args.append(initial_policy)
 
             print(now(), '$', ' '.join(args))
             subprocess.run(args)

@@ -29,7 +29,7 @@
    (depth (string->number d))]
   [("-T" "--threads") T
    "Max number of threads to use."
-   (depth (string->number T))]
+   (max-threads (string->number T))]
   [("-D" "--domain") D
    "Domain ('equations' or 'ternary-addition')."
    (domain D)]
