@@ -241,9 +241,9 @@
 
 (define (get-policy-by-name name args)
   (match name
-    [(== 'smallest) inverse-term-size-value-function]
-    [(== 'random) random-value-function]
-    [(== 'neural) (apply make-neural-value-function args)]))
+    ["smallest" inverse-term-size-value-function]
+    ["random" random-value-function]
+    ["neural" (apply make-neural-value-function args)]))
 
 (provide
   run-solver-round)

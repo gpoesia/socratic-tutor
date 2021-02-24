@@ -31,12 +31,16 @@
     (UnOp? t)
     (BinOp? t)
     (AnyNumber? t)
-    (Predicate? t)))
+    (Predicate? t)
+    (TernaryNumber? t)
+    (TernaryDigit? t)))
 
 (define Predicate-type (phi (Predicate type _) type))
 (define Predicate-terms (phi (Predicate _ terms) terms))
 
 (define TernaryNumber-digits (phi (TernaryNumber ds) ds))
+(define TernaryDigit-digit (phi (TernaryDigit d p) d))
+(define TernaryDigit-power (phi (TernaryDigit d p) p))
 
 (define (compute-bin-op op a b)
   (match op
@@ -378,6 +382,11 @@
    ; Equality.
    [(Predicate 'Eq (a b))
     (format "~a = ~a" (format-term-tex a) (format-term-tex b))]
+   ; Ternary Number.
+   [(TernaryNumber l)
+    (format "##~a" (string-join (map format-term l) ";"))]
+   [(TernaryDigit d p)
+    (format "~a~a" (list-ref (list "a" "b" "c") d) p)]
    ; Marker
    [(Marker t)
     (format "~a~a~a" BEGIN-MARKER (format-term-tex t) END-MARKER)]
@@ -410,7 +419,7 @@
   Number Variable UnOp BinOp AnyNumber Predicate TernaryNumber TernaryDigit
   Term? Number? Variable? UnOp? BinOp? AnyNumber? Predicate?
   Predicate-type Predicate-terms
-  TernaryNumber-digits
+  TernaryNumber-digits TernaryDigit-digit TernaryDigit-power
   mark-term BEGIN-MARKER END-MARKER
   get-term-by-index
   Operator? op+ op* op- op/ is-commutative? is-associative? is-distributive? compute-bin-op op->string string->op)

@@ -10,13 +10,11 @@
 (define policy (make-parameter "random"))
 (define beam-width (make-parameter 10))
 (define server (make-parameter "http://127.0.0.1:9911/"))
+(define max-threads (make-parameter 1))
 
 (command-line
   #:program "domain-learner"
   #:once-each
-  [("-V" "--value-function")
-   "Use neural value function server."
-   (use-value-function #t)]
   [("-S" "--server") s
    "URL of the server to access the neural value function."
    (server s)]
@@ -29,6 +27,9 @@
   [("-d" "--depth") d
    "Max search depth."
    (depth (string->number d))]
+  [("-T" "--threads") T
+   "Max number of threads to use."
+   (depth (string->number T))]
   [("-D" "--domain") D
    "Domain ('equations' or 'ternary-addition')."
    (domain D)]
@@ -43,5 +44,6 @@
    (output-file o)])
 
 (run-solver-round (domain) (n-problems) (depth) (negatives) (beam-width)
-                  (output-file) policy
-                  (if (eq? policy "neural") (list (server)) empty))
+                  (output-file) (policy)
+                  (if (equal? (policy) "neural") (list (server)) empty)
+                  (max-threads))

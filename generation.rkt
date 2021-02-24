@@ -13,7 +13,6 @@
 (require "facts.rkt")
 (require "solver.rkt")
 (require "tactics.rkt")
-(require "serialize.rkt")
 
 (define (choice l) (car (random-sample l 1)))
 (define (choice-p l [c 0.0] [r #f])
@@ -139,56 +138,5 @@
       (map (lambda (t) (assumption (repeat-perturb t (random 1 max-difficulty) 0.3 answer))) base-facts)
       goals)))
 
-; Constant timeout for the problem generation place below, in ms.
-(define timeout 20000)
-
-; A place task that executes an infinite loop of generating
-; and solving problems.
-(define (problem-generation-place channel)
-  (let* ([problem (generate-problem)]
-         [_ (printf "New problem: ~a\n" (format-problem problem))]
-         [e (engine (lambda (_) (solve-problem
-                                  problem
-                                  s:equations
-                                  (prune:keep-smallest-k 20)
-                                  100)))]
-         [success? (engine-run timeout e)])
-    (if success?
-      (begin
-        (printf "Solver succeeded!\n")
-        (place-channel-put
-          channel
-          (to-jsexpr
-            (hash
-              'problem problem
-              'solution (engine-result e))))
-        (problem-generation-place channel))
-        (begin
-          (printf "Solver timed out...\n")
-          (problem-generation-place channel)))))
-
-; Generates and solves problems in parallel, saving them from time
-; to time in `out-path` in JSON format.
-(define (generate-problems-job n-threads out-path)
-  (with-handlers
-    () ; TODO: handle Control-C
-    (letrec ([places (map (lambda (_) (place ch (problem-generation-place ch)))
-                          (range n-threads))]
-             [loop (lambda (all i)
-                     (define result (place-channel-get
-                                      (list-ref places
-                                                (remainder i n-threads))))
-                     (if (eq? 0 (remainder i 10))
-                       (begin
-                         (printf "Saving ~a problems to ~a.\n"
-                                 (length all) out-path)
-                         (call-with-output-file out-path
-                           (lambda (out) (to-json all out))
-                           #:exists 'replace))
-                       void)
-                     (loop (cons result all) (+ 1 i)))])
-      (loop empty 0))))
-
 (provide
-  generate-problem
-  generate-problems-job)
+  generate-problem)

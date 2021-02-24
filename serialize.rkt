@@ -5,6 +5,7 @@
 (require "terms.rkt")
 (require "term-parser.rkt")
 (require "tactics.rkt")
+(require "domains.rkt")
 (require "facts.rkt")
 (require "solver.rkt")
 (require json)

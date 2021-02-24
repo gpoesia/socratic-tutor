@@ -115,13 +115,27 @@
           (td:all (last facts))))
 
 ; Generates a random ternary addition problem by generating random digits.
-(define (generate-ternary-addition-problem [max-difficulty 15] [max-power 5])
+(define (generate-ternary-addition-problem [max-difficulty 30] [max-power 5])
   (Problem
    (list (assumption (TernaryNumber (map (lambda (_) (TernaryDigit (random 0 3)
                                                                    (random 0 max-power)))
                                          (range (random 1 max-difficulty))))))
    (list (AnyNumber))))
 
+(define (is-ternary-number-simplified? f g)
+  (let* ([ternary-digits (TernaryNumber-digits (Fact-term f))]
+         [powers (map TernaryDigit-power ternary-digits)]
+         [digits (map TernaryDigit-digit ternary-digits)]
+         [is-sorted? (equal? powers (sort powers <))]
+         [powers-unique? (not (check-duplicates powers))]
+         [has-zero? (member 0 digits)])
+    (and is-sorted? powers-unique? (not has-zero?))))
+
 (provide
  d:ternary
- generate-ternary-addition-problem)
+ generate-ternary-addition-problem
+ is-ternary-number-simplified?
+
+ td:add-consecutive
+ td:swap
+ td:erase-zero)

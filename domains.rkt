@@ -24,11 +24,56 @@
 
 (define (get-domain-by-name name)
   (or
-   (findf (lambda (d) (eq? (Domain-name d) name)) AllDomains)
-   (raise-user-error (format "Cannot find domain '~a'" name))))
+   (findf (lambda (d) (equal? (Domain-name d) name)) AllDomains)
+   (raise-user-error (format "Cannot find domain '~a' ~a"
+                             name
+                             (map Domain-name AllDomains)))))
+
+; Serialization utils.
+; Returns a unique string representing each axiom.
+(define (axiom->string a)
+  (match a
+    [(== 'assumption) "assumption"]
+    [(== a:flip-equality) "a:flip-equality"]
+    [(== a:commutativity) "a:commutativity"]
+    [(== a:subtraction-commutativity) "a:subtraction-commutativity"]
+    [(== a:subtraction-same) "a:subtraction-same"]
+    [(== a:associativity) "a:associativity"]
+    [(== a:binop-eval) "a:binop-eval"]
+    [(== a:add-zero) "a:add-zero"]
+    [(== a:mul-zero) "a:mul-zero"]
+    [(== a:mul-one) "a:mul-one"]
+    [(== a:distributivity) "a:distributivity"]
+    [(== a:substitute-both-sides) "a:substitute-both-sides"]
+    [(== a:op-both-sides) "a:op-both-sides"]
+    [(== td:add-consecutive) "td:add-consecutive"]
+    [(== td:swap) "td:swap"]
+    [(== td:erase-zero) "td:erase-zero"]))
+
+; Inverts axiom->string.
+(define (string->axiom s)
+  (match s
+    [(== "assumption") 'assumption]
+    [(== "a:flip-equality") a:flip-equality]
+    [(== "a:commutativity") a:commutativity]
+    [(== "a:subtraction-commutativity") a:subtraction-commutativity]
+    [(== "a:subtraction-same") a:subtraction-same]
+    [(== "a:associativity") a:associativity]
+    [(== "a:binop-eval") a:binop-eval]
+    [(== "a:add-zero") a:add-zero]
+    [(== "a:mul-zero") a:mul-zero]
+    [(== "a:mul-one") a:mul-one]
+    [(== "a:distributivity") a:distributivity]
+    [(== "a:substitute-both-sides") a:substitute-both-sides]
+    [(== "a:op-both-sides") a:op-both-sides]
+    [(== "td:add-consecutive") td:add-consecutive]
+    [(== "td:swap") td:swap]
+    [(== "td:erase-zero") td:erase-zero]))
 
 (provide
  EquationsDomain
  TernaryAdditionDomain
  AllDomains
- get-domain-by-name)
+ get-domain-by-name
+ axiom->string
+ string->axiom)

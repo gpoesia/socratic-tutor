@@ -23,14 +23,14 @@
 (define (new-fact term proof)
   (Fact (equal-hash-code (cons term proof)) term proof))
 
-(define assumption-proof (FactProof 'Assumption '()))
+(define assumption-proof (FactProof 'assumption '()))
 
 (define (assumption term) (new-fact term assumption-proof))
 
 (define (fact term proof) (new-fact term proof))
 
 (define (is-assumption? fact) (equal? (FactProof-axiom (Fact-proof fact))
-                                      'Assumption))
+                                      'assumption))
 
 (define (fact-dependencies f)
   (filter identity (map (lambda (a) (if (FactId? a) (FactId-id a) #f))

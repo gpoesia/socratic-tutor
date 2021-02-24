@@ -170,40 +170,6 @@
      (Predicate 'Eq (list (BinOp op a t) (BinOp op b t)))]
     [(_ _ _) #f]))
 
-; Returns a unique string representing each axiom.
-(define (axiom->string a)
-  (match a
-    [(== 'Assumption) "Assumption"]
-    [(== a:flip-equality) "a:flip-equality"]
-    [(== a:commutativity) "a:commutativity"]
-    [(== a:subtraction-commutativity) "a:subtraction-commutativity"]
-    [(== a:subtraction-same) "a:subtraction-same"]
-    [(== a:associativity) "a:associativity"]
-    [(== a:binop-eval) "a:binop-eval"]
-    [(== a:add-zero) "a:add-zero"]
-    [(== a:mul-zero) "a:mul-zero"]
-    [(== a:mul-one) "a:mul-one"]
-    [(== a:distributivity) "a:distributivity"]
-    [(== a:substitute-both-sides) "a:substitute-both-sides"]
-    [(== a:op-both-sides) "a:op-both-sides"]))
-
-; Returns a unique string representing each axiom.
-(define (string->axiom s)
-  (match s
-    [(== "Assumption") 'Assumption]
-    [(== "a:flip-equality") a:flip-equality]
-    [(== "a:commutativity") a:commutativity]
-    [(== "a:subtraction-commutativity") a:subtraction-commutativity]
-    [(== "a:subtraction-same") a:subtraction-same]
-    [(== "a:associativity") a:associativity]
-    [(== "a:binop-eval") a:binop-eval]
-    [(== "a:add-zero") a:add-zero]
-    [(== "a:mul-zero") a:mul-zero]
-    [(== "a:mul-one") a:mul-one]
-    [(== "a:distributivity") a:distributivity]
-    [(== "a:substitute-both-sides") a:substitute-both-sides]
-    [(== "a:op-both-sides") a:op-both-sides]))
-
 ; ==============================
 ; ========   Tactics ===========
 ; ==============================
@@ -451,8 +417,6 @@
 
   s:all
   s:equations
-  axiom->string
-  string->axiom
 
   smallest-k-facts
 
