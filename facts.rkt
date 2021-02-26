@@ -21,7 +21,7 @@
 (struct Fact (id term proof))
 
 (define (new-fact term proof)
-  (Fact (equal-hash-code (cons term proof)) term proof))
+  (Fact (equal-hash-code term) term proof))
 
 (define assumption-proof (FactProof 'assumption '()))
 

@@ -6,6 +6,7 @@
 (require "./terms.rkt")
 (require "./facts.rkt")
 (require "./tactics.rkt")
+(require "./ternary.rkt")
 
 ; Simple utilities to make it easier to access proof parameters.
 (define (first-param proof)
@@ -23,7 +24,7 @@
 (define (generate-leading-question fact-proof all-facts)
   (define-syntax-rule (local-rewrite-question q)
     (let* ([f (find-fact (first-param fact-proof) all-facts)]
-           [t (generate-term-boundary-string 
+           [t (generate-term-boundary-string
                 f
                 (second-param fact-proof))])
       (format q (Fact-id f) (format-fact-i f) t)))
@@ -107,8 +108,75 @@
          (format-term (second (Predicate-terms (Fact-term source))))))]
     [_ ""]))
 
+(define (generate-formal-step-description fact-proof all-facts)
+  ; Template for describing a term-local transformation in equations.
+  (define-syntax-rule (local-rewrite-description d)
+    (let* ([f (find-fact (first-param fact-proof) all-facts)]
+           [index (second-param fact-proof)]
+           [t (get-term-by-index (Fact-term f) index)])
+      (format d index (format-term t))))
+
+  ; Template for describing a transformation in ternary-addition.
+  (define-syntax-rule (ternary-rewrite-description d use-second?)
+    (let* ([f (find-fact (first-param fact-proof) all-facts)]
+           [f-digits (TernaryNumber-digits (Fact-term f))]
+           [index (second-param fact-proof)]
+           [first-digit (format-term (list-ref f-digits index))]
+           [second-digit (if (< (+ 1 index) (length f-digits))
+                             (format-term (list-ref f-digits (+ 1 index)))
+                             "")])
+      (apply format (append (list d index first-digit)
+                            (if use-second? (list second-digit) empty)))))
+
+  (match (FactProof-axiom fact-proof)
+    [(== 'Assumption)
+     "given"]
+
+    ; ================
+    ; Equations domain
+    ; ================
+    [(or (== a:commutativity) (== a:subtraction-commutativity))
+     (local-rewrite-description "comm ~a[~a]")]
+    [(== a:binop-eval)
+     (local-rewrite-description "eval ~a[~a]")]
+    [(== a:associativity)
+     (local-rewrite-description "assoc ~a[~a]")]
+    [(== a:add-zero)
+     (local-rewrite-description "add0 ~a[~a]")]
+    [(== a:mul-zero)
+     (local-rewrite-description "mul0 ~a[~a]")]
+    [(== a:mul-one)
+     (local-rewrite-description "mul1 ~a[~a]")]
+    [(== a:distributivity)
+     (local-rewrite-description "dist ~a[~a]")]
+    [(== a:flip-equality)
+     "symm"]
+    [(== a:op-both-sides)
+     (format
+       "~a ~a"
+       (operation-formal-name(third-param fact-proof))
+       (format-term (second-param fact-proof)))]
+    [(== a:substitute-both-sides)
+     (let ([source (find-fact (first-param fact-proof) all-facts)])
+       (format
+         "sub ~a => ~a"
+         (format-term (first (Predicate-terms (Fact-term source))))
+         (format-term (second (Predicate-terms (Fact-term source))))))]
+
+    ; ==============
+    ; Ternary domain
+    ; ==============
+    [(== td:swap)
+     (ternary-rewrite-description "swap ~a[~a ~a]" #t)]
+    [(== td:add-consecutive)
+     (ternary-rewrite-description "comb ~a[~a ~a]" #t)]
+    [(== td:erase-zero)
+     (ternary-rewrite-description "del ~a[~a]" #f)]
+
+    [_ ""]))
+
 (define (generate-term-boundary-string fact t-idx [fmt format-fact-i])
-  (let* ([marked-fact (Fact (Fact-id fact) 
+  (let* ([marked-fact (Fact (Fact-id fact)
                             (mark-term (Fact-term fact) t-idx)
                             (Fact-proof fact))]
          [marked-str (fmt marked-fact)]
@@ -127,6 +195,15 @@
     [(== op/) "divide by"]
     ))
 
+; Format an operator for a formal step description.
+(define (operation-formal-name op)
+  (match op
+    [(== op+) "add"]
+    [(== op-) "sub"]
+    [(== op*) "mul"]
+    [(== op/) "div"]
+    ))
+
 (define (operation-name-upcase op)
   (match op
     [(== op+) "Add"]
@@ -137,4 +214,5 @@
 
 (provide
   generate-leading-question
-  generate-step-description)
+  generate-step-description
+  generate-formal-step-description)

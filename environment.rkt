@@ -15,6 +15,7 @@
 (require "solver.rkt")
 (require "term-parser.rkt")
 (require "domains.rkt")
+(require "questions.rkt")
 (require "serialize.rkt")
 
 (define (make-post-endpoint f)
@@ -51,7 +52,12 @@
             (let ([next-facts (step-fn state)])
               (hash
                'success #f
-               'actions next-facts)))))))
+               'actions (map (lambda (f)
+                               (let ([desc (generate-formal-step-description (Fact-proof f) state)])
+                                 (hash 'id (Fact-id f)
+                                       'state (format-fact f)
+                                       'action desc)))
+                               next-facts))))))))
 
 (define api:error
   (lambda (req)

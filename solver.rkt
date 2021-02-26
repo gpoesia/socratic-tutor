@@ -317,6 +317,7 @@
   find-solution
   solve-problem
   solve-problem-smc
+  solves-problem?
   inverse-term-size-value-function
   random-value-function
   goal-solution

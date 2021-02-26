@@ -32,7 +32,7 @@
     (list td2 td1)]
    [(td1 td2) #f]))
 
-; Swap adjacent digits.
+; Erase a zero digit.
 (define td:erase-zero
   (function
    [(TernaryDigit 0 p) (list)]
@@ -73,7 +73,7 @@
                                    [(replacement) (transform d1 d2)])
                        (if replacement
                            (fact (TernaryNumber (append before replacement tail))
-                                 (FactProof transform (list i)))
+                                 (FactProof transform (list (FactId (Fact-id f)) i)))
                            #f)))
                    (range (- (length ds) 1)))))))
 
@@ -89,7 +89,7 @@
                                    [(replacement) (transform d)])
                        (if replacement
                            (fact (TernaryNumber (append before replacement tail))
-                                 (FactProof transform (list i)))
+                                 (FactProof transform (list (FactId (Fact-id f)) i)))
                            #f)))
                    (range (length ds)))))))
 
