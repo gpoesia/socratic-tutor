@@ -1,7 +1,9 @@
 #lang racket
 
+(require "terms.rkt")
 (require "learn.rkt")
 (require "tactics.rkt")
+(require "domains.rkt")
 (require "questions.rkt")
 (require "facts.rkt")
 (require "solver.rkt")
@@ -9,6 +11,7 @@
 (require "value-function.rkt")
 
 (define depth (make-parameter 5))
+(define domain (make-parameter "equations"))
 (define use-value-function (make-parameter #f))
 (define beam-width (make-parameter 10))
 (define server (make-parameter "http://127.0.0.1:9911/"))
@@ -25,6 +28,9 @@
   [("-d" "--depth") d
    "Max search depth."
    (depth (string->number d))]
+  [("-D" "--domain") D
+   "Name of the domain.."
+   (domain D)]
   [("-b" "--beam") b
    "Beam width for beam search."
    (beam-width (string->number b))])
@@ -34,7 +40,7 @@
          [problem (Problem (list (assumption term)) (list (parse-term "x = ?")))]
          [result (solve-problem-smc
                   problem
-                  d:equations
+                  (get-domain-by-name (domain))
                   (if (use-value-function)
                       (make-neural-value-function (server))
                       inverse-term-size-value-function)
@@ -52,7 +58,20 @@
                 "<no solution found>"))))
 
 (define (print-next-step input-param)
-  (printf "Pretend I showed the next steps for ~a\n" input-param))
+  (let* ([facts (list (assumption (parse-term input-param)))]
+         [domain (get-domain-by-name (domain))]
+         [next-facts ((Domain-step domain) facts)]
+         [next-nodes (map (lambda (f) (MCTSNode (append facts (list f)) 0 #f)) next-facts)]
+         [value-fn (if (use-value-function)
+                       (make-neural-value-function (server))
+                       inverse-term-size-value-function)]
+         [values (value-fn next-nodes)]
+         [nodes-with-value (map cons next-nodes values)]
+         [sorted-nodes (sort nodes-with-value (lambda (n1 n2) (< (cdr n1) (cdr n2))))])
+    (for-each (lambda (n) (printf "~a :: ~a\n"
+                                  (cdr n)
+                                  (format-term (Fact-term (last (MCTSNode-facts (car n)))))))
+              sorted-nodes)))
 
 (define (main)
   (with-handlers ([exn:break? (lambda (e) (printf "Interrupted.\n") (main))])
