@@ -30,6 +30,9 @@
     (lambda (params)
       (let* ([domain-name (hash-ref params 'domain)]
              [domain (get-domain-by-name domain-name)]
+             [seed (if (hash-has-key? params 'seed)
+                       (random-seed (hash-ref params 'seed))
+                       (void))]
              [generator (Domain-generator domain)]
              [problem (generator)])
         (hash
