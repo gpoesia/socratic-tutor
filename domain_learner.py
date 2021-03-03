@@ -82,6 +82,7 @@ class LearnerValueFunction(pl.LightningModule):
         self.kind = params.get('kind', 'transformer')
         self.hidden_dim = hidden_dim = params.get('hidden_dim', 256)
         self.state_action_pairs = params.get('state_action_pairs', False)
+        self.state_delta_pairs = params.get('state_delta_pairs', False)
 
         if self.kind == 'transformer':
             self.step_positional_encoding = PositionalEncoding(
@@ -110,11 +111,18 @@ class LearnerValueFunction(pl.LightningModule):
 
             out_dim = self.embedding_dim
         else:
-            self.gru = nn.GRU(self.embedding_dim,
-                              hidden_dim,
-                              params.get('layers', 2),
-                              batch_first=True,
-                              bidirectional=True)
+            self.gru_state = nn.GRU(self.embedding_dim,
+                                    hidden_dim,
+                                    params.get('layers', 2),
+                                    batch_first=True,
+                                    bidirectional=True)
+
+            self.gru_action = nn.GRU(self.embedding_dim,
+                                     hidden_dim,
+                                     params.get('layers', 2),
+                                     batch_first=True,
+                                     bidirectional=True)
+
             out_dim = 2*hidden_dim
 
         self.output = nn.Linear(out_dim, 1)
@@ -133,6 +141,16 @@ class LearnerValueFunction(pl.LightningModule):
                                             :]
         return state_embeddings
 
+    def embed_state(self, state_batch):
+        b, _ = self.embed_batch([self.abbreviate(s) for s in state_batch])
+        gru_out, _ = self.gru_state(b)
+        return gru_out[:, -1, :].reshape((len(state_batch), -1))
+
+    def embed_action(self, action_batch):
+        b, _ = self.embed_batch([self.abbreviate(s) for s in action_batch])
+        gru_out, _ = self.gru_action(b)
+        return gru_out[:, -1, :].reshape((len(action_batch), -1))
+
     def embed_steps(self, steps):
         return self.embed_states([self.abbreviate(tag_step(s)) for s in steps])
 
@@ -150,6 +168,8 @@ class LearnerValueFunction(pl.LightningModule):
     def preprocess_example(self, x_i):
         if self.state_action_pairs:
             x_i = [tag_problem(x_i[-2]), tag_step(x_i[-1])]
+        elif self.state_delta_pairs:
+            x_i = [tag_problem(x_i[-2]), tag_prob(x_i[-1])]
 
         return [self.abbreviate(s) for s in x_i]
 
@@ -158,10 +178,11 @@ class LearnerValueFunction(pl.LightningModule):
             return s[:self.max_line_length] + '...'
         return s
 
-    def forward(self, x):
-        x = [self.preprocess_example(x_i) for x_i in x]
-
+    def forward(self, state, action):
         if self.kind == 'transformer':
+            # TODO adapt transformer to DRRN-like architecture.
+            raise NotImplemented()
+
             # x is a list of lists of strings.
             batch_size = len(x)
             n_steps = [len(sol) for sol in x]
@@ -199,25 +220,22 @@ class LearnerValueFunction(pl.LightningModule):
                                                torch.arange(step_embedding.shape[1], device=embedding.device),
                                                :]
         else:
-            if isinstance(x[0], list):
-                x = ['\n'.join(x_i) for x_i in x]
-
-            embedding, lens = self.embed_batch(x)
-            gru_out, _ = self.gru(embedding)
-            encoder_out = gru_out[:, -1, :]
+            state_embedding = self.embed_state(state)
+            action_embedding = self.embed_action(action)
+            return (state_embedding * action_embedding).sum(dim=1).sigmoid()
 
         return self.output(encoder_out).squeeze(1).sigmoid()
 
     def training_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self(x)
+        state, action, y = batch
+        y_hat = self(state, action)
         loss = F.binary_cross_entropy(y_hat, y.float())
         self.log('train_loss', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self(x).round()
+        state, action, y = batch
+        y_hat = self(state, action).round()
         acc = (y == y_hat).float().mean()
         self.log('val_acc', acc)
         return acc
@@ -247,11 +265,14 @@ def parse_solutions_dataset(path):
             solution_lens.append(len(row['solution']))
 
             for i in range(1, len(row['solution'])):
-                examples.append((row['solution'][:i + 1][-2:], 1))
+                examples.append((row['solution'][i-1],
+                                 row['solution-formal-description'][i],
+                                 1))
 
             for neg in row['negative-examples']:
-                examples.append(([row['solution'][neg['index']],
-                                  neg['step']], 0))
+                examples.append((row['solution'][neg['index']],
+                                 neg['step-formal-description'],
+                                 0))
 
     max_solution_len = max(solution_lens)
     len_hist = collections.Counter(solution_lens)
@@ -267,13 +288,13 @@ def parse_solutions_dataset(path):
             })
 
 def split_dataset(dataset):
-    train_size = int(0.7 * len(dataset))
+    train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
     return random_split(dataset, [train_size, val_size])
 
 def collate_concat(l):
-    x, y = zip(*l)
-    return x, torch.tensor(y)
+    s, a, y = zip(*l)
+    return s, a, torch.tensor(y)
 
 def train_domain_learner(config, gpus=0, logger=None):
     print('Training on', config['dataset'])
@@ -282,7 +303,6 @@ def train_domain_learner(config, gpus=0, logger=None):
     if config.get('max_examples'):
         print('Limiting number of examples to', config['max_examples'])
         examples = examples[:config['max_examples']]
-
     train, val = split_dataset(examples)
     batch_size = config.get('batch_size', 128)
     max_epochs = config.get('max_epochs', 50)
@@ -296,7 +316,7 @@ def train_domain_learner(config, gpus=0, logger=None):
     devices = GPUtil.getAvailable(order='memory', maxLoad=0.3, maxMemory=0.2)[:gpus]
     print('Using GPUs', devices)
 
-    trainer = pl.Trainer(gpus=devices,
+    trainer = pl.Trainer(gpus=devices if gpus else None,
                          max_epochs=max_epochs,
                          logger=logger,
                          auto_lr_find=tune_lr)
