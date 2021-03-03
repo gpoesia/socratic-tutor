@@ -382,14 +382,13 @@ def serve_model(config):
             assert type(X) is list
 
             # If received a list of lists, possibly trim it first.
-            X = [(x if isinstance(x, str) else x[-max_example_size:])
-                 for x in X]
+            X = [(x['state'], x['action']) for x in X]
 
             y = []
 
             for b in batch(X, batch_size):
-                assert len(b) <= batch_size
-                y.extend(model(b).tolist())
+                b_s, b_a = zip(*b)
+                y.extend(model(b_s, b_a).tolist())
 
             return json.dumps(y)
         except Exception as e:
