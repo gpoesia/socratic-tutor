@@ -36,6 +36,9 @@
                'step-description (generate-step-description
                                    (Fact-proof (last (MCTSNode-facts node)))
                                    (MCTSNode-facts node))
+               'step-formal-description (generate-formal-step-description
+                                         (Fact-proof (last (MCTSNode-facts node)))
+                                         (MCTSNode-facts node))
                'value (MCTSNode-value node)))
     (filter identity
       (map (lambda (n-steps)
