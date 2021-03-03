@@ -99,6 +99,11 @@
                 'success #t
                 'problem problem
                 'solution-detailed (format-step-by-step solution axiom->string)
+                'solution-formal-description (map
+                                              (lambda (f)
+                                                (generate-formal-step-description
+                                                 (Fact-proof f) solution))
+                                              solution)
                 'solution-description (map
                                         (lambda (f)
                                           (generate-step-description
