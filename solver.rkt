@@ -142,7 +142,8 @@
         ; Otherwise, recurse.
         (begin
           ; Update computed values.
-          (for-each (lambda (node value) (set-MCTSNode-value! node value))
+          (for-each (lambda (node value) (set-MCTSNode-value! node (+ (MCTSNode-value node)
+                                                                      (log value))))
                     proposals proposal-values)
           (find-solution-smc-loop next-nodes goals domain value-function n-samples (- max-depth 1)))))))
 
