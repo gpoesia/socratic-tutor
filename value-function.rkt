@@ -13,8 +13,10 @@
   (lambda (nodes)
     (let* ([examples (map (lambda (node)
                             (hash 'state (format-term (Fact-term (list-ref (MCTSNode-facts node)
-                                                                           (- 2 (length (MCTSNode-facts node))))))
-                                  'action (generate-formal-step-description)))
+                                                                           (- (length (MCTSNode-facts node)) 2))))
+                                  'action (generate-formal-step-description
+                                            (Fact-proof (last (MCTSNode-facts node)))
+                                            (MCTSNode-facts node))))
                           nodes)]
            [res (post address #:json examples)]
            [scores (response-json res)])
