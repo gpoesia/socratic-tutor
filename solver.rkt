@@ -109,6 +109,7 @@
          value-function
          n-samples
          max-depth)
+  (printf "max depth = ~a\n" max-depth)
   ; If timed out, return.
   (if (= 0 max-depth)
     (MCTSResult nodes #f)
@@ -131,21 +132,24 @@
                                                                    (Domain-verifier domain)))
                                    proposals)]
            ; Compute value estimates using value function.
-           [proposal-values (if (empty? terminal-nodes) (value-function proposals) (list))]
-           ; Create other nodes.
-           [next-nodes (append nodes proposals)])
+           [proposal-values (if (empty? terminal-nodes) (value-function proposals) (list))])
       ; Expanded nodes are not leaves anymore; update it.
-      (for-each (lambda (node) (set-MCTSNode-is-leaf?! node #f)) leaves)
+      (for-each (lambda (node) (set-MCTSNode-is-leaf?! node #f)) nodes)
       (if (not (empty? terminal-nodes))
         ; Found a solution!
-        (MCTSResult next-nodes (car terminal-nodes))
+        (MCTSResult (append nodes proposals) (car terminal-nodes))
         ; Otherwise, recurse.
         (begin
           ; Update computed values.
           (for-each (lambda (node value) (set-MCTSNode-value! node (+ (MCTSNode-value node)
                                                                       (log value))))
                     proposals proposal-values)
-          (find-solution-smc-loop next-nodes goals domain value-function n-samples (- max-depth 1)))))))
+          (find-solution-smc-loop (append nodes proposals)
+                                  goals
+                                  domain
+                                  value-function
+                                  n-samples
+                                  (- max-depth 1)))))))
 
 (define (inverse-term-size-value-function nodes)
   (map (lambda (node) (/ 1 (term-size (Fact-term (last (MCTSNode-facts node))))))
