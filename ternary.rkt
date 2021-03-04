@@ -115,7 +115,7 @@
           (td:all (last facts))))
 
 ; Generates a random ternary addition problem by generating random digits.
-(define (generate-ternary-addition-problem [max-difficulty 30] [max-power 5])
+(define (generate-ternary-addition-problem [max-difficulty 10] [max-power 5])
   (Problem
    (list (assumption (TernaryNumber (map (lambda (_) (TernaryDigit (random 0 3)
                                                                    (random 0 max-power)))
