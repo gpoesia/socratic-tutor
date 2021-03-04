@@ -55,7 +55,14 @@
                                             (generate-step-description
                                              (Fact-proof f) (MCTSNode-facts solution))))
                                   (MCTSNode-facts solution)) "\n")
-                "<no solution found>"))))
+                (begin
+                  (for-each (lambda (node) (printf "~a :: ~a\n"
+                                                   (string-join
+                                                    (format-step-by-step-terms (MCTSNode-facts node))
+                                                    "=>")
+                                                   (MCTSNode-value node)))
+                            (MCTSResult-nodes result))
+                  "<no solution found>")))))
 
 (define (print-next-step input-param)
   (let* ([facts (list (assumption (parse-term input-param)))]
