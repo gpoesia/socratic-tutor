@@ -52,7 +52,7 @@ class QFunction(nn.Module):
         success = False
 
         for i in range(max_steps):
-            reward, actions = environment.step(history[-1])
+            reward, actions = environment.step([history[-1]])[0]
             if reward:
                 success = True
                 break
@@ -111,18 +111,20 @@ class Environment:
         response = requests.post(self.url + '/generate', json=params).json()
         return State(response['state'], response['goals'], 0.0)
 
-    def step(self, state, domain=None):
+    def step(self, states, domain=None):
         domain = domain or self.default_domain
         response = requests.post(self.url + '/step',
                                  json={'domain': domain,
-                                       'state': state.facts,
-                                       'goals': state.goals }).json()
-        reward = response['success']
-        return reward, [Action(state,
-                               a['action'],
-                               State(state.facts + (a['state'],), state.goals, 0.0),
-                               0.0)
-                        for a in response['actions']]
+                                       'states': [s.facts for s in states],
+                                       'goals': [s.goals for s in states]}).json()
+        rewards = [r['success'] for r in response]
+        actions = [[Action(state,
+                           a['action'],
+                           State(state.facts + (a['state'],), state.goals, 0.0),
+                           0.0)
+                    for a in r['actions']]
+                   for state, r in zip(states, response)]
+        return list(zip(rewards, actions))
 
 class EnvironmentWithEvaluationProxy:
     '''Wrapper around the environment that triggers an evaluation every K calls'''
@@ -139,19 +141,21 @@ class EnvironmentWithEvaluationProxy:
 
         self.results = []
         self.n_new_problems = 0
+        self.cumulative_reward = 0
 
     def generate_new(self, domain=None, seed=None):
         self.n_new_problems += 1
         return self.environment.generate_new(domain, seed)
 
-    def step(self, state, domain=None):
+    def step(self, states, domain=None):
         if (self.n_steps + 1) % self.evaluate_every == 0:
             self.evaluate()
 
         self.n_steps += 1
-        reward, step_result = self.environment.step(state, domain)
+        reward_and_actions = self.environment.step(state, domain)
+        self.cumulative_reward += sum(rw for rw, _ in reward_and_actions)
 
-        return reward, step_result
+        return results
 
     def evaluate(self):
         evaluator = SuccessRatePolicyEvaluator(self.environment, self.eval_config)
