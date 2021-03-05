@@ -109,7 +109,6 @@
          value-function
          n-samples
          max-depth)
-  (printf "max depth = ~a\n" max-depth)
   ; If timed out, return.
   (if (= 0 max-depth)
     (MCTSResult nodes #f)
