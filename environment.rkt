@@ -44,23 +44,27 @@
     (lambda (params)
       (let* ([domain-name (hash-ref params 'domain)]
              [domain (get-domain-by-name domain-name)]
-             [state-str (hash-ref params 'state)]
-             [state (map (lambda (t) (assumption (parse-term t))) state-str)]
+             [states-str (hash-ref params 'states)]
+             [states (map (lambda (s)
+                            (map (lambda (t) (assumption (parse-term t))) s))
+                            states-str)]
              [goals-str (hash-ref params 'goals)]
-             [goals (map parse-term goals-str)]
+             [goals (map (lambda (g) (map parse-term g)) goals-str)]
              [verifier (Domain-verifier domain)]
              [step-fn (Domain-step domain)])
-        (if (solves-problem? goals state verifier)
-            (hash 'success #t 'actions empty)
-            (let ([next-facts (step-fn state)])
-              (hash
-               'success #f
-               'actions (map (lambda (f)
-                               (let ([desc (generate-formal-step-description (Fact-proof f) state)])
-                                 (hash 'id (Fact-id f)
-                                       'state (format-fact f)
-                                       'action desc)))
-                               next-facts))))))))
+        (map (lambda (state goals)
+               (if (solves-problem? goals state verifier)
+                   (hash 'success #t 'actions empty)
+                   (let ([next-facts (step-fn state)])
+                     (hash
+                      'success #f
+                      'actions (map (lambda (f)
+                                      (let ([desc (generate-formal-step-description (Fact-proof f) state)])
+                                        (hash 'id (Fact-id f)
+                                              'state (format-fact f)
+                                              'action desc)))
+                                    next-facts)))))
+             states goals)))))
 
 (define api:error
   (lambda (req)
