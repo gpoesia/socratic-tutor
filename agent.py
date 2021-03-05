@@ -124,6 +124,45 @@ class Environment:
                                0.0)
                         for a in response['actions']]
 
+class EnvironmentWithEvaluationProxy:
+    '''Wrapper around the environment that triggers an evaluation every K calls'''
+    def __init__(self, enviromnent, q_function, config={}):
+        self.environment = environment
+        self.q_function = q_function
+        self.n_steps = 0
+
+        self.domains = config['domains']
+        self.evaluate_every = config['evaluate_every']
+        self.eval_config = config['eval_config']
+        self.name = config['name']
+        self.output_path = config['output']
+
+        self.results = []
+        self.n_new_problems = 0
+
+    def generate_new(self, domain=None, seed=None):
+        self.n_new_problems += 1
+        return self.environment.generate_new(domain, seed)
+
+    def step(self, state, domain=None):
+        if (self.n_steps + 1) % self.evaluate_every == 0:
+            self.evaluate()
+
+        self.n_steps += 1
+        reward, step_result = self.environment.step(state, domain)
+
+        return reward, step_result
+
+    def evaluate(self):
+        evaluator = SuccessRatePolicyEvaluator(self.environment, self.eval_config)
+        results = evaluator.evaluate()
+        results['n_steps'] = self.n_steps
+        results['problems_seen'] = self.n_new_problems
+        results['name'] = self.name
+
+        with open(self.output_path, 'w') as f:
+            f.write(results)
+
 class DRRN(QFunction):
     def __init__(self, config):
         super().__init__()
