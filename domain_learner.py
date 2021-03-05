@@ -252,7 +252,7 @@ class LearnerValueFunction(pl.LightningModule):
     def load(*args, **kwargs):
         return torch.load(*args, **kwargs)
 
-def parse_solutions_dataset(path):
+def parse_solutions_dataset(path, alpha=1.0):
     print('Loading', path)
     with open(path) as f:
         d = json.load(f)
@@ -267,7 +267,7 @@ def parse_solutions_dataset(path):
             for i in range(1, len(row['solution'])):
                 examples.append((row['solution'][i-1],
                                  row['solution-formal-description'][i],
-                                 1))
+                                 1 * alpha ** (len(row['solution']) - 1)))
 
             for neg in row['negative-examples']:
                 examples.append((row['solution'][neg['index']],
@@ -298,7 +298,8 @@ def collate_concat(l):
 
 def train_domain_learner(config, gpus=0, logger=None):
     print('Training on', config['dataset'])
-    _, examples, _ = parse_solutions_dataset(config['dataset'])
+    _, examples, _ = parse_solutions_dataset(config['dataset'],
+                                             config.get('alpha', 1))
 
     if config.get('max_examples'):
         print('Limiting number of examples to', config['max_examples'])
@@ -313,7 +314,7 @@ def train_domain_learner(config, gpus=0, logger=None):
 
     logger.log_hyperparams(config)
 
-    devices = GPUtil.getAvailable(order='memory', maxLoad=0.3, maxMemory=0.2)[:gpus]
+    devices = GPUtil.getAvailable(order='memory', maxLoad=0.3, maxMemory=0.5)[:gpus]
     print('Using GPUs', devices)
 
     trainer = pl.Trainer(gpus=devices if gpus else None,
@@ -351,7 +352,7 @@ def batch(l, batch_size):
         i += batch_size
 
 def serve_model(config):
-    gpus = GPUtil.getAvailable(order='memory', maxLoad=0.3, maxMemory=0.2)
+    gpus = GPUtil.getAvailable(order='memory', maxLoad=0.3, maxMemory=0.5)
 
     device = torch.device('cuda:{}'.format(gpus[0]) if len(gpus) else 'cpu')
     model = torch.load(config['model'], map_location=device)
@@ -589,7 +590,7 @@ def build_problem_graph(config, gpus):
             })
 
     print('Loading model...')
-    devices = GPUtil.getAvailable(order='memory', maxLoad=0.3, maxMemory=0.2)[:gpus]
+    devices = GPUtil.getAvailable(order='memory', maxLoad=0.3, maxMemory=0.5)[:gpus]
     device = torch.device('cuda:{}'.format(devices[0]) if len(devices) else 'cpu')
     model = torch.load(config['model'], map_location=device)
     model.to(device)
