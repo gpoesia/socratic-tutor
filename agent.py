@@ -390,6 +390,8 @@ class BeamSearchIterativeDeepening(LearningAgent):
             self.replay_buffer.append((states_by_id[s], a,
                                        action_reward.get(id(a), 0.0)))
 
+        self.replay_buffer = self.replay_buffer[-self.replay_buffer_size:]
+
         return solution
 
     def stats(self):
