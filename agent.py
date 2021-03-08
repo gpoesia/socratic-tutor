@@ -301,6 +301,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.step_every = config['step_every']
         self.beam_size = config['beam_size']
 
+        self.reward_decay = config.get('reward_decay', 1.0)
         self.batch_size = config.get('batch_size', 64)
         self.n_gradient_steps = config.get('n_gradient_steps', 10)
 
@@ -336,7 +337,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
         state_parent_edge = {}
         beam = [state]
         solution = None # The state that we found that solves the problem.
-        in_solution = set() # All states in the path to the found solution.
+        action_reward = {} # Remember rewards we attribute to each action.
 
         for i in range(self.current_depth):
             rewards, actions = zip(*environment.step(beam))
@@ -354,11 +355,12 @@ class BeamSearchIterativeDeepening(LearningAgent):
                 # Traverse all the state -> next_state edges backwards, remembering
                 # all states in the path to the solution.
                 current = solution
-                in_solution.add(id(current))
+                current_reward = 1.0
 
                 while id(current) in state_parent_edge:
                     prev_s, a = state_parent_edge[id(current)]
-                    in_solution.add(id(prev_s))
+                    action_reward[id(a)] = current_reward
+                    current_reward *= self.reward_decay
                     current = prev_s
 
                 break
@@ -386,7 +388,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
         # Add all edges traversed as examples in the experience replay buffer.
         for s, (parent, a) in state_parent_edge.items():
             self.replay_buffer.append((states_by_id[s], a,
-                                       int(id(a.next_state) in in_solution)))
+                                       action_reward.get(id(a), 0.0)))
 
         return solution
 
@@ -397,7 +399,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
     def gradient_steps(self):
         pos = [(s, a, r) for s, a, r in self.replay_buffer if r > 0]
-        neg = [(s, a, r) for s, a, r in self.replay_buffer if r == 0]
+        neg = [(s, a, r) for s, a, r in self.replay_buffer if r == 0.0]
         n_each = min(len(pos), len(neg))
         examples = random.sample(pos, k=n_each) + random.sample(neg, k=n_each)
         batch_size = min(self.batch_size, len(examples))
