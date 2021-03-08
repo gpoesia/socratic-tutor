@@ -1,10 +1,22 @@
 # Implementation of Reinforcement Learning agents that interact with the
 # educational domain environment implemented in Racket.
 
+import argparse
+import datetime
 import urllib
 import requests
+import random
+import traceback
+import sys
+import pickle
+import json
+import torch
+import math
+import util
+import wandb
 import torch
 from torch import nn
+from torch.nn import functional as F
 import pytorch_lightning as pl
 
 from domain_learner import CharEncoding
@@ -25,11 +37,12 @@ class State:
         return str(self)
 
 class Action:
-    def __init__(self, state, action, next_state, reward):
+    def __init__(self, state, action, next_state, reward, value=0.0):
         self.state = state
         self.action = action
         self.next_state = next_state
         self.reward = reward
+        self.value = value
 
     def __str__(self):
         return 'Action({})'.format(self.action)
@@ -62,7 +75,7 @@ class QFunction(nn.Module):
                 break
 
             with torch.no_grad():
-                q_values = self(history[-1], actions)
+                q_values = self(actions)
 
             _, best_action = max(list(zip(q_values, actions)),
                                  key=lambda aq: aq[0])
@@ -117,7 +130,7 @@ class Environment:
                                  json={'domain': domain,
                                        'states': [s.facts for s in states],
                                        'goals': [s.goals for s in states]}).json()
-        rewards = [r['success'] for r in response]
+        rewards = [int(r['success']) for r in response]
         actions = [[Action(state,
                            a['action'],
                            State(state.facts + (a['state'],), state.goals, 0.0),
@@ -126,49 +139,95 @@ class Environment:
                    for state, r in zip(states, response)]
         return list(zip(rewards, actions))
 
+class EndOfLearning(Exception):
+    '''Exception used to signal the end of the learning budget for an agent.'''
+
 class EnvironmentWithEvaluationProxy:
     '''Wrapper around the environment that triggers an evaluation every K calls'''
-    def __init__(self, enviromnent, q_function, config={}):
+    def __init__(self, agent, environment, config={}):
         self.environment = environment
-        self.q_function = q_function
         self.n_steps = 0
 
         self.domains = config['domains']
         self.evaluate_every = config['evaluate_every']
         self.eval_config = config['eval_config']
-        self.name = config['name']
+        self.agent = agent
         self.output_path = config['output']
+        self.max_steps = config['max_steps']
+        self.print_every = config.get('print_every', 100)
 
         self.results = []
         self.n_new_problems = 0
         self.cumulative_reward = 0
+        self.begin_time = datetime.datetime.now()
 
     def generate_new(self, domain=None, seed=None):
         self.n_new_problems += 1
         return self.environment.generate_new(domain, seed)
 
     def step(self, states, domain=None):
-        if (self.n_steps + 1) % self.evaluate_every == 0:
+        if self.n_steps % self.evaluate_every == 0:
             self.evaluate()
 
+        if self.n_steps == self.max_steps:
+            # Budget ended.
+            raise EndOfLearning()
+
         self.n_steps += 1
-        reward_and_actions = self.environment.step(state, domain)
+        reward_and_actions = self.environment.step(states, domain)
         self.cumulative_reward += sum(rw for rw, _ in reward_and_actions)
 
-        return results
+        if self.n_steps % self.print_every == 0:
+            self.print_progress()
+
+        return reward_and_actions
 
     def evaluate(self):
+        print('Evaluating...')
+
         evaluator = SuccessRatePolicyEvaluator(self.environment, self.eval_config)
-        results = evaluator.evaluate()
+        results = evaluator.evaluate(self.agent.q_function)
         results['n_steps'] = self.n_steps
         results['problems_seen'] = self.n_new_problems
-        results['name'] = self.name
+        results['name'] = self.agent.name()
+        results['cumulative_reward'] = self.cumulative_reward
 
-        with open(self.output_path, 'w') as f:
-            f.write(results)
+        wandb.log({ 'success_rate': results['success_rate'],
+                    'problems_seen': results['problems_seen'],
+                    'n_environment_steps': results['n_steps'],
+                    'cumulative_reward': results['cumulative_reward'],
+                   })
+
+        print('Success rate:', results['success_rate'])
+
+        with open(self.output_path, 'wb') as f:
+            pickle.dump(results, f)
+
+    def evaluate_agent(self):
+        while True:
+            try:
+                self.agent.learn_from_environment(self)
+            except EndOfLearning:
+                print('Learning budget ended. Doing final evaluation...')
+                self.evaluate()
+                break
+            except Exception as e:
+                traceback.print_exc(e)
+                print('Ignoring exception and continuing...')
+
+    def print_progress(self):
+        print('\r{} steps ({:.3}%, ETA: {}), {} total reward, explored {} problems. {}'
+              .format(self.n_steps,
+                      100 * (self.n_steps / self.max_steps),
+                      util.format_eta(datetime.datetime.now() - self.begin_time,
+                                      self.n_steps,
+                                      self.max_steps),
+                      self.cumulative_reward,
+                      self.n_new_problems,
+                      self.agent.stats()))
 
 class DRRN(QFunction):
-    def __init__(self, config):
+    def __init__(self, config, device):
         super().__init__()
 
         char_emb_dim = config.get('char_emb_dim', 32)
@@ -181,28 +240,30 @@ class DRRN(QFunction):
                                      self.lstm_layers, bidirectional=True)
         self.action_encoder = nn.LSTM(char_emb_dim, hidden_dim,
                                       self.lstm_layers, bidirectional=True)
+        self.to(device)
+        self.device = device
 
-    def forward(self, state, actions):
-        state = state.facts[-1]
+    def forward(self, actions):
+        states = [a.state.facts[-1] for a in actions]
         actions = [a.action for a in actions]
-        A, H = len(actions), self.hidden_dim
+        N, H = len(states), self.hidden_dim
 
-        state_seq , _ = self.state_vocab.embed_batch([state])
+        state_seq , _ = self.state_vocab.embed_batch(states, self.device)
         state_seq = state_seq.transpose(0, 1)
-        actions_seq , _ = self.action_vocab.embed_batch(actions)
+        actions_seq , _ = self.action_vocab.embed_batch(actions, self.device)
         actions_seq = actions_seq.transpose(0, 1)
 
         _, (state_hn, state_cn) = self.state_encoder(state_seq)
         _, (actions_hn, actions_cn) = self.state_encoder(actions_seq)
 
         state_embedding = (state_hn
-                           .view(self.lstm_layers, 2, 1, self.hidden_dim)[-1]
-                           .permute((1, 2, 0)).reshape(1, 2*H))
+                           .view(self.lstm_layers, 2, N, self.hidden_dim)[-1]
+                           .permute((1, 2, 0)).reshape(N, 2*H))
         actions_embedding = (actions_hn
-                             .view(self.lstm_layers, 2, A, self.hidden_dim)[-1]
-                             .permute((1, 2, 0)).reshape((A, 2*H)))
+                             .view(self.lstm_layers, 2, N, self.hidden_dim)[-1]
+                             .permute((1, 2, 0)).reshape((N, 2*H)))
 
-        q_values = actions_embedding.matmul(state_embedding.transpose(0, 1)).squeeze(1)
+        q_values = (actions_embedding * state_embedding).sum(dim=1).sigmoid()
 
         return q_values
 
@@ -210,11 +271,169 @@ class RandomQFunction(QFunction):
     def __init__(self):
         super().__init__()
 
-    def forward(self, state, actions):
+    def forward(self, actions):
         return torch.rand(len(actions))
 
+class LearningAgent:
+    '''Algorithm that guides learning via interaction with the enviroment.
+    Gets to decide when to start a new problem, what states to expand, when to take
+    random actions, etc.
+
+    Any learning algorithm can be combined with any Q-Function.
+    '''
+    def learn_from_environment(self, environment):
+        "Lets the agent learn by interaction using any algorithm."
+        raise NotImplementedError()
+
+    def stats(self):
+        "Returns a string with learning statistics for this agent, for debugging."
+        return ""
+
+class BeamSearchIterativeDeepening(LearningAgent):
+    def __init__(self, q_function, config):
+        self.q_function = q_function
+        self.replay_buffer = []
+
+        self.replay_buffer_size = config['replay_buffer_size']
+        self.max_depth = config['max_depth']
+        self.depth_step = config['depth_step']
+        self.initial_depth = config['initial_depth']
+        self.step_every = config['step_every']
+        self.beam_size = config['beam_size']
+
+        self.batch_size = config.get('batch_size', 64)
+        self.n_gradient_steps = config.get('n_gradient_steps', 10)
+
+        self.optimizer = torch.optim.Adam(q_function.parameters(),
+                                          lr=config.get('learning_rate', 1e-4))
+
+    def name(self):
+        if self.depth_step == 0:
+            return 'BeamSearch({})'.format(self.beam_size)
+        else:
+            return 'BeamSearch({}) + ID({} to {} by {} every {})'.format(
+                self.beam_size,
+                self.initial_depth,
+                self.max_depth,
+                self.depth_step,
+                self.step_every)
+
+    def learn_from_environment(self, environment):
+        self.current_depth = self.initial_depth
+        beam_size = self.beam_size
+        step_every = self.step_every
+
+        for i in range(10**9):
+            problem = environment.generate_new()
+            self.beam_search(problem, environment)
+            self.gradient_steps()
+
+            if i % self.step_every == 0:
+                self.current_depth = min(self.max_depth, self.current_depth + self.depth_step)
+
+    def beam_search(self, state, environment):
+        states_by_id = {id(state): state}
+        state_parent_edge = {}
+        beam = [state]
+        solution = None # The state that we found that solves the problem.
+        in_solution = set() # All states in the path to the found solution.
+
+        for i in range(self.current_depth):
+            rewards, actions = zip(*environment.step(beam))
+
+            for s, r, state_actions in zip(beam, rewards, actions):
+                for a in state_actions:
+                    # Remember how we got to this state.
+                    states_by_id[id(a.next_state)] = a.next_state
+                    state_parent_edge[id(a.next_state)] = (s, a)
+                # Record solution, if found.
+                if r:
+                    solution = s
+
+            if solution is not None:
+                # Traverse all the state -> next_state edges backwards, remembering
+                # all states in the path to the solution.
+                current = solution
+                in_solution.add(id(current))
+
+                while id(current) in state_parent_edge:
+                    prev_s, a = state_parent_edge[id(current)]
+                    in_solution.add(id(prev_s))
+                    current = prev_s
+
+                break
+
+            all_actions = [a for state_actions in actions for a in state_actions]
+
+            # Query model, sort next states by value, then update beam.
+            with torch.no_grad():
+                q_values = self.q_function(all_actions)
+                q_values = q_values.tolist()
+
+            for a, v in zip(all_actions, q_values):
+                a.value = v
+
+            next_states = []
+            for s, state_actions in zip(beam, actions):
+                for a in state_actions:
+                    ns = a.next_state
+                    next_states.append(ns)
+                    ns.value = s.value + math.log(a.value)
+
+            next_states.sort(key=lambda s: s.value, reverse=True)
+            beam = next_states[:self.beam_size]
+
+        # Add all edges traversed as examples in the experience replay buffer.
+        for s, (parent, a) in state_parent_edge.items():
+            self.replay_buffer.append((states_by_id[s], a,
+                                       int(id(a.next_state) in in_solution)))
+
+        return solution
+
+    def stats(self):
+        return "replay buffer size = {}, {} positive".format(
+            len(self.replay_buffer),
+            sum(r > 0 for s, a, r in self.replay_buffer))
+
+    def gradient_steps(self):
+        pos = [(s, a, r) for s, a, r in self.replay_buffer if r > 0]
+        neg = [(s, a, r) for s, a, r in self.replay_buffer if r == 0]
+        n_each = min(len(pos), len(neg))
+        examples = random.sample(pos, k=n_each) + random.sample(neg, k=n_each)
+        batch_size = min(self.batch_size, len(examples))
+
+        if batch_size == 0:
+            return
+
+        for i in range(self.n_gradient_steps):
+            batch = random.sample(examples, batch_size)
+            batch_s, batch_a, batch_r = zip(*batch)
+
+            self.optimizer.zero_grad()
+
+            r_pred = self.q_function(batch_a)
+            loss = F.binary_cross_entropy(r_pred, torch.tensor(batch_r,
+                                                               dtype=r_pred.dtype,
+                                                               device=r_pred.device))
+            wandb.log({ 'train_loss': loss.item() })
+            loss.backward()
+            self.optimizer.step()
+
+def run_agent_experiment(config, device):
+    wandb.init(config=config, project='solver-agent')
+    domain = config['domain']
+    env = Environment('http://localhost:9898', 'ternary-addition')
+    q_fn = DRRN({}, device)
+
+    agent = BeamSearchIterativeDeepening(q_fn, config['agent'])
+    eval_env = EnvironmentWithEvaluationProxy(agent, env, config['eval_environment'])
+    eval_env.evaluate_agent()
+
 if __name__ == '__main__':
-    e = Environment('http://localhost:9898', 'equations')
-    m = DRRN({})
-    rq = RandomQFunction()
-    evaluator = SuccessRatePolicyEvaluator(e, {})
+    parser = argparse.ArgumentParser("Train RL agents to solve symbolic domains")
+    parser.add_argument('--config', help='Path to config file.', required=True)
+    parser.add_argument('--gpu', type=int, default=None, help='Which GPU to use.')
+
+    opt = parser.parse_args()
+    run_agent_experiment(json.load(open(opt.config)),
+                         torch.device('cpu') if not opt.gpu else torch.device(opt.gpu))
