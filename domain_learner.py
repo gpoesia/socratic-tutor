@@ -28,17 +28,25 @@ class CharEncoding(nn.Module):
 
         self.params = params
         self.embedding = nn.Embedding(128, params.get('embedding_dim', 64))
+        self.max_line_length = params.get('max_length', 100)
 
         self.padding_idx = 0
         self.end_token_idx = 1
 
     def embed_batch(self, batch, device=None):
+        batch = [self.abbreviate(s) for s in batch]
+
         lens = [len(s) for s in batch]
         max_len = max(lens)
         int_batch = torch.LongTensor(
             [list(s.encode('ascii')) + [self.end_token_idx] + [self.padding_idx] * (max_len - len(s))
              for s in batch])
         return self.embedding(int_batch.to(device=device)), lens
+
+    def abbreviate(self, s):
+        if len(s) > self.max_line_length:
+            return s[:self.max_line_length] + '...'
+        return s
 
 # Adapted from https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 class PositionalEncoding(nn.Module):
