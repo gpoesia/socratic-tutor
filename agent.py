@@ -429,7 +429,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
 def run_agent_experiment(config, device):
     wandb.init(config=config, project='solver-agent')
     domain = config['domain']
-    env = Environment('http://localhost:9898', 'ternary-addition')
+    env = Environment('http://localhost:9898', domain)
     q_fn = DRRN({}, device)
 
     agent = BeamSearchIterativeDeepening(q_fn, config['agent'])
