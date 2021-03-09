@@ -153,6 +153,7 @@ class EnvironmentWithEvaluationProxy:
         self.eval_config = config['eval_config']
         self.agent = agent
         self.output_path = config['output']
+        self.model_output_path = config['model_output']
         self.max_steps = config['max_steps']
         self.print_every = config.get('print_every', 100)
 
@@ -202,6 +203,8 @@ class EnvironmentWithEvaluationProxy:
 
         with open(self.output_path, 'wb') as f:
             pickle.dump(results, f)
+
+        torch.save(self.agent.q_function, self.model_output_path)
 
     def evaluate_agent(self):
         while True:
