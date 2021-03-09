@@ -19,7 +19,7 @@ from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
 
-from domain_learner import CharEncoding
+from domain_learner import CharEncoding, LearnerValueFunction, collate_concat
 
 class State:
     def __init__(self, facts, goals, value):
@@ -271,6 +271,18 @@ class DRRN(QFunction):
 
         return q_values
 
+class LearnerValueFunctionAdapter(QFunction):
+    '''Adapter for the legacy LearnerValueFunction class to be used as a QFunction.'''
+
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def forward(self, actions):
+        s = [a.state.facts[-1] for a in actions]
+        a = [a.action for a in actions]
+        return self.model(s, a)
+
 class RandomQFunction(QFunction):
     def __init__(self):
         super().__init__()
@@ -445,11 +457,40 @@ def run_agent_experiment(config, device):
     eval_env = EnvironmentWithEvaluationProxy(agent, env, config['eval_environment'])
     eval_env.evaluate_agent()
 
+def evaluate_policy(config, device):
+    q = torch.load(config['model_path'], map_location=device)
+
+    if isinstance(q, LearnerValueFunction):
+        q.encoding.max_line_length = 100
+        q.to(device)
+        q = LearnerValueFunctionAdapter(q)
+
+    domain = config['domain']
+    env = Environment(config['environment_url'], domain)
+    evaluator = SuccessRatePolicyEvaluator(env, config.get('eval_config', {}))
+    result = evaluator.evaluate(q, verbose=True)
+
+    print('Success rate:', result['success_rate'])
+    print('Solved problems:', result['successes'])
+    print('Unsolved problems:', result['failures'])
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Train RL agents to solve symbolic domains")
-    parser.add_argument('--config', help='Path to config file.', required=True)
+    parser.add_argument('--config', help='Path to config file, or inline JSON.', required=True)
+    parser.add_argument('--learn', help='Put an agent to learn from the environment', action='store_true')
+    parser.add_argument('--eval', help='Evaluate a learned policy', action='store_true')
     parser.add_argument('--gpu', type=int, default=None, help='Which GPU to use.')
 
     opt = parser.parse_args()
-    run_agent_experiment(json.load(open(opt.config)),
-                         torch.device('cpu') if not opt.gpu else torch.device(opt.gpu))
+
+    try:
+        config = json.loads(opt.config)
+    except json.decoder.JSONDecodeError:
+        config = json.load(open(opt.config))
+
+    device = torch.device('cpu') if not opt.gpu else torch.device(opt.gpu)
+
+    if opt.learn:
+        run_agent_experiment(config, device)
+    elif opt.eval:
+        evaluate_policy(config, device)
