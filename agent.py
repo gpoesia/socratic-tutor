@@ -322,6 +322,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.batch_size = config.get('batch_size', 64)
         self.optimize_every = config.get('optimize_every', 1)
         self.n_gradient_steps = config.get('n_gradient_steps', 10)
+        self.discard_unsolved_problems = config.get('discard_unsolved', False)
 
         self.optimizer = torch.optim.Adam(q_function.parameters(),
                                           lr=config.get('learning_rate', 1e-4))
@@ -409,13 +410,14 @@ class BeamSearchIterativeDeepening(LearningAgent):
             beam = next_states[:self.beam_size]
 
         # Add all edges traversed as examples in the experience replay buffer.
-        for s, (parent, a) in state_parent_edge.items():
-            r = action_reward.get(id(a), 0.0)
-            b = self.replay_buffer_pos if r > 0 else self.replay_buffer_neg
-            b.append((states_by_id[s], a, r))
+        if solution or not self.discard_unsolved_problems:
+            for s, (parent, a) in state_parent_edge.items():
+                r = action_reward.get(id(a), 0.0)
+                b = self.replay_buffer_pos if r > 0 else self.replay_buffer_neg
+                b.append((states_by_id[s], a, r))
 
-        self.replay_buffer_pos = self.replay_buffer_pos[-self.replay_buffer_size:]
-        self.replay_buffer_neg = self.replay_buffer_neg[-self.replay_buffer_size:]
+            self.replay_buffer_pos = self.replay_buffer_pos[-self.replay_buffer_size:]
+            self.replay_buffer_neg = self.replay_buffer_neg[-self.replay_buffer_size:]
 
         return solution
 
