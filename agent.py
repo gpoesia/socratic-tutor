@@ -375,6 +375,9 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
             all_actions = [a for state_actions in actions for a in state_actions]
 
+            if not len(all_actions):
+                break
+
             # Query model, sort next states by value, then update beam.
             with torch.no_grad():
                 q_values = self.q_function(all_actions)
@@ -435,7 +438,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
 def run_agent_experiment(config, device):
     wandb.init(config=config, project='solver-agent')
     domain = config['domain']
-    env = Environment('http://localhost:9898', domain)
+    env = Environment(config['environment_url'], domain)
     q_fn = DRRN({}, device)
 
     agent = BeamSearchIterativeDeepening(q_fn, config['agent'])
