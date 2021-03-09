@@ -347,10 +347,10 @@ class BeamSearchIterativeDeepening(LearningAgent):
             problem = environment.generate_new()
             self.beam_search(problem, environment)
 
-            if i % self.optimize_every:
+            if (i + 1) % self.optimize_every == 0:
                 self.gradient_steps()
 
-            if i % self.step_every == 0:
+            if (i + 1) % self.step_every == 0:
                 self.current_depth = min(self.max_depth, self.current_depth + self.depth_step)
 
     def beam_search(self, state, environment):
