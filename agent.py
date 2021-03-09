@@ -130,6 +130,7 @@ class Environment:
                                  json={'domain': domain,
                                        'states': [s.facts for s in states],
                                        'goals': [s.goals for s in states]}).json()
+
         rewards = [int(r['success']) for r in response]
         actions = [[Action(state,
                            a['action'],
@@ -295,7 +296,8 @@ class LearningAgent:
 class BeamSearchIterativeDeepening(LearningAgent):
     def __init__(self, q_function, config):
         self.q_function = q_function
-        self.replay_buffer = []
+        self.replay_buffer_pos = []
+        self.replay_buffer_neg = []
 
         self.replay_buffer_size = config['replay_buffer_size']
         self.max_depth = config['max_depth']
@@ -306,6 +308,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
         self.reward_decay = config.get('reward_decay', 1.0)
         self.batch_size = config.get('batch_size', 64)
+        self.optimize_every = config.get('optimize_every', 1)
         self.n_gradient_steps = config.get('n_gradient_steps', 10)
 
         self.optimizer = torch.optim.Adam(q_function.parameters(),
@@ -330,7 +333,9 @@ class BeamSearchIterativeDeepening(LearningAgent):
         for i in range(10**9):
             problem = environment.generate_new()
             self.beam_search(problem, environment)
-            self.gradient_steps()
+
+            if i % self.optimize_every:
+                self.gradient_steps()
 
             if i % self.step_every == 0:
                 self.current_depth = min(self.max_depth, self.current_depth + self.depth_step)
@@ -390,23 +395,24 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
         # Add all edges traversed as examples in the experience replay buffer.
         for s, (parent, a) in state_parent_edge.items():
-            self.replay_buffer.append((states_by_id[s], a,
-                                       action_reward.get(id(a), 0.0)))
+            r = action_reward.get(id(a), 0.0)
+            b = self.replay_buffer_pos if r > 0 else self.replay_buffer_neg
+            b.append((states_by_id[s], a, r))
 
-        self.replay_buffer = self.replay_buffer[-self.replay_buffer_size:]
+        self.replay_buffer_pos = self.replay_buffer_pos[-self.replay_buffer_size:]
+        self.replay_buffer_neg = self.replay_buffer_neg[-self.replay_buffer_size:]
 
         return solution
 
     def stats(self):
         return "replay buffer size = {}, {} positive".format(
-            len(self.replay_buffer),
-            sum(r > 0 for s, a, r in self.replay_buffer))
+            len(self.replay_buffer_pos) + len(self.replay_buffer_neg),
+            len(self.replay_buffer_pos))
 
     def gradient_steps(self):
-        pos = [(s, a, r) for s, a, r in self.replay_buffer if r > 0]
-        neg = [(s, a, r) for s, a, r in self.replay_buffer if r == 0.0]
-        n_each = min(len(pos), len(neg))
-        examples = random.sample(pos, k=n_each) + random.sample(neg, k=n_each)
+        n_each = min(len(self.replay_buffer_pos), len(self.replay_buffer_neg))
+        examples = (random.sample(self.replay_buffer_pos, k=n_each) +
+                    random.sample(self.replay_buffer_neg, k=n_each))
         batch_size = min(self.batch_size, len(examples))
 
         if batch_size == 0:
