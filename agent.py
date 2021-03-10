@@ -168,7 +168,7 @@ class EnvironmentWithEvaluationProxy:
         return self.environment.generate_new(domain, seed)
 
     def step(self, states, domain=None):
-        if self.n_steps % self.evaluate_every == 0:
+        if (self.n_steps + 1) % self.evaluate_every == 0:
             self.evaluate()
 
         if self.n_steps == self.max_steps:
@@ -322,6 +322,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.q_function = q_function
         self.replay_buffer_pos = []
         self.replay_buffer_neg = []
+        self.training_problems_solved = 0
 
         self.replay_buffer_size = config['replay_buffer_size']
         self.max_depth = config['max_depth']
@@ -330,6 +331,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.step_every = config['step_every']
         self.beam_size = config['beam_size']
 
+        self.optimize_on = config.get('optimize_on', 'new_problem')
         self.reward_decay = config.get('reward_decay', 1.0)
         self.batch_size = config.get('batch_size', 64)
         self.optimize_every = config.get('optimize_every', 1)
@@ -357,9 +359,14 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
         for i in range(10**9):
             problem = environment.generate_new()
-            self.beam_search(problem, environment)
+            solution = self.beam_search(problem, environment)
 
-            if (i + 1) % self.optimize_every == 0:
+            if solution is not None:
+                self.training_problems_solved += 1
+
+            if ((self.optimize_on == 'problem' and (i + 1) % self.optimize_every == 0) or
+                (self.optimize_on == 'solution' and solution is not None and
+                 self.training_problems_solved % self.optimize_every == 0)):
                 self.gradient_steps()
 
             if (i + 1) % self.step_every == 0:
