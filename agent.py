@@ -497,6 +497,7 @@ def evaluate_policy(config, device):
     result = evaluator.evaluate(q, verbose=True)
 
     print('Success rate:', result['success_rate'])
+    print('Max solution length:', result['max_solution_length'])
     print('Solved problems:', result['successes'])
     print('Unsolved problems:', result['failures'])
 
