@@ -250,7 +250,7 @@ class DRRN(QFunction):
     def forward(self, actions):
         state_embedding = self.embed_states([a.state for a in actions])
         action_embedding = self.embed_actions(actions)
-        q_values = (actions_embedding * state_embedding).sum(dim=1).sigmoid()
+        q_values = (action_embedding * state_embedding).sum(dim=1).sigmoid()
         return q_values
 
     def embed_states(self, states):
