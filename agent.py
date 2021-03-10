@@ -94,12 +94,14 @@ class SuccessRatePolicyEvaluator:
 
     def evaluate(self, q, verbose=False):
         successes, failures = [], []
+        max_solution_length = 0
 
         for i in range(self.n_problems):
             problem = self.environment.generate_new(seed=(self.seed + i))
-            success, _ = q.rollout(self.environment, problem, self.max_steps)
+            success, history = q.rollout(self.environment, problem, self.max_steps)
             if success:
                 successes.append(problem)
+                max_solution_length = max(max_solution_length, len(history) - 1)
             else:
                 failures.append(problem)
             if verbose:
@@ -107,6 +109,7 @@ class SuccessRatePolicyEvaluator:
 
         return {
             'success_rate': len(successes) / self.n_problems,
+            'max_solution_length': max_solution_length,
             'successes': successes,
             'failures': failures,
         }
@@ -198,9 +201,11 @@ class EnvironmentWithEvaluationProxy:
                     'problems_seen': results['problems_seen'],
                     'n_environment_steps': results['n_steps'],
                     'cumulative_reward': results['cumulative_reward'],
+                    'max_solution_length': results['max_solution_length'],
                    })
 
-        print('Success rate:', results['success_rate'])
+        print('Success rate:', results['success_rate'],
+              '\tMax length:', results['max_solution_length'])
 
         with open(self.output_path, 'wb') as f:
             pickle.dump(results, f)
