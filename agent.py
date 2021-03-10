@@ -248,28 +248,33 @@ class DRRN(QFunction):
         self.device = device
 
     def forward(self, actions):
-        states = [a.state.facts[-1] for a in actions]
-        actions = [a.action for a in actions]
-        N, H = len(states), self.hidden_dim
+        state_embedding = self.embed_states([a.state for a in actions])
+        action_embedding = self.embed_actions(actions)
+        q_values = (actions_embedding * state_embedding).sum(dim=1).sigmoid()
+        return q_values
 
+    def embed_states(self, states):
+        N, H = len(states), self.hidden_dim
+        states = [s.facts[-1] for s in states]
         state_seq , _ = self.state_vocab.embed_batch(states, self.device)
         state_seq = state_seq.transpose(0, 1)
-        actions_seq , _ = self.action_vocab.embed_batch(actions, self.device)
-        actions_seq = actions_seq.transpose(0, 1)
-
         _, (state_hn, state_cn) = self.state_encoder(state_seq)
-        _, (actions_hn, actions_cn) = self.state_encoder(actions_seq)
-
         state_embedding = (state_hn
                            .view(self.lstm_layers, 2, N, self.hidden_dim)[-1]
                            .permute((1, 2, 0)).reshape(N, 2*H))
+        return state_embedding
+
+    def embed_actions(self, actions):
+        actions = [a.action for a in actions]
+        N, H = len(actions), self.hidden_dim
+        actions_seq , _ = self.action_vocab.embed_batch(actions, self.device)
+        actions_seq = actions_seq.transpose(0, 1)
+        _, (actions_hn, actions_cn) = self.state_encoder(actions_seq)
         actions_embedding = (actions_hn
                              .view(self.lstm_layers, 2, N, self.hidden_dim)[-1]
                              .permute((1, 2, 0)).reshape((N, 2*H)))
+        return actions_embedding
 
-        q_values = (actions_embedding * state_embedding).sum(dim=1).sigmoid()
-
-        return q_values
 
 class LearnerValueFunctionAdapter(QFunction):
     '''Adapter for the legacy LearnerValueFunction class to be used as a QFunction.'''
@@ -282,6 +287,13 @@ class LearnerValueFunctionAdapter(QFunction):
         s = [a.state.facts[-1] for a in actions]
         a = [a.action for a in actions]
         return self.model(s, a)
+
+    def embed_states(self, states):
+        s = [s.facts[-1] for s in states]
+        return self.model.embed_state(s)
+
+    def embed_actions(self, actions):
+        return self.model.embed_action([a.action for a in actions])
 
 class RandomQFunction(QFunction):
     def __init__(self):
