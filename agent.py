@@ -58,15 +58,21 @@ class QFunction(nn.Module):
     def forward(self, state, actions):
         raise NotImplemented()
 
-    def rollout(self, environment, state, max_steps):
-        """Greedily picks the best action according to the Q value until either
+    def rollout(self, environment, state, max_steps, beam_size=1, debug=False):
+        """Runs beam search using the Q value until either
         max_steps have been made or reached a terminal state."""
-        history = [state]
+        beam = [state]
+        history = [beam]
         success = False
 
         for i in range(max_steps):
-            reward, actions = environment.step([history[-1]])[0]
-            if reward:
+            if debug:
+                print(f'Beam #{i}: {beam}')
+
+            rewards, s_actions = zip(*environment.step(beam))
+            actions = [a for s_a in s_actions for a in s_a]
+
+            if max(rewards):
                 success = True
                 break
 
@@ -75,11 +81,19 @@ class QFunction(nn.Module):
                 break
 
             with torch.no_grad():
-                q_values = self(actions)
+                q_values = self(actions).tolist()
 
-            _, best_action = max(list(zip(q_values, actions)),
-                                 key=lambda aq: aq[0])
-            history.append(best_action.next_state)
+            for a, v in zip(actions, q_values):
+                a.next_state.value = a.state.value + math.log(v)
+
+            ns = [a.next_state for a in actions]
+            ns.sort(key=lambda s: s.value, reverse=True)
+
+            if debug:
+                print(f'Candidates: {[(s, s.value) for s in ns[::-1]]}')
+
+            beam = ns[:beam_size]
+            history.append(beam)
 
         return success, history
 
@@ -91,6 +105,8 @@ class SuccessRatePolicyEvaluator:
         self.seed = config.get('seed', 0)
         self.n_problems = config.get('n_problems', 100) # How many problems to use.
         self.max_steps = config.get('max_steps', 30) # Maximum length of an episode.
+        self.beam_size = config.get('beam_size', 1) # Size of the beam in beam search.
+        self.debug = config.get('debug', False) # Whether to print all steps during evaluation.
 
     def evaluate(self, q, verbose=False):
         successes, failures = [], []
@@ -98,7 +114,8 @@ class SuccessRatePolicyEvaluator:
 
         for i in range(self.n_problems):
             problem = self.environment.generate_new(seed=(self.seed + i))
-            success, history = q.rollout(self.environment, problem, self.max_steps)
+            success, history = q.rollout(self.environment, problem,
+                                         self.max_steps, self.beam_size, self.debug)
             if success:
                 successes.append(problem)
                 max_solution_length = max(max_solution_length, len(history) - 1)
@@ -484,12 +501,17 @@ def run_agent_experiment(config, device):
     eval_env.evaluate_agent()
 
 def evaluate_policy(config, device):
-    q = torch.load(config['model_path'], map_location=device)
+    if config.get('random_policy'):
+        q = RandomQFunction()
+    else:
+        q = torch.load(config['model_path'], map_location=device)
 
     if isinstance(q, LearnerValueFunction):
         q.encoding.max_line_length = 100
-        q.to(device)
         q = LearnerValueFunctionAdapter(q)
+
+    q.to(device)
+    q.device = device
 
     domain = config['domain']
     env = Environment(config['environment_url'], domain)
