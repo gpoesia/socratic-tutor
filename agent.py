@@ -22,10 +22,11 @@ import pytorch_lightning as pl
 from domain_learner import CharEncoding, LearnerValueFunction, collate_concat
 
 class State:
-    def __init__(self, facts, goals, value):
+    def __init__(self, facts, goals, value, parent_action=None):
         self.facts = tuple(facts)
         self.goals = tuple(goals)
         self.value = value
+        self.parent_action = parent_action
 
     def __hash__(self):
         return hash(self.facts)
@@ -35,6 +36,8 @@ class State:
 
     def __repr__(self):
         return str(self)
+
+SUCCESS_STATE = State(['success'], [], 1.0)
 
 class Action:
     def __init__(self, state, action, next_state, reward, value=0.0):
@@ -158,6 +161,11 @@ class Environment:
                            0.0)
                     for a in r['actions']]
                    for state, r in zip(states, response)]
+
+        for s in actions:
+            for a in s:
+                a.next_state.parent_action = a
+
         return list(zip(rewards, actions))
 
 class EndOfLearning(Exception):
@@ -359,6 +367,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.optimize_every = config.get('optimize_every', 1)
         self.n_gradient_steps = config.get('n_gradient_steps', 10)
         self.discard_unsolved_problems = config.get('discard_unsolved', False)
+        self.add_success_action = config.get('add_success_action', False)
 
         self.optimizer = torch.optim.Adam(q_function.parameters(),
                                           lr=config.get('learning_rate', 1e-4))
@@ -411,7 +420,16 @@ class BeamSearchIterativeDeepening(LearningAgent):
                     state_parent_edge[id(a.next_state)] = (s, a)
                 # Record solution, if found.
                 if r:
-                    solution = s
+                    if self.add_success_action:
+                        states_by_id[id(SUCCESS_STATE)] = SUCCESS_STATE
+                        state_parent_edge[id(SUCCESS_STATE)] = Action(s,
+                                                                      'success',
+                                                                      SUCCESS_STATE,
+                                                                      1.0,
+                                                                      1.0)
+                        solution = SUCCESS_STATE
+                    else:
+                        solution = s
 
             if solution is not None:
                 # Traverse all the state -> next_state edges backwards, remembering
