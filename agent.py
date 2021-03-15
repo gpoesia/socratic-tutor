@@ -65,13 +65,14 @@ class QFunction(nn.Module):
         """Runs beam search using the Q value until either
         max_steps have been made or reached a terminal state."""
         beam = [state]
-        history = [beam]
+        history = []
         success = False
 
         for i in range(max_steps):
             if debug:
                 print(f'Beam #{i}: {beam}')
 
+            history.append(beam)
             rewards, s_actions = zip(*environment.step(beam))
             actions = [a for s_a in s_actions for a in s_a]
 
@@ -99,6 +100,22 @@ class QFunction(nn.Module):
             history.append(beam)
 
         return success, history
+
+    def recover_solutions(self, rollout_history):
+        '''Reconstructs the solutions (lists of states) from the history of a successful rollout.'''
+
+        solution_states = [s for s in rollout_history[-1] if s.value > 0]
+        solutions = []
+
+        for final_state in solution_states:
+            s = final_state
+            solution = [s]
+            while s.parent_action is not None:
+                s = s.parent_action.state
+                solution.append(s)
+            solutions.append(list(reversed(solution)))
+
+        return solutions
 
 class SuccessRatePolicyEvaluator:
     """Evaluates the policy derived from a Q function by its success rate at solving
@@ -162,8 +179,9 @@ class Environment:
                     for a in r['actions']]
                    for state, r in zip(states, response)]
 
-        for s in actions:
-            for a in s:
+        for i, (s, sa) in enumerate(zip(states, actions)):
+            s.value = rewards[i]
+            for a in sa:
                 a.next_state.parent_action = a
 
         return list(zip(rewards, actions))
@@ -361,7 +379,8 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.step_every = config['step_every']
         self.beam_size = config['beam_size']
 
-        self.optimize_on = config.get('optimize_on', 'new_problem')
+        self.balance_examples = config.get('balance_examples', True)
+        self.optimize_on = config.get('optimize_on', 'problem')
         self.reward_decay = config.get('reward_decay', 1.0)
         self.batch_size = config.get('batch_size', 64)
         self.optimize_every = config.get('optimize_every', 1)
@@ -486,9 +505,12 @@ class BeamSearchIterativeDeepening(LearningAgent):
             len(self.replay_buffer_pos))
 
     def gradient_steps(self):
-        n_each = min(len(self.replay_buffer_pos), len(self.replay_buffer_neg))
-        examples = (random.sample(self.replay_buffer_pos, k=n_each) +
-                    random.sample(self.replay_buffer_neg, k=n_each))
+        if self.balance_examples:
+           n_each = min(len(self.replay_buffer_pos), len(self.replay_buffer_neg))
+           examples = (random.sample(self.replay_buffer_pos, k=n_each) +
+                       random.sample(self.replay_buffer_neg, k=n_each))
+        else:
+            examples = self.replay_buffer_pos + self.replay_buffer_neg
         batch_size = min(self.batch_size, len(examples))
 
         if batch_size == 0:
