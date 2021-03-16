@@ -563,17 +563,24 @@ def evaluate_policy(config, device):
     print('Solved problems:', result['successes'])
     print('Unsolved problems:', result['failures'])
 
+def interact():
+    env = Environment('http://localhost:9898')
+    breakpoint()
+    print('REPL')
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Train RL agents to solve symbolic domains")
-    parser.add_argument('--config', help='Path to config file, or inline JSON.', required=True)
+    parser.add_argument('--config', help='Path to config file, or inline JSON.')
     parser.add_argument('--learn', help='Put an agent to learn from the environment', action='store_true')
     parser.add_argument('--eval', help='Evaluate a learned policy', action='store_true')
+    parser.add_argument('--repl', help='Get a REPL with an environment', action='store_true')
     parser.add_argument('--gpu', type=int, default=None, help='Which GPU to use.')
 
     opt = parser.parse_args()
 
     try:
-        config = json.loads(opt.config)
+        if opt.config:
+            config = json.loads(opt.config)
     except json.decoder.JSONDecodeError:
         config = json.load(open(opt.config))
 
@@ -583,3 +590,5 @@ if __name__ == '__main__':
         run_agent_experiment(config, device)
     elif opt.eval:
         evaluate_policy(config, device)
+    elif opt.repl:
+        interact()
