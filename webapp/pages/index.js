@@ -11,10 +11,14 @@ export default function App() {
   const setID = useStore(state => state.setID);
 
   useEffect(async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const curriculum = urlParams.get('curriculum');
+
     if (!sessionId) {
-      const { id } = await apiRequest('new-session');
+      const { id } = await apiRequest('new-session', { curriculum });
       setID(id);
     }
+
     router.push('/instructions');
   });
 

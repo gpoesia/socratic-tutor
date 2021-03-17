@@ -108,20 +108,40 @@ def random_curriculum_next(data, student_history):
     problems = data['problems']
     seen_problems = set(r['problem'] for r in student_history)
     not_seen = set(range(len(problems))) - seen_problems
-    return random.choice(list(not_seen))
+    return random.choice(list(not_seen)) if len(not_seen) else None
 
 def static_curriculum_next(data, student_history):
     curriculum = data['static_curriculum']
-    return curriculum[len(student_history)]
+    return (curriculum[len(student_history)]
+            if len(student_history) < min(len(curriculum), data['config']['curriculum_size'])
+            else None)
+
+def sample_post_test(data, seed, n_problems):
+    problems = data['problems']
+    solutions = data['solutions']
+    candidates = list(range(len(problems)))
+    random.seed(seed)
+    random.shuffle(candidates)
+    return [{ 'id': p_id,
+              'problem': problems[p_id].facts[-1],
+              'solution': solutions[p_id][-1].facts[-1] }
+            for p_id in candidates[:n_problems]]
 
 def serve_curriculum(config):
     data = pickle.load(open(config['output'], 'rb'))
     problems = data['problems']
     solutions = data['solutions']
+    size = config['curriculum_size']
+    post_test_seed = config['post_test_seed']
+    post_test_n_problems = config['post_test_n_problems']
+
+    post_test = sample_post_test(data, post_test_seed, post_test_n_problems)
 
     port = config.get('port', 9191)
 
     print('Serving curriculum on port', port)
+
+    done = json.dumps({ 'id': None, 'problem': None, 'solution': None, 'done': True })
 
     app = Flask(__name__)
     @app.route('/next', methods=['POST'])
@@ -130,6 +150,12 @@ def serve_curriculum(config):
         curriculum_algorithm = params.get('curriculum', 'random')
         student_history = params.get('student_history', [])
 
+        print('Fetching next from', curriculum_algorithm, 'curriculum.')
+        print('History:', student_history)
+
+        if len(student_history) >= size:
+            return done
+
         if curriculum_algorithm == 'random':
             next_problem = random_curriculum_next(data, student_history)
         elif curriculum_algorithm == 'static':
@@ -137,14 +163,22 @@ def serve_curriculum(config):
         else:
             raise NotImplemented()
 
-        return json.dumps({
-            'id': next_problem,
-            'problem': problems[next_problem].facts[-1],
-            'solution': [
-                { 'state': s.facts[-1], 'action': s.parent_action.action if s.parent_action else None }
-                for s in solutions[next_problem]
-            ],
-        })
+        if next_problem:
+            return json.dumps({
+                'done': False,
+                'id': next_problem,
+                'problem': problems[next_problem].facts[-1],
+                'solution': [
+                    { 'state': s.facts[-1], 'action': s.parent_action.action if s.parent_action else None }
+                    for s in solutions[next_problem]
+                ],
+            })
+        else:
+            return done
+
+    @app.route('/post-test', methods=['GET'])
+    def get_post_test():
+        return json.dumps(post_test)
 
     app.run('127.0.0.1', port)
 

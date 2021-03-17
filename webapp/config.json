@@ -1,8 +1,7 @@
 {
-  "levelRange": 2,
   "mongodbHost": "127.0.0.1:27017",
-  "exercises": "exercises-30.json",
-  "minimumCorrect": 3,
+  "curriculumServer": "http://127.0.0.1:9191",
+  "curriculumSize": 20,
 
   "testProblems": [
     {

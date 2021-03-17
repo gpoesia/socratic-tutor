@@ -8,11 +8,14 @@
     "start": "next start"
   },
   "dependencies": {
-    "@material-ui/core": "^4.11.1",
-    "@material-ui/icons": "^4.9.1",
+    "@material-ui/core": "^4.11.3",
+    "@material-ui/icons": "^4.11.2",
+    "@material-ui/lab": "^4.0.0-alpha.57",
     "aws-sdk": "^2.839.0",
+    "just-mix": "^0.3.3",
     "lodash": "^4.17.20",
     "lodash.shuffle": "^4.2.0",
+    "material-ui": "^0.20.2",
     "mathjax-react": "^1.0.6",
     "mongoose": "^5.11.15",
     "next": "10.0.1",

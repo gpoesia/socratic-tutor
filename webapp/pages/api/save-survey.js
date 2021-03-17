@@ -9,5 +9,5 @@ export default async (req, res) => {
   session.endTimestamp = new Date();
   await session.save();
 
-  res.json({ success: "true" });
+  res.json({ mechanicalTurkersAreAwesome: true });
 }
