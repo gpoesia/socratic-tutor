@@ -86,6 +86,7 @@ const TernaryExercises = () => {
       setTimeout(() => {
         if (finished) {
           setShownSolutionSteps(0);
+          setSteps([[]]);
           setPageState(LOAD_STATE);
         } else {
           setShownSolutionSteps(shownSolutionSteps + 1);
