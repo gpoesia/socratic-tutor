@@ -41,8 +41,8 @@ const TernaryInstructions = () => {
         <T digits="#(a0 a1 a2 a3 a4 a5)" />
       </p>
       <p>
-        The colors and sizes above always match: the larger a symbol, the closer to blue its
-        color will be, whereas smaller symbols will be closer to green.
+        The colors and sizes above always match: the largest symbol is always black,
+        whereas the smaller sizes transition to red.
       </p>
       <p>
         In the puzzle, we'll be given a sequence of such symbols, with possibly mixed sizes and colors,

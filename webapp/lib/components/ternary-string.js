@@ -11,7 +11,18 @@ const MIN_COLOR = '#21ff4a';
 const MAX_COLOR = '#2167ff';
 const MAX_POWER = 5;
 
+const SYMBOL_COLORS = [
+  // "#FFFF00",
+  "#FF0000",
+  "#FF7F00",
+  "#00FF00",
+  "#0000FF",
+  "#8B00FF",
+  "#000000",
+];
+
 const makeColor = colors(MIN_COLOR, MAX_COLOR);
+const symbolColorByPower = (p) => SYMBOL_COLORS[p];
 
 const makeScale = (power) => ({
   'display': 'inline-block',
@@ -27,7 +38,7 @@ const TernaryString = ({ digits }) => {
     const symbol = d[0];
     const power = d[1];
 
-    const symbolColor = makeColor(parseInt(power) / MAX_POWER);
+    const symbolColor = symbolColorByPower(parseInt(power));
     const icon =   (symbol === 'a' ? <CircleIcon htmlColor={symbolColor} />
                     :  symbol === 'b' ? <SquareIcon htmlColor={symbolColor} />
                     : symbol === 'c' ? <TriangleIcon htmlColor={symbolColor} />
