@@ -195,7 +195,6 @@ class EnvironmentWithEvaluationProxy:
         self.environment = environment
         self.n_steps = 0
 
-        self.domains = config['domains']
         self.evaluate_every = config['evaluate_every']
         self.eval_config = config['eval_config']
         self.agent = agent
@@ -236,6 +235,7 @@ class EnvironmentWithEvaluationProxy:
         evaluator = SuccessRatePolicyEvaluator(self.environment, self.eval_config)
         results = evaluator.evaluate(self.agent.q_function)
         results['n_steps'] = self.n_steps
+        results['domain'] = self.environment.default_domain
         results['problems_seen'] = self.n_new_problems
         results['name'] = self.agent.name()
         results['cumulative_reward'] = self.cumulative_reward
@@ -249,6 +249,14 @@ class EnvironmentWithEvaluationProxy:
 
         print('Success rate:', results['success_rate'],
               '\tMax length:', results['max_solution_length'])
+
+        try:
+            with open(self.output_path) as f:
+                existing_results = pickle.load(existing_results)
+        except:
+            existing_results = []
+
+        existing_results.append(results)
 
         with open(self.output_path, 'wb') as f:
             pickle.dump(results, f)
@@ -546,13 +554,15 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
 def run_agent_experiment(config, device):
     wandb.init(config=config, project='solver-agent')
-    domain = config['domain']
-    env = Environment(config['environment_url'], domain)
-    q_fn = DRRN({}, device)
+    domains = config['domains']
 
-    agent = BeamSearchIterativeDeepening(q_fn, config['agent'])
-    eval_env = EnvironmentWithEvaluationProxy(agent, env, config['eval_environment'])
-    eval_env.evaluate_agent()
+    for domain in domains:
+        env = Environment(config['environment_url'], domain)
+        q_fn = DRRN({}, device)
+
+        agent = BeamSearchIterativeDeepening(q_fn, config['agent'])
+        eval_env = EnvironmentWithEvaluationProxy(agent, env, config['eval_environment'])
+        eval_env.evaluate_agent()
 
 def evaluate_policy(config, device):
     if config.get('random_policy'):
