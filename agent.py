@@ -398,15 +398,16 @@ class BeamSearchIterativeDeepening(LearningAgent):
                                           lr=config.get('learning_rate', 1e-4))
 
     def name(self):
-        if self.depth_step == 0:
-            return 'BeamSearch({})'.format(self.beam_size)
-        else:
-            return 'BeamSearch({}) + ID({} to {} by {} every {})'.format(
-                self.beam_size,
-                self.initial_depth,
-                self.max_depth,
-                self.depth_step,
-                self.step_every)
+        if self.full_imitation_learning:
+            return 'ImitationLearning'
+        elif self.optimize_every == 1:
+            return 'QLearning'
+        elif self.depth_step == 0 and not self.balance_examples:
+            return 'DAgger'
+        elif self.depth_step > 0 and not self.balance_examples:
+            return 'IDDagger'
+        elif self.depth_step > 0 and self.balance_examples:
+            return 'IDCDagger'
 
     def learn_from_environment(self, environment):
         self.current_depth = self.initial_depth
