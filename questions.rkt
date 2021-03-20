@@ -7,6 +7,7 @@
 (require "./facts.rkt")
 (require "./tactics.rkt")
 (require "./ternary.rkt")
+(require "./sorting.rkt")
 
 ; Simple utilities to make it easier to access proof parameters.
 (define (first-param proof)
@@ -172,6 +173,14 @@
      (ternary-rewrite-description "comb ~a[~a ~a]" #t)]
     [(== td:erase-zero)
      (ternary-rewrite-description "del ~a[~a]" #f)]
+
+    ; ==============
+    ; Sorting domain
+    ; ==============
+    [(== sd:reverse)
+     "rev"]
+    [(== sd:swap)
+     (format "swap ~a" (list-ref (FactProof-parameters fact-proof) 1))]
 
     [_ ""]))
 

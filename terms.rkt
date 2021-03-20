@@ -2,6 +2,7 @@
 (require algebraic/data)
 (require algebraic/function)
 (require algebraic/racket/base/forms)
+(require racket/list)
 (require racket/match)
 (require racket/string)
 (require rebellion/type/enum)
@@ -14,6 +15,11 @@
       (Number Variable UnOp BinOp AnyNumber Predicate
       ; Ternary addition domain.
       TernaryNumber TernaryDigit
+      ; Counting domain
+      CountingSequence
+      ; Sorting domain
+      SortingList
+
       ; A Marker is a "fake" wrapper term, only used for doing formatting
       ; tricks (e.g. see generate-term-boundary-string in questions.rkt).
       ; The parser (term-parser.rkt) never returns markers, and general functions
@@ -33,7 +39,9 @@
     (AnyNumber? t)
     (Predicate? t)
     (TernaryNumber? t)
-    (TernaryDigit? t)))
+    (TernaryDigit? t)
+    (CountingSequence? t)
+    (SortingList? t)))
 
 (define Predicate-type (phi (Predicate type _) type))
 (define Predicate-terms (phi (Predicate _ terms) terms))
@@ -41,6 +49,11 @@
 (define TernaryNumber-digits (phi (TernaryNumber ds) ds))
 (define TernaryDigit-digit (phi (TernaryDigit d p) d))
 (define TernaryDigit-power (phi (TernaryDigit d p) p))
+
+(define CountingSequence-left (phi (CountingSequence l _) l))
+(define CountingSequence-right (phi (CountingSequence _ r) r))
+
+(define SortingList-elems (phi (SortingList l) l))
 
 (define (compute-bin-op op a b)
   (match op
@@ -61,6 +74,8 @@
     [(BinOp op t1 t2) (+ 1 (term-size t1) (term-size t2))]
     [(Predicate type terms) (foldl + 1 (map term-size terms))]
     [(TernaryNumber digits) (length digits)]
+    [(CountingSequence l r) 2]
+    [(SortingList l) (length l)]
     ))
 
 ; Returns a list with the direct subterms of `t`.
@@ -354,6 +369,12 @@
     (format "#(~a)" (string-join (map format-term l) " "))]
    [(TernaryDigit d p)
     (format "~a~a" (list-ref (list "a" "b" "c") d) p)]
+   ; Counting Sequence: a, b, ...
+   [(CountingSequence l r) (format "~a, ~a ..." l r)]
+   ; Sorting domain: list.
+   [(SortingList l) (string-join
+                     (map (lambda (n) (string-join (map (const "_") (range n)) "")) l)
+                     " | ")]
    ; Marker
    [(Marker t)
     (format "~a~a~a" BEGIN-MARKER (format-term t) END-MARKER)]
@@ -420,6 +441,8 @@
   Term? Number? Variable? UnOp? BinOp? AnyNumber? Predicate?
   Predicate-type Predicate-terms
   TernaryNumber-digits TernaryDigit-digit TernaryDigit-power
+  CountingSequence CountingSequence-left CountingSequence-right
+  SortingList SortingList-elems
   mark-term BEGIN-MARKER END-MARKER
   get-term-by-index
   Operator? op+ op* op- op/ is-commutative? is-associative? is-distributive? compute-bin-op op->string string->op)

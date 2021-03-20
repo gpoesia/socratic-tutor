@@ -1,7 +1,15 @@
 #lang brag
 
-term       : predicate | expr | ternary_number
+; This is a unified grammar for all domains we support.
+; A term is the union of terms in all domains. Each domain is defined below.
 
+term       : Dequations | Dternary | Dsorting | Dcounting
+
+; ===========================================
+; =========== Equations Domain ==============
+; ===========================================
+
+Dequations : predicate | expr
 predicate  : equality
 equality   : expr REL_EQ expr
 expr       : expr_l1
@@ -25,8 +33,28 @@ any_number : ANY_NUMBER
 neg_number : OP_MINUS INTEGER
 number     : INTEGER
 
+; ===========================================
+; =========== Ternary Domain ================
+; ===========================================
+
+Dternary       : ternary_number
 ternary_number : TERNARY_MARK LEFT_PAREN ternary_digits
 ternary_digits : ternary_end | ternary_cons
 ternary_cons   : ternary_digit ternary_digits
 ternary_digit  : VARIABLE INTEGER
 ternary_end    : RIGHT_PAREN
+
+; ===========================================
+; =========== Sorting domain ================
+; ===========================================
+
+Dsorting       : sorting_list
+sorting_list   : sorting_single | sorting_many
+sorting_single : SORTING_ELEM
+sorting_many   : SORTING_ELEM SORTING_SEP sorting_list
+
+; ============================================
+; =========== Counting domain ================
+; ============================================
+
+Dcounting : INTEGER COMMA INTEGER COMMA ELLIPSIS

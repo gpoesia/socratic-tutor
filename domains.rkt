@@ -5,6 +5,7 @@
 (require "generation.rkt")
 (require "tactics.rkt")
 (require "ternary.rkt")
+(require "sorting.rkt")
 
 (define EquationsDomain
   (Domain
@@ -20,7 +21,19 @@
    is-ternary-number-simplified?
    d:ternary))
 
-(define AllDomains (list EquationsDomain TernaryAdditionDomain))
+(define SortingDomain
+  (Domain
+   "sorting"
+   generate-sorting-problem
+   is-sorting-list-sorted?
+   d:sorting))
+
+(define AllDomains
+  (list
+   EquationsDomain
+   TernaryAdditionDomain
+   SortingDomain
+   ))
 
 (define (get-domain-by-name name)
   (or
@@ -48,7 +61,10 @@
     [(== a:op-both-sides) "a:op-both-sides"]
     [(== td:add-consecutive) "td:add-consecutive"]
     [(== td:swap) "td:swap"]
-    [(== td:erase-zero) "td:erase-zero"]))
+    [(== td:erase-zero) "td:erase-zero"]
+    [(== sd:swap) "sd:swap"]
+    [(== sd:reverse) "sd:reverse"]
+    ))
 
 ; Inverts axiom->string.
 (define (string->axiom s)
@@ -68,7 +84,10 @@
     [(== "a:op-both-sides") a:op-both-sides]
     [(== "td:add-consecutive") td:add-consecutive]
     [(== "td:swap") td:swap]
-    [(== "td:erase-zero") td:erase-zero]))
+    [(== "td:erase-zero") td:erase-zero]
+    [(== "sd:swap") sd:swap]
+    [(== "sd:reverse") sd:reverse]
+    ))
 
 (provide
  EquationsDomain

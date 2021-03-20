@@ -14,6 +14,9 @@
 (define (parse-tree-to-term t)
   (match t
          [`(term ,t) (parse-tree-to-term t)]
+
+         ; Equations domain.
+         [`(Dequations ,t) (parse-tree-to-term t)]
          [`(predicate ,eq) (parse-tree-to-term eq)]
          [`(expr ,e) (parse-tree-to-term e)]
          [`(paren-expr ,_ ,e ,_) (parse-tree-to-term e)]
@@ -38,6 +41,17 @@
            (BinOp op/ (parse-tree-to-term e1) (parse-tree-to-term e2))]
          [`(number ,n)
            (Number n)]
+         [`(any_number ,_)
+           (AnyNumber)]
+         [`(neg_number ,_ ,n)
+           (Number (- n))]
+         [`(neg_var ,_ ,v)
+           (BinOp op* (Number -1) (Variable v))]
+         [`(variable ,v)
+           (Variable v)]
+
+         ; Ternary domain.
+         [`(Dternary ,t) (parse-tree-to-term t)]
          [`(ternary_number ,_ ,_ ,ds)
           (TernaryNumber (parse-tree-to-term ds))]
          [`(ternary_digits ,ds) (parse-tree-to-term ds)]
@@ -46,14 +60,16 @@
                                                   (char->integer #\a))
                                                i)]
          [`(ternary_end ,_) empty]
-         [`(any_number ,_)
-           (AnyNumber)]
-         [`(neg_number ,_ ,n)
-           (Number (- n))]
-         [`(neg_var ,_ ,v)
-           (BinOp op* (Number -1) (Variable v))]
-         [`(variable ,v)
-           (Variable v)]))
+
+         ; Counting domain
+         [`(Dcounting ,l ,_ ,r ,_ ,_) (CountingSequence l r)]
+
+         ; Sorting domain
+         [`(Dsorting ,t) (SortingList (parse-tree-to-term t))]
+         [`(sorting_list ,t) (parse-tree-to-term t)]
+         [`(sorting_single ,n) (list n)]
+         [`(sorting_many ,h ,_ ,t) (cons h (parse-tree-to-term t))]
+         ))
 
 (define (tokenize ip)
   (port-count-lines! ip)
@@ -61,6 +77,10 @@
            (lexer-src-pos
              ["(" (token 'LEFT_PAREN)]
              [")" (token 'RIGHT_PAREN)]
+             ["[" (token 'LEFT_SBRACKET)]
+             ["]" (token 'RIGHT_SBRACKET)]
+             ["," (token 'COMMA)]
+             ["..." (token 'ELLIPSIS)]
              ["=" (token 'REL_EQ)]
              ["+" (token 'OP_PLUS)]
              [(repetition 1 +inf.0 numeric)
@@ -70,8 +90,9 @@
              ["/" (token 'OP_DIV)]
              ["?" (token 'ANY_NUMBER)]
              ["#" (token 'TERNARY_MARK)]
-             [(repetition 1 +inf.0 numeric)
-              (token 'INTEGER (string->number lexeme))]
+             ["|" (token 'SORTING_SEP)]
+             [(repetition 1 +inf.0 "_")
+              (token 'SORTING_ELEM (string-length lexeme))]
              [(repetition 1 +inf.0 alphabetic)
               (token 'VARIABLE lexeme)]
              [whitespace
