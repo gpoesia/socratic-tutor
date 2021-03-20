@@ -260,7 +260,9 @@ class EnvironmentWithEvaluationProxy:
             try:
                 self.agent.learn_from_environment(self)
             except EndOfLearning:
-                print('Learning budget ended. Doing final evaluation...')
+                print('Learning budget ended. Doing last learning round (if agent wants to)')
+                self.agent.learn_from_experience()
+                print('Running final evaluation...')
                 self.evaluate()
                 break
             except Exception as e:
@@ -361,6 +363,9 @@ class LearningAgent:
         "Lets the agent learn by interaction using any algorithm."
         raise NotImplementedError()
 
+    def learn_from_experience(self):
+        "Lets the agent optionally learn from its past interactions one last time before eval."
+
     def stats(self):
         "Returns a string with learning statistics for this agent, for debugging."
         return ""
@@ -387,6 +392,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.n_gradient_steps = config.get('n_gradient_steps', 10)
         self.discard_unsolved_problems = config.get('discard_unsolved', False)
         self.add_success_action = config.get('add_success_action', False)
+        self.full_imitation_learning = config.get('full_imitation_learning', False)
 
         self.optimizer = torch.optim.Adam(q_function.parameters(),
                                           lr=config.get('learning_rate', 1e-4))
@@ -421,6 +427,10 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
             if (i + 1) % self.step_every == 0:
                 self.current_depth = min(self.max_depth, self.current_depth + self.depth_step)
+
+    def learn_from_experience(self):
+        if self.full_imitation_learning:
+            self.gradient_steps(True)
 
     def beam_search(self, state, environment):
         states_by_id = {id(state): state}
@@ -504,7 +514,10 @@ class BeamSearchIterativeDeepening(LearningAgent):
             len(self.replay_buffer_pos) + len(self.replay_buffer_neg),
             len(self.replay_buffer_pos))
 
-    def gradient_steps(self):
+    def gradient_steps(self, is_last_round=False):
+        if self.full_imitation_learning and not is_last_round:
+            return
+
         if self.balance_examples:
            n_each = min(len(self.replay_buffer_pos), len(self.replay_buffer_neg))
            examples = (random.sample(self.replay_buffer_pos, k=n_each) +
