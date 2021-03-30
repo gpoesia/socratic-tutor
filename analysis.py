@@ -5,6 +5,9 @@ import pymongo
 import numpy as np
 import collections
 from scipy.stats import norm
+import argparse
+import pickle
+from agent import State, Action
 
 def load_data(config):
     client = pymongo.MongoClient()
@@ -118,3 +121,64 @@ def analyze_question_difficulty(dataset, criterion):
                 results[key].append(r)
 
     return { k:bernoulli_ci(v)  for k, v in results.items() }
+
+def compare_learning_algorithms(config):
+    print('Comparing learning algorithms...')
+    results = config['results']
+    output = config['output']
+
+    data_points = collections.defaultdict(list)
+
+    for path in results:
+        with open(path, 'rb') as f:
+            r = pickle.load(f)
+
+        for p in r:
+            algorithm, domain = r['name'], r['domain']
+            data_points[algorithm, domain].append(r)
+
+    algorithms = list(set(k[0] for k in data_points.keys()))
+    domains = list(set(k[1] for k in data_points.keys()))
+
+    success_rate = {}
+
+    for a in algorithms:
+        for d in domains:
+            if len(data_points[a, d]):
+                success_rate[a, d] = '{:.2f}'.format(data_points[a, d][-1]['success_rate'])
+            else:
+                success_rate[a, d] = 'N/A'
+
+    with open(output, 'w') as f:
+        f.write(f'\\begin{{tabular}}{{| l | {" c" * len(domains)} |}}\n')
+        f.write('\\hline')
+
+        headers = ['Algorithm'] + domains
+        f.write(' & '.join('\textbf{{{}}}'.format(c) for c in headers))
+        f.write('\\\\ \\hline\n')
+
+        for a in algorithms:
+            line = [a]
+
+            for d in domains:
+                line.append(success_rate[a, d])
+
+            f.write(' & '.join(line))
+            f.write('\\\\\n')
+
+        f.write('\\end{tabular}\n')
+
+    print('Wrote', output)
+
+def run_analyses(config):
+    if config.get('compare_learning_algorithms'):
+        compare_learning_algorithms(config['compare_learning_algorithms'])
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser('Analyze experiments & user study results')
+    parser.add_argument('--config', required=True, help='Path to config file.')
+    opt = parser.parse_args()
+
+    config = json.load(open(opt.config))
+
+    run_analyses(config)
