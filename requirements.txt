@@ -1,0 +1,10 @@
+torch
+requests
+tqdm
+matplotlib
+wandb
+flask
+numpy
+scikit-learn
+pytorch_lightning
+GPUtil
