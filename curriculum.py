@@ -15,6 +15,9 @@ from flask import Flask, request
 
 from agent import Environment, QFunction, DRRN
 
+def l2_distance(u, v):
+    return np.sqrt(np.sum((u - v)**2))
+
 def find_all_solutions(env, problems, q_fn, max_steps):
     problems_with_solution = []
 
@@ -116,6 +119,42 @@ def static_curriculum_next(data, student_history):
             if len(student_history) < min(len(curriculum), data['config']['curriculum_size'])
             else None)
 
+def dynamic_curriculum_next(data, student_history):
+    '''Returns the uncovered exercise that is closest to the last exercise.'''
+
+    if len(student_history) == 0:
+        return data['static_curriculum'][0]
+
+    last = student_history[-1]['id']
+    problems = data['problems']
+    radius = data['config']['radius']
+    d = data['pairwise_distances']
+    solved_exercises = [e['id'] for e in student_history if e['correct']]
+    seen_exercises = set(e['id'] for e in student_history)
+    elligible = []
+
+    for i in range(len(problems)):
+        if i in seen_exercises:
+            continue
+
+        min_d = np.inf
+
+        for p in solved_exercises:
+            min_d = min(min_d, d[p][i])
+
+        if min_d > radius:
+            elligible.append((i, d[i][last]))
+
+        if not len(elligible):
+            break
+
+    if not len(elligible):
+        # All exercises have either been seen or covered.
+        return None
+
+    # Choose the closest to the last exercise among the unseen and uncovered exercises.
+    return min(elligible, key=lambda p: p[1])[0]
+
 def sample_post_test(data, seed, n_problems):
     problems = data['problems']
     solutions = data['solutions']
@@ -160,6 +199,8 @@ def serve_curriculum(config):
             next_problem = random_curriculum_next(data, student_history)
         elif curriculum_algorithm == 'static':
             next_problem = static_curriculum_next(data, student_history)
+        elif curriculum_algorithm == 'dynamic':
+            next_problem = dynamic_curriculum_next(data, student_history)
         else:
             raise NotImplemented()
 
