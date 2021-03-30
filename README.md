@@ -1,11 +1,9 @@
-# Socratic Tutor
+# Socratic: Learning and Tutoring Symbolic Manipulation Domains
 
-Implementation of the Socratic Tutor project.
+This project consists of (1) learning how to solve procedural educational domains,
+and then (2) teaching people to do the same, using an expert domain model.
 
-For now, the short-term goal is to get the solver to generate the step-by-step
-solution to simple math problems, so that we can think about/play with asking questions.
-
-The solver is implemented in Racket.
+The educational domains themselves are implemented in Racket.
 We're using [Algebraic Racket](https://docs.racket-lang.org/algebraic/ref.html),
 since Algebraic Data Types are especially useful for recursive structures like
 mathematical expressions. You can install all dependencies with:
@@ -14,42 +12,48 @@ mathematical expressions. You can install all dependencies with:
 raco pkg install --auto --pkgs algebraic brag date rebellion http-easy gregor
 ```
 
-## Prototype
-
-By running `racket tutor-example.rkt`, you'll interact with a preliminary version
-of the tutor. It still does not ask questions, or finds solutions.
-Rather, it verifies whether each step in the student's solution is correct.
-Here's an example dialogue:
+The learning algorithms are implemented in Python 3, using PyTorch. You can install
+all Python dependencies using:
 
 ```
-$ racket tutor-example.rkt
-Let's solve a math problem! Given:
-(1): ((1 + 2) + 3) = (-9x + 10x)
-You need to meet:
-(G1): x = ??
->>> 7 = x
-Hmm, I could not verify that. Try again?
->>> 6 = x
-OK! Let's add that to what we know:
-(2): 6 = x
->>> x = 6
-OK! Let's add that to what we know:
-(3): x = 6
-Great, this matches the goal x = ??
-You're done!
+pip install -r requirements.txt
 ```
 
-## Current stage and next steps
+Finally, the human evaluation is done with a Web application, written using Next.js and React.
+It is located under the `webapp` directory. To install all dependencies there, simply
+use `npm install` on the `webapp` directory.
 
-These are some clear short-term goals:
+## Educational domains
 
-- [x] Have a representation for terms (`x + 2y`) and equalities between terms (`x + 2y = x - 1`)
-- [x] Implement term simplification using random search (`x + y + x + y` --> `2 * (x + y)`).
-- [ ] Implement simple tactics for solving a problem (e.g. "Isolate x in the equation", "Substitute an equation in another", "Simplify both sides").
-- [ ] Implement step-by-step solver for simple systems of linear equations.
+Our first goal is to learn how to automatically solve exercises in a new educational domain.
+Concretely, a domain defines:
 
-After that, we'll likely want to (not necessarily in this order):
+(1) What exercises exist in the domain (e.g. what are algebraic equations),
+(2) How to generate new exercises in that domain (e.g. an equations generator),
+(3) Given one state, what are the actions available at that state (e.g. in an equation, could be changing the order of some terms, applying an operation to both sides, etc),
+(4) Finally, how to detect that an exercise was solved (e.g. in equations, `x = 4` is solved, while `2x = 8` is still not)
 
-- [ ] Think more concretely about interaction, especially how to generate questions and answers.
-- [ ] Try to make the solver work with simple problems from actual math exercise websites/textbooks.
-- [ ] Pick other categories of problems to expand what we can solve.
+This is roughly what you need to implement a new domain:
+
+* First, we need to create new subtypes of terms to represent exercises in the new domain.
+  This is done in `terms.rkt`. You need to add the appropriate constructors to the `Term` algebraic type,
+  to the `Term?` predicate, and add a way of formatting these terms under the `format-term` function.
+  Other functions in this file that handle each kind of term also need to be updated (such as `term-size` and
+  `subterms`)
+* Then, we need to augment our parser to recognize terms in the new domain.
+  This mainly consists of changing the brag grammar in `grammar.rkt`, and then changing `term-parser.rkt`
+  where needed.
+* Now that we have a way of representing and parsing terms, we can proceed to (2), (3) and (4).
+  Create a new file for the domain. You can copy `sorting.rkt` as a simple domain to start from.
+  You'll need to define axioms for the new domain, then tactics, and finally the domain function,
+  which applies all tactics and returns all possible next steps (3).
+* In the same file, also implement a generator and a predicate that tells whether the exercise is solved.
+* Finally, add your domain to `domains.rkt`, with the corresponding axioms. That's all, your domain is
+  now fully integrated into the rest! We can train and evaluate various agents to learn it, and see how
+  well they do.
+
+## Learning agents
+
+Several learning algorithms are implemented to learn the domains.
+They are all in `agent.py`, which is a file that also implements evaluation.
+More on this soon!
