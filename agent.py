@@ -16,6 +16,7 @@ import math
 import util
 import wandb
 import torch
+import logging
 from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
@@ -509,7 +510,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
             beam = next_states[:self.beam_size]
 
         # Add all edges traversed as examples in the experience replay buffer.
-        if solution or not self.discard_unsolved_problems:
+        if solution is not None or not self.discard_unsolved_problems:
             for s, (parent, a) in state_parent_edge.items():
                 r = action_reward.get(id(a), 0.0)
                 b = self.replay_buffer_pos if r > 0 else self.replay_buffer_neg
@@ -530,11 +531,12 @@ class BeamSearchIterativeDeepening(LearningAgent):
             return
 
         if self.balance_examples:
-           n_each = min(len(self.replay_buffer_pos), len(self.replay_buffer_neg))
-           examples = (random.sample(self.replay_buffer_pos, k=n_each) +
-                       random.sample(self.replay_buffer_neg, k=n_each))
+            n_each = min(len(self.replay_buffer_pos), len(self.replay_buffer_neg))
+            examples = (random.sample(self.replay_buffer_pos, k=n_each) +
+                        random.sample(self.replay_buffer_neg, k=n_each))
         else:
             examples = self.replay_buffer_pos + self.replay_buffer_neg
+
         batch_size = min(self.batch_size, len(examples))
 
         if batch_size == 0:
@@ -603,6 +605,7 @@ if __name__ == '__main__':
     parser.add_argument('--learn', help='Put an agent to learn from the environment', action='store_true')
     parser.add_argument('--eval', help='Evaluate a learned policy', action='store_true')
     parser.add_argument('--repl', help='Get a REPL with an environment', action='store_true')
+    parser.add_argument('--debug', help='Enable debug messages.', action='store_true')
     parser.add_argument('--gpu', type=int, default=None, help='Which GPU to use.')
 
     opt = parser.parse_args()
@@ -614,6 +617,18 @@ if __name__ == '__main__':
         config = json.load(open(opt.config))
 
     device = torch.device('cpu') if not opt.gpu else torch.device(opt.gpu)
+
+    # Configure logging.
+    FORMAT = '%(asctime)-15s %(message)s'
+    logging.basicConfig(format=FORMAT)
+
+    if opt.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    # Only shown in debug mode.
+    logging.debug('Running in debug mode.')
 
     if opt.learn:
         run_agent_experiment(config, device)
