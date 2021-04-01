@@ -2,6 +2,7 @@
 # educational domain environment implemented in Racket.
 
 import argparse
+import copy
 import datetime
 import urllib
 import requests
@@ -554,15 +555,18 @@ class BeamSearchIterativeDeepening(LearningAgent):
             self.optimizer.step()
 
 def run_agent_experiment(config, device):
-    wandb.init(config=config, project='solver-agent')
     domains = config['domains']
 
     for domain in domains:
-        env = Environment(config['environment_url'], domain)
+        run_config = copy.deepcopy(config)
+        run_config['agent']['model_output'] = run_config['agent']['model_output'].format(domain)
+        wandb.init(config=run_config, project='solver-agent', reinit=True)
+
+        env = Environment(run_config['environment_url'], domain)
         q_fn = DRRN({}, device)
 
-        agent = BeamSearchIterativeDeepening(q_fn, config['agent'])
-        eval_env = EnvironmentWithEvaluationProxy(agent, env, config['eval_environment'])
+        agent = BeamSearchIterativeDeepening(q_fn, run_config['agent'])
+        eval_env = EnvironmentWithEvaluationProxy(agent, env, run_config['eval_environment'])
         eval_env.evaluate_agent()
 
 def evaluate_policy(config, device):
