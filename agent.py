@@ -565,7 +565,8 @@ def run_agent_experiment(config, device):
 
     for domain in domains:
         run_config = copy.deepcopy(config)
-        run_config['agent']['model_output'] = run_config['agent']['model_output'].format(domain)
+        run_config['eval_environment']['model_output'] = \
+            run_config['eval_environment']['model_output'].format(domain)
         wandb.init(config=run_config, project='solver-agent', reinit=True)
 
         env = Environment(run_config['environment_url'], domain)
