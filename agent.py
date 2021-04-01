@@ -252,8 +252,9 @@ class EnvironmentWithEvaluationProxy:
 
         try:
             with open(self.output_path) as f:
-                existing_results = pickle.load(existing_results)
-        except:
+                existing_results = pickle.load(f)
+        except Exception as e:
+            print(f'Starting new results log at {self.output_path} ({e})')
             existing_results = []
 
         existing_results.append(results)
