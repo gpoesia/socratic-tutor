@@ -435,16 +435,16 @@ class BeamSearchIterativeDeepening(LearningAgent):
             if ((self.optimize_on == 'problem' and (i + 1) % self.optimize_every == 0) or
                 (self.optimize_on == 'solution' and solution is not None and
                  self.training_problems_solved % self.optimize_every == 0)):
-                logging.debug('Running SGD steps.')
+                logging.info('Running SGD steps.')
                 self.gradient_steps()
 
             if (i + 1) % self.step_every == 0:
                 self.current_depth = min(self.max_depth, self.current_depth + self.depth_step)
-                logging.debug(f'Bem search depth increased to {self.current_depth}.')
+                logging.info(f'Bem search depth increased to {self.current_depth}.')
 
     def learn_from_experience(self):
         if self.full_imitation_learning:
-            logging.debug('Running Imitation learning')
+            logging.info('Running Imitation learning')
             self.gradient_steps(True)
 
     def beam_search(self, state, environment):
@@ -540,7 +540,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
         else:
             examples = self.replay_buffer_pos + self.replay_buffer_neg
 
-        logging.debug(f'Training with {len(examples)} examples (balanced = {self.balance_examples}')
+        logging.info(f'Training with {len(examples)} examples (balanced = {self.balance_examples}')
         batch_size = min(self.batch_size, len(examples))
 
         if batch_size == 0:
@@ -628,12 +628,10 @@ if __name__ == '__main__':
     logging.basicConfig(format=FORMAT)
 
     if opt.debug:
-        logging.getLogger().setLevel(logging.DEBUG)
-
-        logging.getLogger().setLevel(logging.DEBUG)
+        logging.getLogger().setLevel(logging.INFO)
 
     # Only shown in debug mode.
-    logging.debug('Running in debug mode.')
+    logging.info('Running in debug mode.')
 
     if opt.learn:
         run_agent_experiment(config, device)
