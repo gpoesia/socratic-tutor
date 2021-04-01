@@ -573,6 +573,7 @@ def run_agent_experiment(config, device):
         q_fn = DRRN({}, device)
 
         agent = BeamSearchIterativeDeepening(q_fn, run_config['agent'])
+        print('Running', agent.name(), 'on', domain)
         eval_env = EnvironmentWithEvaluationProxy(agent, env, run_config['eval_environment'])
         eval_env.evaluate_agent()
 
