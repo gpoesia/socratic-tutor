@@ -281,13 +281,13 @@ class EnvironmentWithEvaluationProxy:
                 print('Ignoring exception and continuing...')
 
     def print_progress(self):
-        print('\r{} steps ({:.3}%, ETA: {}), {} total reward, explored {} problems. {}'
+        print('\r{} steps ({:.3}%, ETA: {}), {} solutions found, explored {} problems. {}'
               .format(self.n_steps,
                       100 * (self.n_steps / self.max_steps),
                       util.format_eta(datetime.datetime.now() - self.begin_time,
                                       self.n_steps,
                                       self.max_steps),
-                      self.cumulative_reward,
+                      self.training_problems_solved,
                       self.n_new_problems,
                       self.agent.stats()))
 
@@ -440,7 +440,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
             if (i + 1) % self.step_every == 0:
                 self.current_depth = min(self.max_depth, self.current_depth + self.depth_step)
-                logging.info(f'Bem search depth increased to {self.current_depth}.')
+                logging.info(f'Beam search depth increased to {self.current_depth}.')
 
     def learn_from_experience(self):
         if self.full_imitation_learning:
