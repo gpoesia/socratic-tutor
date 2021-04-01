@@ -281,13 +281,13 @@ class EnvironmentWithEvaluationProxy:
                 print('Ignoring exception and continuing...')
 
     def print_progress(self):
-        print('\r{} steps ({:.3}%, ETA: {}), {} solutions found, explored {} problems. {}'
+        print('{} steps ({:.3}%, ETA: {}), {} total reward, explored {} problems. {}'
               .format(self.n_steps,
                       100 * (self.n_steps / self.max_steps),
                       util.format_eta(datetime.datetime.now() - self.begin_time,
                                       self.n_steps,
                                       self.max_steps),
-                      self.training_problems_solved,
+                      self.cumulative_reward,
                       self.n_new_problems,
                       self.agent.stats()))
 
