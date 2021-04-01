@@ -253,7 +253,7 @@ class EnvironmentWithEvaluationProxy:
               '\tMax length:', results['max_solution_length'])
 
         try:
-            with open(self.output_path) as f:
+            with open(self.output_path, 'rb') as f:
                 existing_results = pickle.load(f)
         except Exception as e:
             print(f'Starting new results log at {self.output_path} ({e})')
@@ -267,6 +267,7 @@ class EnvironmentWithEvaluationProxy:
         torch.save(self.agent.q_function, self.model_output_path)
 
     def evaluate_agent(self):
+        self.evaluate()
         while True:
             try:
                 self.agent.learn_from_environment(self)
