@@ -540,7 +540,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
         else:
             examples = self.replay_buffer_pos + self.replay_buffer_neg
 
-        logging.info(f'Training with {len(examples)} examples (balanced = {self.balance_examples}')
+        logging.info(f'Taking {self.n_gradient_steps} with {len(examples)} examples (balanced = {self.balance_examples})')
         batch_size = min(self.batch_size, len(examples))
 
         if batch_size == 0:
