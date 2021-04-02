@@ -2,8 +2,10 @@
 # educational domain environment implemented in Racket.
 
 import argparse
+import collections
 import copy
 import datetime
+import itertools
 import urllib
 import requests
 import random
@@ -15,10 +17,10 @@ import torch
 import math
 import util
 import wandb
-import torch
 import logging
 from torch import nn
 from torch.nn import functional as F
+from torch.distributions.categorical import Categorical
 import pytorch_lightning as pl
 
 from domain_learner import CharEncoding, LearnerValueFunction, collate_concat
@@ -385,11 +387,12 @@ class LearningAgent:
 class BeamSearchIterativeDeepening(LearningAgent):
     def __init__(self, q_function, config):
         self.q_function = q_function
-        self.replay_buffer_pos = []
-        self.replay_buffer_neg = []
+        self.replay_buffer_size = config['replay_buffer_size']
+
+        self.replay_buffer_pos = collections.deque(self.replay_buffer_size)
+        self.replay_buffer_neg = collections.deque(self.replay_buffer_size)
         self.training_problems_solved = 0
 
-        self.replay_buffer_size = config['replay_buffer_size']
         self.max_depth = config['max_depth']
         self.depth_step = config['depth_step']
         self.initial_depth = config['initial_depth']
@@ -412,8 +415,6 @@ class BeamSearchIterativeDeepening(LearningAgent):
     def name(self):
         if self.full_imitation_learning:
             return 'ImitationLearning'
-        elif self.optimize_every == 1:
-            return 'QLearning'
         elif self.depth_step == 0 and not self.balance_examples:
             return 'DAgger'
         elif self.depth_step > 0 and not self.balance_examples:
@@ -426,7 +427,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
         beam_size = self.beam_size
         step_every = self.step_every
 
-        for i in range(10**9):
+        for i in itertools.count():
             problem = environment.generate_new()
             solution = self.beam_search(problem, environment)
 
@@ -520,9 +521,6 @@ class BeamSearchIterativeDeepening(LearningAgent):
                 b = self.replay_buffer_pos if r > 0 else self.replay_buffer_neg
                 b.append((states_by_id[s], a, r))
 
-            self.replay_buffer_pos = self.replay_buffer_pos[-self.replay_buffer_size:]
-            self.replay_buffer_neg = self.replay_buffer_neg[-self.replay_buffer_size:]
-
         return solution
 
     def stats(self):
@@ -561,22 +559,89 @@ class BeamSearchIterativeDeepening(LearningAgent):
             loss.backward()
             self.optimizer.step()
 
-def run_agent_experiment(config, device):
-    domains = config['domains']
+# A tuple of the replay buffer. We don't need to store the current state or the next state
+# because a0 is an Action object, which already has a0.state and a0.next_state.
+QReplayBufferTuple = collections.namedtuple('QReplayBufferTuple',
+                                            ['a0', 'r', 'A1'])
 
-    for domain in domains:
-        run_config = copy.deepcopy(config)
-        run_config['eval_environment']['model_output'] = \
-            run_config['eval_environment']['model_output'].format(domain)
-        wandb.init(config=run_config, project='solver-agent', reinit=True)
+class QLearning(LearningAgent):
+    def __init__(self, q_function, config):
+        self.q_function = q_function
 
-        env = Environment(run_config['environment_url'], domain)
-        q_fn = DRRN({}, device)
+        self.replay_buffer_size = config['replay_buffer_size']
+        self.max_depth = config['max_depth']
 
-        agent = BeamSearchIterativeDeepening(q_fn, run_config['agent'])
-        print('Running', agent.name(), 'on', domain)
-        eval_env = EnvironmentWithEvaluationProxy(agent, env, run_config['eval_environment'])
-        eval_env.evaluate_agent()
+        self.discount_factor = config.get('discount_factor', 1.0)
+        self.batch_size = config.get('batch_size', 64)
+        self.softmax_alpha = config.get('softmax_alpha', 1.0)
+
+        self.replay_buffer = collections.deque(maxlen=self.replay_buffer_size)
+        self.solutions_found = 0
+
+        self.optimizer = torch.optim.Adam(q_function.parameters(),
+                                          lr=config.get('learning_rate', 1e-4))
+
+    def name(self):
+        return 'QLearning'
+
+    def learn_from_environment(self, environment):
+        for i in itertools.count():
+            state = environment.generate_new()
+            r, actions = environment.step([state])[0]
+
+            if r:
+                # Trivial state: already solved, no examples to draw.
+                continue
+
+            for j in range(self.max_depth):
+                with torch.no_grad():
+                    q_values = self.q_function(actions)
+                    pi = Categorical(logits=self.softmax_alpha * q_values)
+                    a = pi.sample().item()
+
+                s_next = actions[a].next_state
+                r, next_actions = environment.step([s_next])[0]
+                self.replay_buffer.append(QReplayBufferTuple(actions[a],
+                                                             r,
+                                                             next_actions))
+                self.gradient_steps()
+
+    def learn_from_experience(self):
+        pass # QLearning doesn't have a learning step at the end.
+
+    def stats(self):
+        return "replay buffer size = {}, {} solutions found".format(
+            len(self.replay_buffer), self.solutions_found)
+
+    def gradient_steps(self):
+        examples = self.replay_buffer
+        batch_size = min(self.batch_size, len(examples))
+
+        if batch_size == 0:
+            return
+
+        batch = random.sample(examples, batch_size)
+        ys = []
+
+        # Compute ys.
+        with torch.no_grad():
+            for t in batch:
+                if t.r > 0: # Next state is terminal.
+                    ys.append(t.r)
+                else:
+                    # Need to compute maximum Q value for all actions.
+                    max_q = self.q_function(t.A1).max()
+                    ys.append(t.r + self.discount_factor * max_q)
+
+        # Compute Q estimates and take gradient steps.
+        self.optimizer.zero_grad()
+        q_estimates = self.q_function([t.a0 for t in batch])
+
+        y = torch.tensor(ys, dtype=q_estimates.dtype, device=q_estimates.device)
+        loss = ((y - q_estimates)**2).mean()
+        wandb.log({ 'train_loss': loss.item() })
+        loss.backward()
+        self.optimizer.step()
 
 def evaluate_policy(config, device):
     if config.get('random_policy'):
@@ -600,6 +665,26 @@ def evaluate_policy(config, device):
     print('Max solution length:', result['max_solution_length'])
     print('Solved problems:', result['successes'])
     print('Unsolved problems:', result['failures'])
+
+def run_agent_experiment(config, device):
+    domains = config['domains']
+
+    for domain in domains:
+        run_config = copy.deepcopy(config)
+        run_config['eval_environment']['model_output'] = \
+            run_config['eval_environment']['model_output'].format(domain)
+        wandb.init(config=run_config, project='solver-agent', reinit=True)
+
+        env = Environment(run_config['environment_url'], domain)
+        q_fn = DRRN({}, device)
+
+        if run_config['agent']['type'] == 'QLearning':
+            agent = QLearning(q_fn, run_config['agent'])
+        else:
+            agent = BeamSearchIterativeDeepening(q_fn, run_config['agent'])
+        print('Running', agent.name(), 'on', domain)
+        eval_env = EnvironmentWithEvaluationProxy(agent, env, run_config['eval_environment'])
+        eval_env.evaluate_agent()
 
 def interact():
     env = Environment('http://localhost:9898')
