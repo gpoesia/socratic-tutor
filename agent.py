@@ -594,6 +594,10 @@ class QLearning(LearningAgent):
                 continue
 
             for j in range(self.max_depth):
+                # No actions to take.
+                if not len(actions):
+                    break
+
                 with torch.no_grad():
                     q_values = self.q_function(actions)
                     pi = Categorical(logits=self.softmax_alpha * q_values)
