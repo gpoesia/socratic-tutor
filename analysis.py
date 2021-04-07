@@ -134,8 +134,8 @@ def compare_learning_algorithms(config):
             r = pickle.load(f)
 
         for p in r:
-            algorithm, domain = r['name'], r['domain']
-            data_points[algorithm, domain].append(r)
+            algorithm, domain = p['name'], p['domain']
+            data_points[algorithm, domain].append(p)
 
     algorithms = list(set(k[0] for k in data_points.keys()))
     domains = list(set(k[1] for k in data_points.keys()))
@@ -145,7 +145,8 @@ def compare_learning_algorithms(config):
     for a in algorithms:
         for d in domains:
             if len(data_points[a, d]):
-                success_rate[a, d] = '{:.2f}'.format(data_points[a, d][-1]['success_rate'])
+                success_rate[a, d] = '{:.3f}'.format(max(map(lambda r: r['success_rate'],
+                                                             data_points[a, d])))
             else:
                 success_rate[a, d] = 'N/A'
 
@@ -154,7 +155,7 @@ def compare_learning_algorithms(config):
         f.write('\\hline')
 
         headers = ['Algorithm'] + domains
-        f.write(' & '.join('\textbf{{{}}}'.format(c) for c in headers))
+        f.write(' & '.join('\\textbf{{{}}}'.format(c) for c in headers))
         f.write('\\\\ \\hline\n')
 
         for a in algorithms:
