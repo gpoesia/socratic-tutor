@@ -718,7 +718,7 @@ def run_batch_experiment(config):
     'Spawns a series of processes to run experiments for each agent/domain pair.'
     experiment_id = util.random_id()
     domains = config['domains']
-    agents = config['agents']
+    agents = [c for c in config['agents'] if not c.get('disable')]
 
     environment_port_base = config.get('environment_port_base', 9876)
     run_processes = []
