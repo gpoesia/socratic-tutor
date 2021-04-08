@@ -405,8 +405,8 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.q_function = q_function
         self.replay_buffer_size = config['replay_buffer_size']
 
-        self.replay_buffer_pos = collections.deque(self.replay_buffer_size)
-        self.replay_buffer_neg = collections.deque(self.replay_buffer_size)
+        self.replay_buffer_pos = collections.deque(maxlen=self.replay_buffer_size)
+        self.replay_buffer_neg = collections.deque(maxlen=self.replay_buffer_size)
         self.training_problems_solved = 0
 
         self.max_depth = config['max_depth']
@@ -760,20 +760,21 @@ def run_batch_experiment(config):
                 run_processes.append(agent_process)
 
                 agent_index += 1
+
+        print('Waiting for all agents to finish...')
+        for p in run_processes:
+            p.wait()
+        print('Shutting down environments...')
+        for p in environments:
+            p.terminate()
+        print('Done!')
+
     except (Exception, KeyboardInterrupt) as e:
         print('Killing all created processes...')
         for p in run_processes + environments:
             p.terminate()
 
         raise
-
-    print('Waiting for all agents to finish...')
-    for p in run_processes:
-        p.wait()
-    print('Shutting down environments...')
-    for p in environments:
-        p.terminate()
-    print('Done!')
 
 def interact():
     env = Environment('http://localhost:9898')
