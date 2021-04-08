@@ -198,6 +198,7 @@ class EndOfLearning(Exception):
 class EnvironmentWithEvaluationProxy:
     '''Wrapper around the environment that triggers an evaluation every K calls'''
     def __init__(self, experiment_id, agent, environment, config={}):
+        self.experiment_id = experiment_id
         self.environment = environment
         self.n_steps = 0
 
