@@ -220,20 +220,24 @@ class EnvironmentWithEvaluationProxy:
         return self.environment.generate_new(domain, seed)
 
     def step(self, states, domain=None):
-        # The agent is taking steps on each of the len(states) states.
-        # One 'epoch' is finished when the expert
-        self.n_steps += 1
-        if (self.n_steps + 1) % self.evaluate_every == 0:
+        n_steps_before = self.n_steps
+        self.n_steps += len(states)
+
+        # If the number of steps crossed the boundary of '0 mod evaluate_every', run evaluation.
+        # If the agent took one step at a time, then we would only need to test if
+        # n_steps % evaluate_every == 0. However the agent might take multiple steps at once.
+        if (n_steps_before % self.evaluate_every) + len(states) >= self.evaluate_every:
             self.evaluate()
 
-        if self.n_steps == self.max_steps:
+        if self.n_steps >= self.max_steps:
             # Budget ended.
             raise EndOfLearning()
 
         reward_and_actions = self.environment.step(states, domain)
         self.cumulative_reward += sum(rw for rw, _ in reward_and_actions)
 
-        if self.n_steps % self.print_every == 0:
+        # Same logic as with evaluate_every.
+        if (n_steps_before % self.print_every) + len(states) >= self.print_every:
             self.print_progress()
 
         return reward_and_actions
