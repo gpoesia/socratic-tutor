@@ -19,7 +19,8 @@
       CountingSequence
       ; Sorting domain
       SortingList
-
+      ; Fraction domain
+      FractionExpression
       ; A Marker is a "fake" wrapper term, only used for doing formatting
       ; tricks (e.g. see generate-term-boundary-string in questions.rkt).
       ; The parser (term-parser.rkt) never returns markers, and general functions
@@ -41,7 +42,9 @@
     (TernaryNumber? t)
     (TernaryDigit? t)
     (CountingSequence? t)
-    (SortingList? t)))
+    (SortingList? t)
+    (FractionExpression? t)
+    ))
 
 (define Predicate-type (phi (Predicate type _) type))
 (define Predicate-terms (phi (Predicate _ terms) terms))
@@ -54,6 +57,7 @@
 (define CountingSequence-right (phi (CountingSequence _ r) r))
 
 (define SortingList-elems (phi (SortingList l) l))
+(define FractionExpression-elems (phi (FractionExpression l) l))
 
 (define (compute-bin-op op a b)
   (match op
@@ -76,6 +80,7 @@
     [(TernaryNumber digits) (length digits)]
     [(CountingSequence l r) 2]
     [(SortingList l) (length l)]
+    [(FractionExpression terms) (foldl + 0 (map term-size terms)) ]
     ))
 
 ; Returns a list with the direct subterms of `t`.
@@ -437,12 +442,13 @@
   enumerate-subterms
   term-size
   goal-matches?
-  Number Variable UnOp BinOp AnyNumber Predicate TernaryNumber TernaryDigit
+  Number Variable UnOp BinOp AnyNumber Predicate TernaryNumber TernaryDigit 
   Term? Number? Variable? UnOp? BinOp? AnyNumber? Predicate?
   Predicate-type Predicate-terms
   TernaryNumber-digits TernaryDigit-digit TernaryDigit-power
   CountingSequence CountingSequence-left CountingSequence-right
-  SortingList SortingList-elems
+  SortingList SortingList-elems 
+  FractionExpression FractionExpression-elems
   mark-term BEGIN-MARKER END-MARKER
   get-term-by-index
   Operator? op+ op* op- op/ is-commutative? is-associative? is-distributive? compute-bin-op op->string string->op)

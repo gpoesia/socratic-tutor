@@ -3,7 +3,7 @@
 ; This is a unified grammar for all domains we support.
 ; A term is the union of terms in all domains. Each domain is defined below.
 
-term       : Dequations | Dternary | Dsorting | Dcounting
+term       : Dequations | Dternary | Dsorting | Dcounting | Dfraction
 
 ; ===========================================
 ; =========== Equations Domain ==============
@@ -58,3 +58,27 @@ sorting_many   : SORTING_ELEM SORTING_SEP sorting_list
 ; ============================================
 
 Dcounting : INTEGER COMMA INTEGER COMMA ELLIPSIS
+
+
+; ============================================
+; =========== Fractions domain ================
+; ============================================
+
+; 3/5
+; 3/5 + 12/10 + 2/4
+
+Dfraction: FRACTION_MARK fexpr_l1
+
+fexpr_l1    : fsum | fsub | fexpr_l2
+fsum        : fexpr_l1 OP_PLUS fexpr_l2
+fsub        : fexpr_l1 OP_MINUS fexpr_l2
+
+fexpr_l2    : fprod | fraction | fexpr_l3
+fprod       : fexpr_l2 OP_TIMES fexpr_l3
+             | fparen-expr fparen-expr
+fvarcoeff   : number fparen-expr
+fraction    : fexpr_l2 OP_DIV fexpr_l3
+
+fexpr_l3    : number | fvarcoeff | fparen-expr
+fparen-expr : LEFT_PAREN fexpr_l1 RIGHT_PAREN
+

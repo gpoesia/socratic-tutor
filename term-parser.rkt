@@ -69,7 +69,23 @@
          [`(sorting_list ,t) (parse-tree-to-term t)]
          [`(sorting_single ,n) (list n)]
          [`(sorting_many ,h ,_ ,t) (cons h (parse-tree-to-term t))]
-         ))
+         ; Fraction domain
+        [`(Dfraction ,_ ,t) (parse-tree-to-term t)]
+        [`(fexpr_l1 ,t) (parse-tree-to-term t)]
+        [`(fsum ,a ,_ ,b) (BinOp op+ (parse-tree-to-term a) (parse-tree-to-term b))]
+        [`(fsub ,a ,_ ,b) (BinOp op- (parse-tree-to-term a) (parse-tree-to-term b))]
+        [`(fexpr_l2 ,t) (parse-tree-to-term t)]
+        [`(fprod ,e1 ,e2)
+          (BinOp op* (parse-tree-to-term e1) (parse-tree-to-term e2))]
+        [`(fprod ,e1 ,_ ,e2)
+          (BinOp op* (parse-tree-to-term e1) (parse-tree-to-term e2))]
+        [`(fvarcoeff ,e1 ,e2)
+          (BinOp op* (parse-tree-to-term e1) (parse-tree-to-term e2))]
+        [`(fraction ,e1 ,_ ,e2)
+          (BinOp op/ (parse-tree-to-term e1) (parse-tree-to-term e2))]
+        [`(fexpr_l3 ,t) (parse-tree-to-term t)]
+        [`(fparen-expr ,_ ,e ,_) (parse-tree-to-term e)]))
+        
 
 (define (tokenize ip)
   (port-count-lines! ip)
@@ -91,12 +107,14 @@
              ["?" (token 'ANY_NUMBER)]
              ["#" (token 'TERNARY_MARK)]
              ["|" (token 'SORTING_SEP)]
+             ["F" (token 'FRACTION_MARK)]
              [(repetition 1 +inf.0 "_")
               (token 'SORTING_ELEM (string-length lexeme))]
              [(repetition 1 +inf.0 alphabetic)
               (token 'VARIABLE lexeme)]
              [whitespace
-              (token 'WHITESPACE lexeme #:skip? #t)]
-             )]
+              (token 'WHITESPACE lexeme #:skip? #t)])]
+             
+             
          [next-token (lambda () (expr-lexer ip))])
     next-token))
