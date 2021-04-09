@@ -276,7 +276,7 @@ class EnvironmentWithEvaluationProxy:
 
         existing_results.append(results)
 
-        with open(self.output_path, 'wb') as f:
+        with open(output_path, 'wb') as f:
             pickle.dump(existing_results, f)
 
         torch.save(self.agent.q_function,
