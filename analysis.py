@@ -8,6 +8,7 @@ from scipy.stats import norm
 import argparse
 import pickle
 from agent import State, Action
+import dateutil
 
 def load_data(config):
     client = pymongo.MongoClient()
@@ -171,15 +172,49 @@ def compare_learning_algorithms(config):
 
     print('Wrote', output)
 
-def run_analyses(config):
+def compare_agents(config):
     if config.get('compare_learning_algorithms'):
         compare_learning_algorithms(config['compare_learning_algorithms'])
+
+def analyze_user_study(config):
+    dump = config['db_dump']
+
+    db = json.load(open(dump))
+    i = 0
+
+    for row in db:
+        if not row.get('endTimestamp'):
+            continue
+
+        i += 1
+        time_taken = (dateutil.parser.parse(row['endTimestamp']['$date']) -
+                      dateutil.parser.parse(row['beginTimestamp']['$date']))
+
+        n_exercises = len(row['exerciseResponses'])
+        n_post_test_questions = len(row['postTestResponses'])
+        exercise_score = sum(1 for e in row['exerciseResponses'] if e['correct'])
+        post_test_score = sum(1 for e in row['postTestResponses'] if e['correct'])
+
+        print(f'Participant #{i}:')
+        print('Curriculum:', row['curriculum'])
+        print('Time elapsed:', time_taken)
+        print('Survey:', row['survey'])
+        print(f'Exercise phase: {exercise_score}/{n_exercises} correct')
+        print(f'Post test: {post_test_score}/{n_post_test_questions} correct')
+        print()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Analyze experiments & user study results')
     parser.add_argument('--config', required=True, help='Path to config file.')
+    parser.add_argument('--user-study', help='Analyze data from the tutoring user study.',
+                        action='store_true')
+    parser.add_argument('--agent-comparison', help='Compare different learning agents.',
+                        action='store_true')
     opt = parser.parse_args()
 
     config = json.load(open(opt.config))
 
-    run_analyses(config)
+    if opt.user_study:
+        analyze_user_study(config)
+    elif opt.agent_comparison:
+        compare_agents(config)
