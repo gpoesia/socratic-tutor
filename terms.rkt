@@ -117,6 +117,20 @@
           (filter-subterms-aux sts st p idx)))
       (cons result (+ 1 index))
       (subterms t))))
+; Returns a list of all indices of subterms of `t` for which `p` is true, when given c
+; For example, filter all terms that can be factored into aX, varying a to be 2,3,5 etc ... 
+(define (filter-subterms-w-context t p c)
+  (car (filter-subterms-w-context-aux (list) t p c 0)))
+
+; Returns (l . index)
+(define (filter-subterms-w-context-aux l t p c index)
+  (let ([result (if (p t c) (cons index l) l)])
+    (foldl
+      (lambda (st r)
+        (let ([(sts . idx) r])
+          (filter-subterms-w-context-aux sts st p c idx)))
+      (cons result (+ 1 index))
+      (subterms t))))
 
 ; Substitutes all occurrences of t1 by t2 in t.
 (define (substitute-term t t1 t2)
@@ -177,6 +191,30 @@
                        (cons (append sts (list st)) (- idx s)))))))
              (cons (list) (- index 1))
              (subterms term))))))
+; Same as rewrite-subterm but with additional context
+; For example, factor the term `10` into 2*5. 
+(define (rewrite-subterm-w-context term transform index context)
+  (if
+    (= index 0)
+    (or (transform term context) term)
+    (replace-subterms
+      term
+      (car (foldl
+             (lambda (st result)
+               (let ([(sts . idx) result])
+                 (if (not idx)
+                   (cons (append sts (list st)) #f)
+                   (let ([s (term-size st)])
+                     (if (< idx s)
+                       ; The term to rewrite is in st - rewrite.
+                       (cons (append sts
+                                     (list (rewrite-subterm-w-context st transform idx context)))
+                                     #f)
+                       (cons (append sts (list st)) (- idx s)))))))
+             (cons (list) (- index 1))
+             (subterms term))))))
+
+
 
 ; Adds markers around the term with index `i` inside `t`.
 (define (mark-term t i)
@@ -436,8 +474,8 @@
   simpl-term
   simpl-example
   format-term format-term-debug format-term-tex
-  rewrite-subterm
-  filter-subterms
+  rewrite-subterm rewrite-subterm-w-context
+  filter-subterms filter-subterms-w-context
   substitute-term
   enumerate-subterms
   term-size
