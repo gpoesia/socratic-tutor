@@ -5,6 +5,7 @@ import argparse
 import collections
 import copy
 import datetime
+import time
 import itertools
 import urllib
 import requests
@@ -18,12 +19,14 @@ import math
 import util
 import wandb
 import logging
+import subprocess
 from torch import nn
 from torch.nn import functional as F
 from torch.distributions.categorical import Categorical
 import pytorch_lightning as pl
 
 from domain_learner import CharEncoding, LearnerValueFunction, collate_concat
+from util import register
 
 class State:
     def __init__(self, facts, goals, value, parent_action=None):
@@ -57,10 +60,13 @@ class Action:
     def __repr__(self):
         return str(self)
 
+
 class QFunction(nn.Module):
     """A Q-Function estimates the total expected reward of taking a certain
        action given that the agent is at a certain state. This module
        batches the computation and evaluates a set of actions given one state."""
+
+    subtypes = {}
 
     def forward(self, state, actions):
         raise NotImplemented()
@@ -120,6 +126,13 @@ class QFunction(nn.Module):
             solutions.append(list(reversed(solution)))
 
         return solutions
+
+    @staticmethod
+    def new(config, device):
+        return QFunction.subtypes[config['type']](config, device)
+
+    def name(self):
+        raise NotImplementedError()
 
 class SuccessRatePolicyEvaluator:
     """Evaluates the policy derived from a Q function by its success rate at solving
@@ -195,7 +208,8 @@ class EndOfLearning(Exception):
 
 class EnvironmentWithEvaluationProxy:
     '''Wrapper around the environment that triggers an evaluation every K calls'''
-    def __init__(self, agent, environment, config={}):
+    def __init__(self, experiment_id, agent, environment, config={}):
+        self.experiment_id = experiment_id
         self.environment = environment
         self.n_steps = 0
 
@@ -203,7 +217,7 @@ class EnvironmentWithEvaluationProxy:
         self.eval_config = config['eval_config']
         self.agent = agent
         self.output_path = config['output']
-        self.model_output_path = config['model_output']
+        self.checkpoint_path = config['checkpoint_path']
         self.max_steps = config['max_steps']
         self.print_every = config.get('print_every', 100)
 
@@ -211,37 +225,45 @@ class EnvironmentWithEvaluationProxy:
         self.n_new_problems = 0
         self.cumulative_reward = 0
         self.begin_time = datetime.datetime.now()
+        self.n_checkpoints = 0
 
     def generate_new(self, domain=None, seed=None):
         self.n_new_problems += 1
         return self.environment.generate_new(domain, seed)
 
     def step(self, states, domain=None):
-        if (self.n_steps + 1) % self.evaluate_every == 0:
+        n_steps_before = self.n_steps
+        self.n_steps += len(states)
+
+        # If the number of steps crossed the boundary of '0 mod evaluate_every', run evaluation.
+        # If the agent took one step at a time, then we would only need to test if
+        # n_steps % evaluate_every == 0. However the agent might take multiple steps at once.
+        if (n_steps_before % self.evaluate_every) + len(states) >= self.evaluate_every:
             self.evaluate()
 
-        if self.n_steps == self.max_steps:
+        if self.n_steps >= self.max_steps:
             # Budget ended.
             raise EndOfLearning()
 
-        self.n_steps += 1
         reward_and_actions = self.environment.step(states, domain)
         self.cumulative_reward += sum(rw for rw, _ in reward_and_actions)
 
-        if self.n_steps % self.print_every == 0:
+        # Same logic as with evaluate_every.
+        if (n_steps_before % self.print_every) + len(states) >= self.print_every:
             self.print_progress()
 
         return reward_and_actions
 
     def evaluate(self):
         print('Evaluating...')
+        name, domain = self.agent.name(), self.environment.default_domain
 
         evaluator = SuccessRatePolicyEvaluator(self.environment, self.eval_config)
         results = evaluator.evaluate(self.agent.q_function)
         results['n_steps'] = self.n_steps
-        results['domain'] = self.environment.default_domain
+        results['name'] = name
+        results['domain'] = domain
         results['problems_seen'] = self.n_new_problems
-        results['name'] = self.agent.name()
         results['cumulative_reward'] = self.cumulative_reward
 
         wandb.log({ 'success_rate': results['success_rate'],
@@ -254,8 +276,10 @@ class EnvironmentWithEvaluationProxy:
         print('Success rate:', results['success_rate'],
               '\tMax length:', results['max_solution_length'])
 
+        output_path = self.output_path.format(self.experiment_id)
+
         try:
-            with open(self.output_path, 'rb') as f:
+            with open(output_path, 'rb') as f:
                 existing_results = pickle.load(f)
         except Exception as e:
             print(f'Starting new results log at {self.output_path} ({e})')
@@ -263,10 +287,13 @@ class EnvironmentWithEvaluationProxy:
 
         existing_results.append(results)
 
-        with open(self.output_path, 'wb') as f:
+        with open(output_path, 'wb') as f:
             pickle.dump(existing_results, f)
 
-        torch.save(self.agent.q_function, self.model_output_path)
+        torch.save(self.agent.q_function,
+                   self.checkpoint_path.format(self.experiment_id,
+                                               self.n_checkpoints))
+        self.n_checkpoints += 1
 
     def evaluate_agent(self):
         self.evaluate()
@@ -294,13 +321,14 @@ class EnvironmentWithEvaluationProxy:
                       self.n_new_problems,
                       self.agent.stats()))
 
+@register(QFunction)
 class DRRN(QFunction):
     def __init__(self, config, device):
         super().__init__()
 
-        char_emb_dim = config.get('char_emb_dim', 32)
-        self.hidden_dim = hidden_dim = config.get('hidden_dim', 32)
-        self.lstm_layers = config.get('lstm_layers', 1)
+        char_emb_dim = config.get('char_emb_dim', 128)
+        self.hidden_dim = hidden_dim = config.get('hidden_dim', 256)
+        self.lstm_layers = config.get('lstm_layers', 2)
 
         self.state_vocab = CharEncoding({ 'embedding_dim': char_emb_dim })
         self.action_vocab = CharEncoding({ 'embedding_dim': char_emb_dim })
@@ -339,6 +367,44 @@ class DRRN(QFunction):
                              .permute((1, 2, 0)).reshape((N, 2*H)))
         return actions_embedding
 
+    def name(self):
+        return 'DRRN'
+
+# A simple architecture that just estimates the value of the next state.
+@register(QFunction)
+class StateRNNValueFn(QFunction):
+    def __init__(self, config, device):
+        super().__init__()
+
+        char_emb_dim = config.get('char_emb_dim', 128)
+        self.hidden_dim = hidden_dim = config.get('hidden_dim', 256)
+        self.lstm_layers = config.get('lstm_layers', 2)
+
+        self.vocab = CharEncoding({ 'embedding_dim': char_emb_dim })
+        self.encoder = nn.LSTM(char_emb_dim, hidden_dim,
+                               self.lstm_layers, bidirectional=True)
+        self.output = nn.Linear(2*hidden_dim, 1)
+        self.to(device)
+        self.device = device
+
+    def forward(self, actions):
+        state_embedding = self.embed_states([a.next_state for a in actions])
+        q_values = self.output(state_embedding).sigmoid().squeeze(1)
+        return q_values
+
+    def embed_states(self, states):
+        N, H = len(states), self.hidden_dim
+        states = [s.facts[-1] for s in states]
+        state_seq , _ = self.vocab.embed_batch(states, self.device)
+        state_seq = state_seq.transpose(0, 1)
+        _, (state_hn, state_cn) = self.encoder(state_seq)
+        state_embedding = (state_hn
+                           .view(self.lstm_layers, 2, N, self.hidden_dim)[-1]
+                           .permute((1, 2, 0)).reshape(N, 2*H))
+        return state_embedding
+
+    def name(self):
+        return 'StateRNNValueFn'
 
 class LearnerValueFunctionAdapter(QFunction):
     '''Adapter for the legacy LearnerValueFunction class to be used as a QFunction.'''
@@ -373,6 +439,9 @@ class LearningAgent:
 
     Any learning algorithm can be combined with any Q-Function.
     '''
+
+    subtypes = {}
+
     def learn_from_environment(self, environment):
         "Lets the agent learn by interaction using any algorithm."
         raise NotImplementedError()
@@ -384,13 +453,18 @@ class LearningAgent:
         "Returns a string with learning statistics for this agent, for debugging."
         return ""
 
+    @staticmethod
+    def new(q_fn, config):
+        return LearningAgent.subtypes[config['type']](q_fn, config)
+
+@register(LearningAgent)
 class BeamSearchIterativeDeepening(LearningAgent):
     def __init__(self, q_function, config):
         self.q_function = q_function
         self.replay_buffer_size = config['replay_buffer_size']
 
-        self.replay_buffer_pos = collections.deque(self.replay_buffer_size)
-        self.replay_buffer_neg = collections.deque(self.replay_buffer_size)
+        self.replay_buffer_pos = collections.deque(maxlen=self.replay_buffer_size)
+        self.replay_buffer_neg = collections.deque(maxlen=self.replay_buffer_size)
         self.training_problems_solved = 0
 
         self.max_depth = config['max_depth']
@@ -564,6 +638,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
 QReplayBufferTuple = collections.namedtuple('QReplayBufferTuple',
                                             ['a0', 'r', 'A1'])
 
+@register
 class QLearning(LearningAgent):
     def __init__(self, q_function, config):
         self.q_function = q_function
@@ -671,24 +746,89 @@ def evaluate_policy(config, device):
     print('Unsolved problems:', result['failures'])
 
 def run_agent_experiment(config, device):
+    experiment_id = config['experiment_id']
+    domain = config['domain']
+    agent_name = config['agent']['name']
+
+    run_id = "{}-{}-{}".format(experiment_id, agent_name, domain)
+
+    wandb.init(id=run_id,
+               name=run_id,
+               config=config,
+               project='solver-agent',
+               reinit=True)
+
+    env = Environment(config['environment_url'], domain)
+
+    q_fn = QFunction.new(config['q_function'], device)
+    agent = LearningAgent.new(q_fn, config['agent'])
+
+    print('Running', q_fn.name(), agent.name(), 'on', domain)
+
+    eval_env = EnvironmentWithEvaluationProxy(run_id, agent, env, config['eval_environment'])
+    eval_env.evaluate_agent()
+
+def run_batch_experiment(config):
+    'Spawns a series of processes to run experiments for each agent/domain pair.'
+    experiment_id = util.random_id()
     domains = config['domains']
+    agents = [c for c in config['agents'] if not c.get('disable')]
 
-    for domain in domains:
-        run_config = copy.deepcopy(config)
-        run_config['eval_environment']['model_output'] = \
-            run_config['eval_environment']['model_output'].format(domain)
-        wandb.init(config=run_config, project='solver-agent', reinit=True)
+    environment_port_base = config.get('environment_port_base', 9876)
+    run_processes = []
+    environments = []
+    agent_index = 0
+    gpus = config['gpus']
 
-        env = Environment(run_config['environment_url'], domain)
-        q_fn = DRRN({}, device)
+    print('Starting experiment', experiment_id)
 
-        if run_config['agent']['type'] == 'QLearning':
-            agent = QLearning(q_fn, run_config['agent'])
-        else:
-            agent = BeamSearchIterativeDeepening(q_fn, run_config['agent'])
-        print('Running', agent.name(), 'on', domain)
-        eval_env = EnvironmentWithEvaluationProxy(agent, env, run_config['eval_environment'])
-        eval_env.evaluate_agent()
+    try:
+        for domain in domains:
+            for agent in agents:
+                print(f'Running {agent["name"]} on {domain}')
+
+                port = environment_port_base + agent_index
+                environment_process = subprocess.Popen(
+                    ['racket', 'environment.rkt', '-p', str(port)],
+                    stderr=subprocess.DEVNULL)
+                environments.append(environment_process)
+
+                # Wait for environment to be ready.
+                time.sleep(30)
+
+                run_config = {
+                    'experiment_id': experiment_id,
+                    'environment_url': 'http://localhost:{}'.format(port),
+                    'agent': agent,
+                    'domain': domain,
+                    'q_function': config['q_function'],
+                    'eval_environment': copy.deepcopy(config['eval_environment'])
+                }
+
+                print('Running agent with config', json.dumps(run_config))
+
+                agent_process = subprocess.Popen(
+                    ['python3', 'agent.py', '--learn', '--config', json.dumps(run_config),
+                     '--gpu', str(gpus[agent_index % len(gpus)])],
+                    stderr=subprocess.DEVNULL)
+                run_processes.append(agent_process)
+
+                agent_index += 1
+
+        print('Waiting for all agents to finish...')
+        for p in run_processes:
+            p.wait()
+        print('Shutting down environments...')
+        for p in environments:
+            p.terminate()
+        print('Done!')
+
+    except (Exception, KeyboardInterrupt) as e:
+        print('Killing all created processes...')
+        for p in run_processes + environments:
+            p.terminate()
+
+        raise
 
 def interact():
     env = Environment('http://localhost:9898')
@@ -699,6 +839,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser("Train RL agents to solve symbolic domains")
     parser.add_argument('--config', help='Path to config file, or inline JSON.')
     parser.add_argument('--learn', help='Put an agent to learn from the environment', action='store_true')
+    parser.add_argument('--experiment', help='Run a batch of experiments with multiple agents and environments',
+                        action='store_true')
     parser.add_argument('--eval', help='Evaluate a learned policy', action='store_true')
     parser.add_argument('--repl', help='Get a REPL with an environment', action='store_true')
     parser.add_argument('--debug', help='Enable debug messages.', action='store_true')
@@ -714,7 +856,7 @@ if __name__ == '__main__':
 
     device = torch.device('cpu') if not opt.gpu else torch.device(opt.gpu)
 
-    # Configure logging.
+    # configure logging.
     FORMAT = '%(asctime)-15s %(message)s'
     logging.basicConfig(format=FORMAT)
 
@@ -730,3 +872,5 @@ if __name__ == '__main__':
         evaluate_policy(config, device)
     elif opt.repl:
         interact()
+    elif opt.experiment:
+        run_batch_experiment(config)

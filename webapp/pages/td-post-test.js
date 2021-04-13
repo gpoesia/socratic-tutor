@@ -13,6 +13,9 @@ import { Button } from '@material-ui/core';
 
 const SuzzleEditor = dynamic(() => import('../lib/components/suzzle-editor.js'),
                              { ssr: false });
+const SuzzleInstructions = dynamic(() => import('../lib/components/suzzle-instructions.js'),
+                                   { ssr: false });
+
 
 const TernaryPostTest = () => {
   const sessionId = useStore(state => state.id);
@@ -53,6 +56,7 @@ const TernaryPostTest = () => {
                        answers: [{ "id": problem.id, steps, correct }],
                      });
 
+    setSteps([[]]);
     setNextProblem(nextProblem + 1);
   };
 
@@ -67,13 +71,20 @@ const TernaryPostTest = () => {
       <LinearProgress variant="determinate" value={100*(nextProblem / problems.length)} />
 
       <p>To test your understanding, let's solve the final challenges.</p>
+      <div className="challenge-root">
+        <div className="challenge-content">
+          <SuzzleEditor
+            problem={problem.problem}
+            steps={steps}
+            setSteps={setSteps}
+            onSubmit={onSubmit}
+          />
+        </div>
+        <div className="challenge-instructions">
+          <SuzzleInstructions />
+        </div>
+      </div>
 
-      <SuzzleEditor
-        problem={problem.problem}
-        steps={steps}
-        setSteps={setSteps}
-        onSubmit={onSubmit}
-      />
     </div>
   );
 };
