@@ -26,6 +26,7 @@ from torch.distributions.categorical import Categorical
 import pytorch_lightning as pl
 
 from domain_learner import CharEncoding, LearnerValueFunction, collate_concat
+from util import register
 
 class State:
     def __init__(self, facts, goals, value, parent_action=None):
@@ -59,10 +60,13 @@ class Action:
     def __repr__(self):
         return str(self)
 
+
 class QFunction(nn.Module):
     """A Q-Function estimates the total expected reward of taking a certain
        action given that the agent is at a certain state. This module
        batches the computation and evaluates a set of actions given one state."""
+
+    subtypes = {}
 
     def forward(self, state, actions):
         raise NotImplemented()
@@ -122,6 +126,13 @@ class QFunction(nn.Module):
             solutions.append(list(reversed(solution)))
 
         return solutions
+
+    @staticmethod
+    def new(config, device):
+        return QFunction.subtypes[config['type']](config, device)
+
+    def name(self):
+        raise NotImplementedError()
 
 class SuccessRatePolicyEvaluator:
     """Evaluates the policy derived from a Q function by its success rate at solving
@@ -310,6 +321,7 @@ class EnvironmentWithEvaluationProxy:
                       self.n_new_problems,
                       self.agent.stats()))
 
+@register(QFunction)
 class DRRN(QFunction):
     def __init__(self, config, device):
         super().__init__()
@@ -355,6 +367,44 @@ class DRRN(QFunction):
                              .permute((1, 2, 0)).reshape((N, 2*H)))
         return actions_embedding
 
+    def name(self):
+        return 'DRRN'
+
+# A simple architecture that just estimates the value of the next state.
+@register(QFunction)
+class StateRNNValueFn(QFunction):
+    def __init__(self, config, device):
+        super().__init__()
+
+        char_emb_dim = config.get('char_emb_dim', 128)
+        self.hidden_dim = hidden_dim = config.get('hidden_dim', 256)
+        self.lstm_layers = config.get('lstm_layers', 2)
+
+        self.vocab = CharEncoding({ 'embedding_dim': char_emb_dim })
+        self.encoder = nn.LSTM(char_emb_dim, hidden_dim,
+                               self.lstm_layers, bidirectional=True)
+        self.output = nn.Linear(2*hidden_dim, 1)
+        self.to(device)
+        self.device = device
+
+    def forward(self, actions):
+        state_embedding = self.embed_states([a.next_state for a in actions])
+        q_values = self.output(state_embedding).sigmoid().squeeze(1)
+        return q_values
+
+    def embed_states(self, states):
+        N, H = len(states), self.hidden_dim
+        states = [s.facts[-1] for s in states]
+        state_seq , _ = self.vocab.embed_batch(states, self.device)
+        state_seq = state_seq.transpose(0, 1)
+        _, (state_hn, state_cn) = self.encoder(state_seq)
+        state_embedding = (state_hn
+                           .view(self.lstm_layers, 2, N, self.hidden_dim)[-1]
+                           .permute((1, 2, 0)).reshape(N, 2*H))
+        return state_embedding
+
+    def name(self):
+        return 'StateRNNValueFn'
 
 class LearnerValueFunctionAdapter(QFunction):
     '''Adapter for the legacy LearnerValueFunction class to be used as a QFunction.'''
@@ -389,6 +439,9 @@ class LearningAgent:
 
     Any learning algorithm can be combined with any Q-Function.
     '''
+
+    subtypes = {}
+
     def learn_from_environment(self, environment):
         "Lets the agent learn by interaction using any algorithm."
         raise NotImplementedError()
@@ -400,6 +453,11 @@ class LearningAgent:
         "Returns a string with learning statistics for this agent, for debugging."
         return ""
 
+    @staticmethod
+    def new(q_fn, config):
+        return LearningAgent.subtypes[config['type']](q_fn, config)
+
+@register(LearningAgent)
 class BeamSearchIterativeDeepening(LearningAgent):
     def __init__(self, q_function, config):
         self.q_function = q_function
@@ -580,6 +638,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
 QReplayBufferTuple = collections.namedtuple('QReplayBufferTuple',
                                             ['a0', 'r', 'A1'])
 
+@register
 class QLearning(LearningAgent):
     def __init__(self, q_function, config):
         self.q_function = q_function
@@ -701,15 +760,10 @@ def run_agent_experiment(config, device):
 
     env = Environment(config['environment_url'], domain)
 
-    if config['q_function']['type'] == 'DRRN':
-        q_fn = DRRN(config['q_function'], device)
+    q_fn = QFunction.new(config['q_function'], device)
+    agent = LearningAgent.new(q_fn, config['agent'])
 
-    if config['agent']['type'] == 'QLearning':
-        agent = QLearning(q_fn, config['agent'])
-    else:
-        agent = BeamSearchIterativeDeepening(q_fn, config['agent'])
-
-    print('Running', agent.name(), 'on', domain)
+    print('Running', q_fn.name(), agent.name(), 'on', domain)
 
     eval_env = EnvironmentWithEvaluationProxy(run_id, agent, env, config['eval_environment'])
     eval_env.evaluate_agent()
