@@ -5,7 +5,7 @@
 (require srfi/13)
 (require "./terms.rkt")
 (require "./facts.rkt")
-(require "./tactics.rkt")
+(require "./equations.rkt")
 (require "./ternary.rkt")
 (require "./sorting.rkt")
 

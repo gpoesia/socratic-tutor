@@ -119,6 +119,12 @@
     t2
     (replace-subterms t (map (lambda (st) (substitute-term st t1 t2)) (subterms t)))))
 
+; Maps a function f over all subterms of t, recursively.
+; First maps f to each subterm of t, then replaces the results as the subterms of t,
+; then returns the application of f over that new term.
+(define (map-subterms f t)
+  (f (replace-subterms t (map (lambda (st) (map-subterms f st)) (subterms t)))))
+
 ; Returns whether a pair of terms matches (i.e. are equal except that
 ; AnyNumber is considered equal to Number). Does not recurse: only compares
 ; the top level (which we might want to change at some point).
@@ -435,6 +441,7 @@
   filter-subterms
   substitute-term
   enumerate-subterms
+  map-subterms
   term-size
   goal-matches?
   Number Variable UnOp BinOp AnyNumber Predicate TernaryNumber TernaryDigit

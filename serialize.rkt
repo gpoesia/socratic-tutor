@@ -4,7 +4,7 @@
 
 (require "terms.rkt")
 (require "term-parser.rkt")
-(require "tactics.rkt")
+(require "equations.rkt")
 (require "domains.rkt")
 (require "facts.rkt")
 (require "solver.rkt")

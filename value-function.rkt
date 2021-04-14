@@ -5,7 +5,6 @@
 (require net/http-easy)
 (require "facts.rkt")
 (require "terms.rkt")
-(require "tactics.rkt")
 (require "questions.rkt")
 (require "solver.rkt")
 

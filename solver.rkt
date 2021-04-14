@@ -11,7 +11,6 @@
 
 (require "terms.rkt")
 (require "facts.rkt")
-(require "tactics.rkt")
 (require "debug.rkt")
 
 (struct Domain (name generator verifier step) #:transparent)
@@ -216,7 +215,8 @@
 ; Returns a pruner function that sorts facts by term size and gets the k
 ; smallest, with a random tie breaking.
 (define (prune:keep-smallest-k k)
-  (lambda (all-facts facts) (smallest-k-facts k facts)))
+  (lambda (all-facts facts)
+    (take (sort-facts-by-size facts) (min k (length facts)))))
 
 ; Returns a pruner function that samples k facts uniformly.
 (define (prune:keep-random-k k)

@@ -8,8 +8,11 @@
 (require racket/string)
 (require racket/function)
 (require racket/match)
+(require racket/port)
 (require rebellion/type/enum)
 (require "terms.rkt")
+(require "solver.rkt")
+(require "term-parser.rkt")
 (require "facts.rkt")
 (require "debug.rkt")
 
@@ -406,6 +409,40 @@
          )
     (values (remove-trivial new-facts) kept-existing-facts state)))
 
+; Load templates at start-up.
+(define cognitive-tutor-templates
+  (let*
+      ([f (open-input-file "./data/cognitive_tutor_templates.txt")]
+       [c (port->string f)]
+       [templates-str (string-split c "\n")]
+       [templates (map parse-term templates-str)])
+    templates))
+
+; Returns a generator that draws a random template from ts and randomizes its constants.
+(define (generator-from-templates ts)
+  (lambda ()
+    (let* ([equation (randomize-constants (list-ref ts (random 0 (length ts))))]
+           [variables (remove-duplicates
+                       (remove #f
+                               (map (function
+                                     [(Variable v) v]
+                                     [_ #f])
+                                    (enumerate-subterms equation))))]
+           [goals (map (lambda (v) (Predicate 'Eq (list (Variable v)
+                                                        (AnyNumber))))
+                       variables)])
+      (Problem
+       (list (assumption equation))
+       goals))))
+
+; Substitutes constants by random positive numbers, and keeps everything else intact.
+(define (randomize-constants t)
+  (map-subterms
+   (function
+    [(Number n) (Number (random 1 11))]
+    [t t])
+   t))
+
 (provide
   a:premise
   a:flip-equality
@@ -424,7 +461,7 @@
   s:all
   s:equations
 
-  smallest-k-facts
-
   d:equations
+  generator-from-templates
+  cognitive-tutor-templates
   )
