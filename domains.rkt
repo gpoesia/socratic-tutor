@@ -3,7 +3,7 @@
 (require "solver.rkt")
 (require "facts.rkt")
 (require "generation.rkt")
-(require "tactics.rkt")
+(require "equations.rkt")
 (require "ternary.rkt")
 (require "sorting.rkt")
 
