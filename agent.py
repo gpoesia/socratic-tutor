@@ -336,6 +336,11 @@ class DRRN(QFunction):
                                      self.lstm_layers, bidirectional=True)
         self.action_encoder = nn.LSTM(char_emb_dim, hidden_dim,
                                       self.lstm_layers, bidirectional=True)
+
+        # Knob: whether to use the action description or the next state.
+        # Options: 'state' or 'action'.
+        self.action_label_type = config.get('action_label_type', 'action')
+
         self.to(device)
         self.device = device
 
@@ -357,7 +362,11 @@ class DRRN(QFunction):
         return state_embedding
 
     def embed_actions(self, actions):
-        actions = [a.action for a in actions]
+        if self.action_label_type == 'action':
+            actions = [a.action for a in actions]
+        else:
+            actions = [a.next_state.facts[-1] for a in actions]
+
         N, H = len(actions), self.hidden_dim
         actions_seq , _ = self.action_vocab.embed_batch(actions, self.device)
         actions_seq = actions_seq.transpose(0, 1)
@@ -480,8 +489,15 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.optimize_every = config.get('optimize_every', 1)
         self.n_gradient_steps = config.get('n_gradient_steps', 10)
         self.discard_unsolved_problems = config.get('discard_unsolved', False)
-        self.add_success_action = config.get('add_success_action', False)
         self.full_imitation_learning = config.get('full_imitation_learning', False)
+
+        # Knob: whether to add an artificial 'success' state in the end
+        # of the solution in training examples. The idea is that this would align
+        # all states that are in the path to a solution closer together.
+        self.add_success_state = config.get('add_success_state', False)
+        # Knob: how many future states to use as examples.
+        self.n_future_states = config.get('n_future_states', 1)
+        self.n_negatives = config.get('n_negatives', 1)
 
         self.optimizer = torch.optim.Adam(q_function.parameters(),
                                           lr=config.get('learning_rate', 1e-4))
@@ -524,6 +540,9 @@ class BeamSearchIterativeDeepening(LearningAgent):
             self.gradient_steps(True)
 
     def beam_search(self, state, environment):
+        '''Performs beam search in a train problem while recording particular examples
+        in the replay buffer (according to the various knobs in the algorithm, see config)'''
+
         states_by_id = {id(state): state}
         state_parent_edge = {}
         beam = [state]
@@ -540,21 +559,20 @@ class BeamSearchIterativeDeepening(LearningAgent):
                     state_parent_edge[id(a.next_state)] = (s, a)
                 # Record solution, if found.
                 if r:
-                    if self.add_success_action:
-                        states_by_id[id(SUCCESS_STATE)] = SUCCESS_STATE
-                        state_parent_edge[id(SUCCESS_STATE)] = Action(s,
-                                                                      'success',
-                                                                      SUCCESS_STATE,
-                                                                      1.0,
-                                                                      1.0)
-                        solution = SUCCESS_STATE
+                    if self.add_success_state:
+                        success = copy.deepcopy(SUCCESS_STATE)
+                        a = Action(s, 'success', success, 1.0, 1.0)
+                        success.parent_action = a
+                        states_by_id[id(success)] = success
+                        state_parent_edge[id(success)] = (s, a)
+                        solution = [success]
                     else:
-                        solution = s
+                        solution = [s]
 
             if solution is not None:
                 # Traverse all the state -> next_state edges backwards, remembering
                 # all states in the path to the solution.
-                current = solution
+                current = solution[0]
                 current_reward = 1.0
 
                 while id(current) in state_parent_edge:
@@ -562,7 +580,9 @@ class BeamSearchIterativeDeepening(LearningAgent):
                     action_reward[id(a)] = current_reward
                     current_reward *= self.reward_decay
                     current = prev_s
+                    solution.append(current)
 
+                solution = list(reversed(solution))
                 break
 
             all_actions = [a for state_actions in actions for a in state_actions]
@@ -572,8 +592,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
             # Query model, sort next states by value, then update beam.
             with torch.no_grad():
-                q_values = self.q_function(all_actions)
-                q_values = q_values.tolist()
+                q_values = self.q_function(all_actions).tolist()
 
             for a, v in zip(all_actions, q_values):
                 a.value = v
@@ -590,12 +609,22 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
         # Add all edges traversed as examples in the experience replay buffer.
         if solution is not None or not self.discard_unsolved_problems:
+            # Add negative examples.
             for s, (parent, a) in state_parent_edge.items():
                 r = action_reward.get(id(a), 0.0)
-                b = self.replay_buffer_pos if r > 0 else self.replay_buffer_neg
-                b.append((states_by_id[s], a, r))
+                if r == 0:
+                    self.replay_buffer_neg.append((states_by_id[s], a, 0))
+            # Add positive examples (possibly looking several steps ahead, depending
+            # on `self.n_future_states`.
+            if solution is not None:
+                for i, s_i in enumerate(solution):
+                    for j in range(i+1, min(i + 1 + self.n_future_states, len(solution))):
+                        s_j = solution[j]
+                        self.replay_buffer_pos.append((states_by_id[s],
+                                                       s_j.parent_action,
+                                                       action_reward[id(s_j.parent_action)]))
 
-        return solution
+        return None if solution is None else solution[-1]
 
     def stats(self):
         return "replay buffer size = {}, {} positive".format(
@@ -607,7 +636,8 @@ class BeamSearchIterativeDeepening(LearningAgent):
             return
 
         if self.balance_examples:
-            n_each = min(len(self.replay_buffer_pos), len(self.replay_buffer_neg))
+            n_pos = len(self.replay_buffer_pos)
+            n_neg = min(self.n_negatives * n_pos, len(self.replay_buffer_neg))
             examples = (random.sample(self.replay_buffer_pos, k=n_each) +
                         random.sample(self.replay_buffer_neg, k=n_each))
         else:
