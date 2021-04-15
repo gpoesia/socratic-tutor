@@ -12,7 +12,7 @@
 (require "terms.rkt")
 (require "facts.rkt")
 (require "solver.rkt")
-(require "tactics.rkt")
+(require "equations.rkt")
 
 (define (choice l) (car (random-sample l 1)))
 (define (choice-p l [c 0.0] [r #f])

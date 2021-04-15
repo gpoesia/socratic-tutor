@@ -2,7 +2,7 @@
 
 (require "terms.rkt")
 (require "learn.rkt")
-(require "tactics.rkt")
+(require "equations.rkt")
 (require "domains.rkt")
 (require "questions.rkt")
 (require "facts.rkt")

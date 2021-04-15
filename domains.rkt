@@ -3,7 +3,7 @@
 (require "solver.rkt")
 (require "facts.rkt")
 (require "generation.rkt")
-(require "tactics.rkt")
+(require "equations.rkt")
 (require "ternary.rkt")
 (require "sorting.rkt")
 (require "fraction.rkt")
@@ -12,6 +12,24 @@
   (Domain
    "equations"
    generate-problem
+   fact-solves-goal?
+   d:equations))
+
+; Equations domain where problems come from the Cognitive Tutor logs.
+; We take the last 90 templates to be a 'test set', and the
+; remaining to be the 'training set' (there are 290 in total).
+(define EquationsCTTrainDomain
+  (Domain
+   "equations-ct-train"
+   (generator-from-templates (take-right cognitive-tutor-templates 90))
+   fact-solves-goal?
+   d:equations))
+
+; Equations domain where problems come from the Cognitive Tutor logs.
+(define EquationsCTTestDomain
+  (Domain
+   "equations-ct-test"
+   (generator-from-templates (drop-right cognitive-tutor-templates 90))
    fact-solves-goal?
    d:equations))
 
@@ -39,6 +57,8 @@
 (define AllDomains
   (list
    EquationsDomain
+   EquationsCTTrainDomain
+   EquationsCTTestDomain
    TernaryAdditionDomain
    SortingDomain
    FractionDomain

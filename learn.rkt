@@ -7,7 +7,7 @@
 (require racket/place)
 
 (require "solver.rkt")
-(require "tactics.rkt")
+(require "equations.rkt")
 (require "generation.rkt")
 (require "domains.rkt")
 (require "serialize.rkt")

@@ -190,10 +190,12 @@ def analyze_user_study(config):
         time_taken = (dateutil.parser.parse(row['endTimestamp']['$date']) -
                       dateutil.parser.parse(row['beginTimestamp']['$date']))
 
-        n_exercises = len(row['exerciseResponses'])
-        n_post_test_questions = len(row['postTestResponses'])
-        exercise_score = sum(1 for e in row['exerciseResponses'] if e['correct'])
-        post_test_score = sum(1 for e in row['postTestResponses'] if e['correct'])
+        exercise_responses = row['exerciseResponses']
+        post_test_responses = row['postTestResponses']
+        n_exercises = len(exercise_responses)
+        n_post_test_questions = len(post_test_responses)
+        exercise_score = sum(1 for e in exercise_responses if e['correct'])
+        post_test_score = sum(1 for e in post_test_responses if e['correct'])
 
         print(f'Participant #{i}:')
         print('Curriculum:', row['curriculum'])
@@ -201,6 +203,7 @@ def analyze_user_study(config):
         print('Survey:', row['survey'])
         print(f'Exercise phase: {exercise_score}/{n_exercises} correct')
         print(f'Post test: {post_test_score}/{n_post_test_questions} correct')
+        print('Post test responses:', post_test_responses)
         print()
 
 if __name__ == '__main__':
