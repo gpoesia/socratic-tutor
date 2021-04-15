@@ -423,7 +423,7 @@
   (lambda ()
     (let* ([equation (randomize-constants (list-ref ts (random 0 (length ts))))]
            [variables (remove-duplicates
-                       (remove* #f
+                       (remove* '(#f)
                                 (map (function
                                       [(Variable v) v]
                                       [_ #f])

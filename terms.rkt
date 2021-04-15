@@ -358,7 +358,10 @@
    ; AnyNumber
    [(AnyNumber) "?"]
    ; Number
-   [(Number n) (format (if (< n 0) "(~a)" "~a") n)]
+   [(Number n) (format (if (< n 0) "(~a)" "~a")
+                       (if (and (rational? n) (not (integer? n)))
+                           (format "~a//~a" (numerator n) (denominator n))
+                           n))]
    ; Variable
    [(Variable v) (format "~a" v)]
    ; Unary operator

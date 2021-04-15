@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.distributions.categorical import Categorical
 import pytorch_lightning as pl
+from tqdm import tqdm
 
 from domain_learner import CharEncoding, LearnerValueFunction, collate_concat
 from util import register
@@ -146,11 +147,12 @@ class SuccessRatePolicyEvaluator:
         self.beam_size = config.get('beam_size', 1) # Size of the beam in beam search.
         self.debug = config.get('debug', False) # Whether to print all steps during evaluation.
 
-    def evaluate(self, q, verbose=False):
+    def evaluate(self, q, verbose=False, show_progress=False):
         successes, failures, solution_lengths = [], [], []
         max_solution_length = 0
+        wrapper = tqdm if show_progress else lambda x: x
 
-        for i in range(self.n_problems):
+        for i in wrapper(range(self.n_problems)):
             problem = self.environment.generate_new(seed=(self.seed + i))
             success, history = q.rollout(self.environment, problem,
                                          self.max_steps, self.beam_size, self.debug)
@@ -789,6 +791,7 @@ def evaluate_policy_checkpoints(config, device):
     try:
         while True:
             path = checkpoint_path.format(i)
+            i += 1
 
             with open(path, 'rb') as f:
                 h = hashlib.md5(f.read()).hexdigest()
@@ -799,17 +802,17 @@ def evaluate_policy_checkpoints(config, device):
             q = torch.load(path, map_location=device)
             q.to(device)
             q.device = device
-            result = evaluator.evaluate(q)
+            result = evaluator.evaluate(q, show_progress=True)
 
-            for i, p in result['successes']:
-                if i not in previous_successes:
-                    print(f'New success: {i} :: {p.facts[-1]} (length: {result["solution_lengths"][i]})')
+            for j, p in result['successes']:
+                if j not in previous_successes:
+                    print(f'New success: {j} :: {p.facts[-1]} (length: {result["solution_lengths"][j]})')
 
-            for i, p in result['failures']:
-                if i in previous_successes:
-                    print('New failure:', i, '::', p.facts[-1])
+            for j, p in result['failures']:
+                if j in previous_successes:
+                    print('New failure:', j, '::', p.facts[-1])
 
-            previous_successes = set([i for i, _ in result['successes']])
+            previous_successes = set([j for j, _ in result['successes']])
 
             print('Success rate:', result['success_rate'])
 
