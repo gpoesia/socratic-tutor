@@ -640,8 +640,8 @@ class BeamSearchIterativeDeepening(LearningAgent):
         if self.balance_examples:
             n_pos = len(self.replay_buffer_pos)
             n_neg = min(self.n_negatives * n_pos, len(self.replay_buffer_neg))
-            examples = (random.sample(self.replay_buffer_pos, k=n_each) +
-                        random.sample(self.replay_buffer_neg, k=n_each))
+            examples = (random.sample(self.replay_buffer_pos, k=n_pos) +
+                        random.sample(self.replay_buffer_neg, k=n_neg))
         else:
             examples = self.replay_buffer_pos + self.replay_buffer_neg
 
