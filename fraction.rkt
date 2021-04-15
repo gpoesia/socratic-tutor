@@ -20,8 +20,9 @@
 ;;; D.  a number divided by 1 is itself ⇒  25/1 = 25
 ;;; E.  multiply a fraction by a scaling factor ⇒  1/1 = 2/2
 ;;; F.  merge two fractions ⇒  2/2 + 3/2 = (2+3)/2
-;;; G.  A number over itself is 1
+;;; G.  A number over a multiple of itself should be simplied ⇒ 10/5 = 2
 ;;; H.  Evaluates a binary operation on numbers, except for fractions
+;;; I. Commutativity
 
 ; A. cancel out common factor
 ; Possible if factor exists in both numerator and demonimator
@@ -78,10 +79,8 @@
 ; C.  convert a number into fraction by dividing one ⇒  3 = 3/1
 (define fd:convert-into-fraction?
   (function
-   [(Number N)
-
-    #t]
-   [x (log-debug "here ~a \n" x) #f]))
+   [(Number N) #t]
+   [_  #f]))
 
 (define fd:convert-into-fraction
   (phi (Number N)
@@ -121,13 +120,14 @@
      #t]
    [_ #f]))
 
+
 (define fd:merge-two-fractions
   (phi (BinOp op0 (BinOp op1 n1 n2) (BinOp op2 m1 m2))
        (BinOp op/ (BinOp op+ n1 m1) n2)))
 
 
 ; H. Evaluates binary operations, except for division with one exception:
-; G. A number over itself is 1 ⇒ 5/5 =1
+; G. A number over a multiple of itself should be simplied 10/5 = 2
 
 (define fd:binop-eval?
   (function
@@ -135,13 +135,24 @@
     #:if (not (eq? op op/))
     #t]
    [(BinOp op (Number n1) (Number n2))
-    #:if (eq? n1 n2)
+    #:if (divisible? n1 n2)
     #t]
    [_ #f]))
 
 (define fd:binop-eval
   (phi (BinOp op (Number n1) (Number n2))
        (Number (compute-bin-op op n1 n2))))
+
+; I. Commutativity
+
+(define fd:commutativity?
+  (function
+    [(BinOp op _ _) (is-commutative? op)]
+    [_ #f]))
+
+(define fd:commutativity
+  (phi (BinOp op l r) (BinOp op r l)))
+
 
 ; ==============================
 ; ========   Tactics ===========
@@ -153,6 +164,7 @@
 ;;; D. Try multiplying every fraction by a scalar factor, using numbers in the `primes` list + set of number appearing in the expression
 ;;; E. Try merge two fractions if they share the same denominator
 ;;; F. Evaluate binary operation except for division
+;;; G. Commute every possible pairs
 
 (define MAX-SIZE 20)
 
@@ -241,6 +253,10 @@
 ; F. Evaluate binary operation except for division
 (local-rewrite-tactic fdt:binop-eval fd:binop-eval? fd:binop-eval)
 
+; G. Try commute every binary operation
+(local-rewrite-tactic fdt:commutativity fd:commutativity? fd:commutativity)
+
+
 (define (combine-tactics tactics)
   (lambda (unmet-goals old-facts new-facts)
     (apply append
@@ -257,6 +273,7 @@
                   fdt:mul-scaling-factor
                   fdt:merge-two-fractions
                   fdt:binop-eval
+                  fdt:commutativity
                   )))
 
 ; Domain function: given a node, lists all child nodes.
@@ -274,7 +291,7 @@
          [fractions (map (lambda (_) (generate-fraction))(range number-of-terms))])
     (Problem
      (list (assumption (FractionExpression (list-to-sum fractions))))
-     (list (Number))) ; want it to be Number ||  (Number / Number)
+     (list (Number)))
     ))
 
 ; Convert a list of single elements into a sum through BinOp
@@ -295,7 +312,6 @@
          [list-primes-denominator (map (lambda (_) (list-ref primes (random 0 (length primes))))(range len-primes-denominator))]
          [numerator (foldl * 1 list-primes-numerator)]
          [denominator (foldl * 1 list-primes-denominator)])
-
     (BinOp op/ numerator denominator)))
 
 
@@ -327,6 +343,7 @@
  fd:mul-scaling-factor
  fd:binop-eval
  fd:convert-into-fraction
+ fd:commutativity
  d:fraction
  generate-fraction-problem
  is-fraction-simplified?
