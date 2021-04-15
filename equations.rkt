@@ -423,11 +423,11 @@
   (lambda ()
     (let* ([equation (randomize-constants (list-ref ts (random 0 (length ts))))]
            [variables (remove-duplicates
-                       (remove #f
-                               (map (function
-                                     [(Variable v) v]
-                                     [_ #f])
-                                    (enumerate-subterms equation))))]
+                       (remove* #f
+                                (map (function
+                                      [(Variable v) v]
+                                      [_ #f])
+                                     (enumerate-subterms equation))))]
            [goals (map (lambda (v) (Predicate 'Eq (list (Variable v)
                                                         (AnyNumber))))
                        variables)])
