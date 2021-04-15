@@ -5,6 +5,7 @@ import argparse
 import collections
 import copy
 import datetime
+import hashlib
 import time
 import itertools
 import urllib
@@ -146,7 +147,7 @@ class SuccessRatePolicyEvaluator:
         self.debug = config.get('debug', False) # Whether to print all steps during evaluation.
 
     def evaluate(self, q, verbose=False):
-        successes, failures = [], []
+        successes, failures, solution_lengths = [], [], []
         max_solution_length = 0
 
         for i in range(self.n_problems):
@@ -154,16 +155,17 @@ class SuccessRatePolicyEvaluator:
             success, history = q.rollout(self.environment, problem,
                                          self.max_steps, self.beam_size, self.debug)
             if success:
-                successes.append(problem)
-                max_solution_length = max(max_solution_length, len(history) - 1)
+                successes.append((i, problem))
             else:
-                failures.append(problem)
+                failures.append((i, problem))
+            solution_lengths.append(len(history) - 1 if success else -1)
             if verbose:
                 print(i, problem, '-- success?', success)
 
         return {
             'success_rate': len(successes) / self.n_problems,
-            'max_solution_length': max_solution_length,
+            'solution_lengths': solution_lengths,
+            'max_solution_length': max(solution_lengths),
             'successes': successes,
             'failures': failures,
         }
@@ -775,6 +777,45 @@ def evaluate_policy(config, device):
     print('Solved problems:', result['successes'])
     print('Unsolved problems:', result['failures'])
 
+def evaluate_policy_checkpoints(config, device):
+    previous_successes = set()
+    domain = config['domain']
+    checkpoint_path = config['checkpoint_path']
+    env = Environment(config['environment_url'], domain)
+    evaluator = SuccessRatePolicyEvaluator(env, config.get('eval_config', {}))
+    i = 0
+    last_hash = None
+
+    try:
+        while True:
+            path = checkpoint_path.format(i)
+
+            with open(path, 'rb') as f:
+                h = hashlib.md5(f.read()).hexdigest()
+                if h == last_hash:
+                    continue
+                last_hash = h
+            print('Evaluating', path)
+            q = torch.load(path, map_location=device)
+            q.to(device)
+            q.device = device
+            result = evaluator.evaluate(q)
+
+            for i, p in result['successes']:
+                if i not in previous_successes:
+                    print(f'New success: {i} :: {p.facts[-1]} (length: {result["solution_lengths"][i]})')
+
+            for i, p in result['failures']:
+                if i in previous_successes:
+                    print('New failure:', i, '::', p.facts[-1])
+
+            previous_successes = set([i for i, _ in result['successes']])
+
+            print('Success rate:', result['success_rate'])
+
+    except FileNotFoundError:
+        print('Checkpoint', i, 'does not exist -- stopping.')
+
 def run_agent_experiment(config, device):
     experiment_id = config['experiment_id']
     domain = config['domain']
@@ -872,6 +913,8 @@ if __name__ == '__main__':
     parser.add_argument('--experiment', help='Run a batch of experiments with multiple agents and environments',
                         action='store_true')
     parser.add_argument('--eval', help='Evaluate a learned policy', action='store_true')
+    parser.add_argument('--eval-checkpoints', help='Show the evolution of a learned policy during interaction',
+                        action='store_true')
     parser.add_argument('--repl', help='Get a REPL with an environment', action='store_true')
     parser.add_argument('--debug', help='Enable debug messages.', action='store_true')
     parser.add_argument('--gpu', type=int, default=None, help='Which GPU to use.')
@@ -900,6 +943,8 @@ if __name__ == '__main__':
         run_agent_experiment(config, device)
     elif opt.eval:
         evaluate_policy(config, device)
+    elif opt.eval_checkpoints:
+        evaluate_policy_checkpoints(config, device)
     elif opt.repl:
         interact()
     elif opt.experiment:
