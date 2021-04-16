@@ -38,13 +38,16 @@ class State:
         self.parent_action = parent_action
 
     def __hash__(self):
-        return hash(self.facts)
+        return hash(self.facts[-1])
 
     def __str__(self):
         return 'State({})'.format(self.facts[-1])
 
     def __repr__(self):
         return str(self)
+
+    def __eq__(self, rhs):
+        return isinstance(rhs, State) and self.facts[-1] == rhs.facts[-1]
 
 SUCCESS_STATE = State(['success'], [], 1.0)
 
@@ -77,14 +80,14 @@ class QFunction(nn.Module):
         """Runs beam search using the Q value until either
         max_steps have been made or reached a terminal state."""
         beam = [state]
-        history = []
+        history = [beam]
+        seen = set([state])
         success = False
 
         for i in range(max_steps):
             if debug:
                 print(f'Beam #{i}: {beam}')
 
-            history.append(beam)
             rewards, s_actions = zip(*environment.step(beam))
             actions = [a for s_a in s_actions for a in s_a]
 
@@ -102,14 +105,15 @@ class QFunction(nn.Module):
             for a, v in zip(actions, q_values):
                 a.next_state.value = a.state.value + math.log(v)
 
-            ns = [a.next_state for a in actions]
+            ns = list(set([a.next_state for a in actions]) - seen)
             ns.sort(key=lambda s: s.value, reverse=True)
 
             if debug:
-                print(f'Candidates: {[(s, s.value) for s in ns[::-1]]}')
+                print(f'Candidates: {[(s, s.value) for s in ns]}')
 
             beam = ns[:beam_size]
-            history.append(beam)
+            history.append(ns)
+            seen.update(ns)
 
         return success, history
 
@@ -187,10 +191,24 @@ class Environment:
 
     def step(self, states, domain=None):
         domain = domain or self.default_domain
-        response = requests.post(self.url + '/step',
-                                 json={'domain': domain,
-                                       'states': [s.facts for s in states],
-                                       'goals': [s.goals for s in states]}).json()
+        try:
+            response = requests.post(self.url + '/step',
+                                     json={'domain': domain,
+                                           'states': [s.facts for s in states],
+                                           'goals': [s.goals for s in states]}).json()
+        except Exception as e:
+            print('Error: diagnosing')
+            try:
+                for s in states:
+                    print(s)
+                    self.problematic_state = s
+                    requests.post(self.url + '/step',
+                                  json={'domain': domain,
+                                        'states': [s.facts],
+                                        'goals': [s.goals]}).json()
+            except Exception as e2:
+                print('Problem in stepping', s.facts, s.goals)
+                raise
 
         rewards = [int(r['success']) for r in response]
         actions = [[Action(state,
@@ -429,7 +447,10 @@ class LearnerValueFunctionAdapter(QFunction):
     def forward(self, actions):
         s = [a.state.facts[-1] for a in actions]
         a = [a.action for a in actions]
-        return self.model(s, a)
+        return self.model.forward(s, a)
+
+    def __call__(self, actions):
+        return self.forward(actions)
 
     def embed_states(self, states):
         s = [s.facts[-1] for s in states]
@@ -439,11 +460,20 @@ class LearnerValueFunctionAdapter(QFunction):
         return self.model.embed_action([a.action for a in actions])
 
 class RandomQFunction(QFunction):
-    def __init__(self):
+    def __init__(self, device=None):
         super().__init__()
+        self.device = device
 
     def forward(self, actions):
-        return torch.rand(len(actions))
+        return torch.rand(len(actions)).to(device=self.device)
+
+class InverseLength(QFunction):
+    def __init__(self, device=None):
+        super().__init__()
+        self.device = device
+
+    def forward(self, actions):
+        return torch.tensor([1 / len(a.next_state.facts[-1]) for a in actions]).to(device=self.device)
 
 class LearningAgent:
     '''Algorithm that guides learning via interaction with the enviroment.
@@ -809,7 +839,7 @@ def evaluate_policy_checkpoints(config, device):
                     print(f'New success: {j} :: {p.facts[-1]} (length: {result["solution_lengths"][j]})')
 
             for j, p in result['failures']:
-                if j in previous_successes:
+                if j in previous_successes or i == 1:
                     print('New failure:', j, '::', p.facts[-1])
 
             previous_successes = set([j for j, _ in result['successes']])
