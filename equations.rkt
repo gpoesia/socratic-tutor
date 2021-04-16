@@ -252,8 +252,8 @@
     [(Fact id t proof)
      ((function
        [(Predicate 'Eq (a b))
-        (let (
-              [all-terms (append (enumerate-subterms a) (enumerate-subterms b))])
+        (let ([all-terms (filter (lambda (t) (= 1 (term-size t)))
+                                 (append (enumerate-subterms a) (enumerate-subterms b)))])
           (map
             (lambda (t-op)
               (let
