@@ -43,6 +43,8 @@
     (CountingSequence? t)
     (SortingList? t)))
 
+(define Number-value (phi (Number n) n))
+
 (define Predicate-type (phi (Predicate type _) type))
 (define Predicate-terms (phi (Predicate _ terms) terms))
 
@@ -449,6 +451,7 @@
   goal-matches?
   Number Variable UnOp BinOp AnyNumber Predicate TernaryNumber TernaryDigit
   Term? Number? Variable? UnOp? BinOp? AnyNumber? Predicate?
+  Number-value
   Predicate-type Predicate-terms
   TernaryNumber-digits TernaryDigit-digit TernaryDigit-power
   CountingSequence CountingSequence-left CountingSequence-right

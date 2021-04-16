@@ -24,13 +24,14 @@ prod       : expr_l2 OP_TIMES expr_l3
 varcoeff   : number expr_l4 | neg_number expr_l4
 div        : expr_l2 OP_DIV expr_l3
 
-expr_l3    : number | int_frac | neg_number | any_number | varcoeff | expr_l4
+expr_l3    : number | int_frac | neg_number | neg_frac | any_number | varcoeff | expr_l4
 expr_l4    : variable | neg_var | paren-expr
 paren-expr : LEFT_PAREN expr RIGHT_PAREN
 variable   : VARIABLE
 neg_var    : OP_MINUS VARIABLE
 any_number : ANY_NUMBER
 neg_number : OP_MINUS INTEGER
+neg_frac   : OP_MINUS int_frac
 number     : INTEGER
 int_frac   : INTEGER OP_FRAC INTEGER
 

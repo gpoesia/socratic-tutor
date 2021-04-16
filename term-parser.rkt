@@ -47,6 +47,8 @@
            (AnyNumber)]
          [`(neg_number ,_ ,n)
            (Number (- n))]
+         [`(neg_frac ,_ ,f)
+           (Number (- (Number-value (parse-tree-to-term f))))]
          [`(neg_var ,_ ,v)
            (BinOp op* (Number -1) (Variable v))]
          [`(variable ,v)
