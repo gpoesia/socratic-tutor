@@ -41,10 +41,14 @@
            (BinOp op/ (parse-tree-to-term e1) (parse-tree-to-term e2))]
          [`(number ,n)
            (Number n)]
+         [`(int_frac ,n ,_ ,m)
+           (Number (/ n m))]
          [`(any_number ,_)
            (AnyNumber)]
          [`(neg_number ,_ ,n)
            (Number (- n))]
+         [`(neg_frac ,_ ,f)
+           (Number (- (Number-value (parse-tree-to-term f))))]
          [`(neg_var ,_ ,v)
            (BinOp op* (Number -1) (Variable v))]
          [`(variable ,v)
@@ -103,6 +107,7 @@
               (token 'INTEGER (string->number lexeme))]
              ["-" (token 'OP_MINUS)]
              ["*" (token 'OP_TIMES)]
+             ["//" (token 'OP_FRAC)]
              ["/" (token 'OP_DIV)]
              ["?" (token 'ANY_NUMBER)]
              ["#" (token 'TERNARY_MARK)]
