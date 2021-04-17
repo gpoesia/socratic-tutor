@@ -876,8 +876,9 @@ def run_agent_experiment(config, device):
     experiment_id = config['experiment_id']
     domain = config['domain']
     agent_name = config['agent']['name']
+    run_index = config.get('run_index', 0)
 
-    run_id = "{}-{}-{}".format(experiment_id, agent_name, domain)
+    run_id = "{}-{}-{}{}".format(experiment_id, agent_name, domain, run_index)
 
     wandb.init(id=run_id,
                name=run_id,
@@ -900,6 +901,7 @@ def run_batch_experiment(config):
     experiment_id = util.random_id()
     domains = config['domains']
     agents = [c for c in config['agents'] if not c.get('disable')]
+    n_runs = config.get('n_runs', 1)
 
     environment_port_base = config.get('environment_port_base', 9876)
     run_processes = []
@@ -914,33 +916,35 @@ def run_batch_experiment(config):
             for agent in agents:
                 print(f'Running {agent["name"]} on {domain}')
 
-                port = environment_port_base + agent_index
-                environment_process = subprocess.Popen(
-                    ['racket', 'environment.rkt', '-p', str(port)],
-                    stderr=subprocess.DEVNULL)
-                environments.append(environment_process)
+                for run_index in range(n_runs):
+                    port = environment_port_base + agent_index
+                    environment_process = subprocess.Popen(
+                        ['racket', 'environment.rkt', '-p', str(port)],
+                        stderr=subprocess.DEVNULL)
+                    environments.append(environment_process)
 
-                # Wait for environment to be ready.
-                time.sleep(30)
+                    # Wait for environment to be ready.
+                    time.sleep(30)
 
-                run_config = {
-                    'experiment_id': experiment_id,
-                    'environment_url': 'http://localhost:{}'.format(port),
-                    'agent': agent,
-                    'domain': domain,
-                    'q_function': config['q_function'],
-                    'eval_environment': copy.deepcopy(config['eval_environment'])
-                }
+                    run_config = {
+                        'experiment_id': experiment_id,
+                        'run_index': run_index,
+                        'environment_url': 'http://localhost:{}'.format(port),
+                        'agent': agent,
+                        'domain': domain,
+                        'q_function': config['q_function'],
+                        'eval_environment': copy.deepcopy(config['eval_environment'])
+                    }
 
-                print('Running agent with config', json.dumps(run_config))
+                    print('Running agent with config', json.dumps(run_config))
 
-                agent_process = subprocess.Popen(
-                    ['python3', 'agent.py', '--learn', '--config', json.dumps(run_config),
-                     '--gpu', str(gpus[agent_index % len(gpus)])],
-                    stderr=subprocess.DEVNULL)
-                run_processes.append(agent_process)
+                    agent_process = subprocess.Popen(
+                        ['python3', 'agent.py', '--learn', '--config', json.dumps(run_config),
+                         '--gpu', str(gpus[agent_index % len(gpus)])],
+                        stderr=subprocess.DEVNULL)
+                    run_processes.append(agent_process)
 
-                agent_index += 1
+                    agent_index += 1
 
         print('Waiting for all agents to finish...')
         for p in run_processes:
