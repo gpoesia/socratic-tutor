@@ -84,8 +84,8 @@
         [`(fraction ,e1 ,_ ,e2)
           (BinOp op/ (parse-tree-to-term e1) (parse-tree-to-term e2))]
         [`(fexpr_l3 ,t) (parse-tree-to-term t)]
-        [`(fparen-expr ,_ ,e ,_) (parse-tree-to-term e)]))
-        
+        [`(fparen-expr ,_ ,e ,_) (parse-tree-to-term e)]
+        [`(fnumber ,t) (parse-tree-to-term t)]))
 
 (define (tokenize ip)
   (port-count-lines! ip)
@@ -114,7 +114,7 @@
               (token 'VARIABLE lexeme)]
              [whitespace
               (token 'WHITESPACE lexeme #:skip? #t)])]
-             
-             
+
+
          [next-token (lambda () (expr-lexer ip))])
     next-token))

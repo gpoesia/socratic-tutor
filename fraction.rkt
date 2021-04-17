@@ -112,18 +112,18 @@
   (phi* ((BinOp (op #:if (eq? op op/)) n1 n2) scale)
         (BinOp op/ (BinOp op* (Number scale) n1) (BinOp op* (Number scale) n2))))
 
-; F.  merge two fractions ⇒  2/2 + 3/2 = (2+3)/2
+; F.  merge two fractions ⇒  2/2 +/- 3/2 = (2+/-3)/2
 (define fd:merge-two-fractions?
   (function
    [ (BinOp op0 (BinOp op1 n1 n2) (BinOp op2 m1 m2))
-     #:if (and (eq? op0 op+) (eq? op1 op/) (eq? op2 op/) (equal? n2 m2))
+     #:if (and (or (eq? op0 op+) (eq? op0 op-)) (eq? op1 op/) (eq? op2 op/) (equal? n2 m2))
      #t]
    [_ #f]))
 
 
 (define fd:merge-two-fractions
   (phi (BinOp op0 (BinOp op1 n1 n2) (BinOp op2 m1 m2))
-       (BinOp op/ (BinOp op+ n1 m1) n2)))
+       (BinOp op/ (BinOp op0 n1 m1) n2)))
 
 
 ; H. Evaluates binary operations, except for division with one exception:
@@ -285,7 +285,6 @@
               (fdt:all #f empty (list (last facts))))))
 
 ; Generates a random fraction problem
-
 (define (generate-fraction-problem [max-number-terms 3])
   (let* ([number-of-terms (random 1 (+ 1 max-number-terms))]
          [fractions (map (lambda (_) (generate-fraction))(range number-of-terms))])
@@ -295,10 +294,13 @@
     ))
 
 ; Convert a list of single elements into a sum through BinOp
+(define (flip-coin p) (< (random) p))
+
 (define (list-to-sum fractions)
+(let ([op (if (flip-coin 0.5) op+ op-)])
   (if (eq? (length fractions) 1)
-      fractions
-      (BinOp op+ (car fractions) (list-to-sum (cdr fractions))) ))
+      (car fractions)
+      (BinOp op (car fractions) (list-to-sum (cdr fractions))))))
 
 ; Define the list of prime factors allowed in the generated exercises
 (define primes '(1 2 3 5 7))
@@ -310,8 +312,8 @@
          [len-primes-denominator (random 1 max-number-primes-factors)]
          [list-primes-numerator (map (lambda (_) (list-ref primes (random 0 (length primes)))) (range len-primes-numerator))]
          [list-primes-denominator (map (lambda (_) (list-ref primes (random 0 (length primes))))(range len-primes-denominator))]
-         [numerator (foldl * 1 list-primes-numerator)]
-         [denominator (foldl * 1 list-primes-denominator)])
+         [numerator (Number (foldl * 1 list-primes-numerator))]
+         [denominator (Number (foldl * 1 list-primes-denominator))])
     (BinOp op/ numerator denominator)))
 
 

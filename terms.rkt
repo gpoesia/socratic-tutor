@@ -118,7 +118,7 @@
       (cons result (+ 1 index))
       (subterms t))))
 ; Returns a list of all indices of subterms of `t` for which `p` is true, when given c
-; For example, filter all terms that can be factored into aX, varying a to be 2,3,5 etc ... 
+; For example, filter all terms that can be factored into aX, varying a to be 2,3,5 etc ...
 (define (filter-subterms-w-context t p c)
   (car (filter-subterms-w-context-aux (list) t p c 0)))
 
@@ -198,7 +198,7 @@
              (cons (list) (- index 1))
              (subterms term))))))
 ; Same as rewrite-subterm but with additional context
-; For example, factor the term `10` into 2*5. 
+; For example, factor the term `10` into 2*5.
 (define (rewrite-subterm-w-context term transform index context)
   (if
     (= index 0)
@@ -424,6 +424,9 @@
    [(SortingList l) (string-join
                      (map (lambda (n) (string-join (map (const "_") (range n)) "")) l)
                      " | ")]
+   ;FractionExpression
+   [(FractionExpression t)
+    (format "~a" (format-term t))]
    ; Marker
    [(Marker t)
     (format "~a~a~a" BEGIN-MARKER (format-term t) END-MARKER)]
@@ -487,12 +490,12 @@
   map-subterms
   term-size
   goal-matches?
-  Number Variable UnOp BinOp AnyNumber Predicate TernaryNumber TernaryDigit 
+  Number Variable UnOp BinOp AnyNumber Predicate TernaryNumber TernaryDigit
   Term? Number? Variable? UnOp? BinOp? AnyNumber? Predicate?
   Predicate-type Predicate-terms
   TernaryNumber-digits TernaryDigit-digit TernaryDigit-power
   CountingSequence CountingSequence-left CountingSequence-right
-  SortingList SortingList-elems 
+  SortingList SortingList-elems
   FractionExpression FractionExpression-elems
   mark-term BEGIN-MARKER END-MARKER
   get-term-by-index

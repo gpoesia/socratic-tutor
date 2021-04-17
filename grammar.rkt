@@ -76,9 +76,10 @@ fsub        : fexpr_l1 OP_MINUS fexpr_l2
 fexpr_l2    : fprod | fraction | fexpr_l3
 fprod       : fexpr_l2 OP_TIMES fexpr_l3
              | fparen-expr fparen-expr
-fvarcoeff   : number fparen-expr
+fvarcoeff   : fnumber fparen-expr
 fraction    : fexpr_l2 OP_DIV fexpr_l3
 
-fexpr_l3    : number | fvarcoeff | fparen-expr
+fexpr_l3    : fnumber | fvarcoeff | fparen-expr
 fparen-expr : LEFT_PAREN fexpr_l1 RIGHT_PAREN
 
+fnumber     : neg_number | number
