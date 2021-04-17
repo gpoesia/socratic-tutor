@@ -281,7 +281,7 @@ class EnvironmentWithEvaluationProxy:
         name, domain = self.agent.name(), self.environment.default_domain
 
         evaluator = SuccessRatePolicyEvaluator(self.environment, self.eval_config)
-        results = evaluator.evaluate(self.agent.q_function)
+        results = evaluator.evaluate(self.agent.get_q_function())
         results['n_steps'] = self.n_steps
         results['name'] = name
         results['domain'] = domain
@@ -496,6 +496,10 @@ class LearningAgent:
         "Returns a string with learning statistics for this agent, for debugging."
         return ""
 
+    def get_q_function(self):
+        "Returns a QFunction that encodes the current learned model."
+        raise NotImplementedError()
+
     @staticmethod
     def new(q_fn, config):
         return LearningAgent.subtypes[config['type']](q_fn, config)
@@ -504,6 +508,7 @@ class LearningAgent:
 class BeamSearchIterativeDeepening(LearningAgent):
     def __init__(self, q_function, config):
         self.q_function = q_function
+        self.bootstrapping = True
         self.replay_buffer_size = config['replay_buffer_size']
 
         self.replay_buffer_pos = collections.deque(maxlen=self.replay_buffer_size)
@@ -524,6 +529,11 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.n_gradient_steps = config.get('n_gradient_steps', 10)
         self.discard_unsolved_problems = config.get('discard_unsolved', False)
         self.full_imitation_learning = config.get('full_imitation_learning', False)
+
+        if config.get('bootstrap_from', 'Random') == 'InverseLength':
+            self.bootstrap_policy = InverseLength(self.q_function.device)
+        else:
+            self.bootstrap_policy = RandomQFunction(self.q_function.device)
 
         # Knob: whether to add an artificial 'success' state in the end
         # of the solution in training examples. The idea is that this would align
@@ -548,6 +558,8 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
     def learn_from_environment(self, environment):
         self.current_depth = self.initial_depth
+        self.bootstrapping = True
+
         beam_size = self.beam_size
         step_every = self.step_every
 
@@ -573,6 +585,11 @@ class BeamSearchIterativeDeepening(LearningAgent):
             logging.info('Running Imitation learning')
             self.gradient_steps(True)
 
+    def get_q_function(self):
+        if self.bootstrapping:
+            return self.bootstrap_policy
+        return self.q_function
+
     def beam_search(self, state, environment):
         '''Performs beam search in a train problem while recording particular examples
         in the replay buffer (according to the various knobs in the algorithm, see config)'''
@@ -582,6 +599,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
         beam = [state]
         solution = None # The state that we found that solves the problem.
         action_reward = {} # Remember rewards we attribute to each action.
+        q = self.get_q_function()
 
         for i in range(self.current_depth):
             rewards, actions = zip(*environment.step(beam))
@@ -626,7 +644,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
             # Query model, sort next states by value, then update beam.
             with torch.no_grad():
-                q_values = self.q_function(all_actions).tolist()
+                q_values = q(all_actions).tolist()
 
             for a, v in zip(all_actions, q_values):
                 a.value = v
@@ -697,6 +715,8 @@ class BeamSearchIterativeDeepening(LearningAgent):
             loss.backward()
             self.optimizer.step()
 
+        self.bootstrapping = False
+
 # A tuple of the replay buffer. We don't need to store the current state or the next state
 # because a0 is an Action object, which already has a0.state and a0.next_state.
 QReplayBufferTuple = collections.namedtuple('QReplayBufferTuple',
@@ -722,6 +742,9 @@ class QLearning(LearningAgent):
 
     def name(self):
         return 'QLearning'
+
+    def get_q_function(self):
+        return self.q_function
 
     def learn_from_environment(self, environment):
         for i in itertools.count():
