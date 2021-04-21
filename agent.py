@@ -88,6 +88,9 @@ class QFunction(nn.Module):
             if debug:
                 print(f'Beam #{i}: {beam}')
 
+            if not len(beam):
+                break
+
             rewards, s_actions = zip(*environment.step(beam))
             actions = [a for s_a in s_actions for a in s_a]
 
@@ -600,6 +603,9 @@ class BeamSearchIterativeDeepening(LearningAgent):
         solution = None # The state that we found that solves the problem.
         action_reward = {} # Remember rewards we attribute to each action.
         q = self.get_q_function()
+        seen = {state}
+
+        logging.info(f'Trying {state}')
 
         for i in range(self.current_depth):
             rewards, actions = zip(*environment.step(beam))
@@ -653,11 +659,21 @@ class BeamSearchIterativeDeepening(LearningAgent):
             for s, state_actions in zip(beam, actions):
                 for a in state_actions:
                     ns = a.next_state
-                    next_states.append(ns)
                     ns.value = s.value + math.log(a.value)
+                    next_states.append(ns)
 
             next_states.sort(key=lambda s: s.value, reverse=True)
+            # Remove duplicates while keeping the order (i.e. if a state appears multiple times,
+            # keep the one with the largest value). Works because dict is ordered in Python 3.6+.
+            next_states = [s for s in dict.fromkeys(next_states) if s not in seen]
+            seen.update(next_states)
             beam = next_states[:self.beam_size]
+            logging.info(f'Beam #{i}: {beam}:')
+
+        logging.info('Solved? {} (solution len {}, q={})'
+                     .format(solution is not None,
+                             solution and len(solution),
+                             type(q)))
 
         # Add all edges traversed as examples in the experience replay buffer.
         if solution is not None or not self.discard_unsolved_problems:
@@ -722,7 +738,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
 QReplayBufferTuple = collections.namedtuple('QReplayBufferTuple',
                                             ['a0', 'r', 'A1'])
 
-@register
+@register(LearningAgent)
 class QLearning(LearningAgent):
     def __init__(self, q_function, config):
         self.q_function = q_function
