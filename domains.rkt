@@ -8,6 +8,14 @@
 (require "sorting.rkt")
 (require "fraction.rkt")
 
+; Definition of all implemented domains.
+; Domains come in pairs: domain should be used for training and learning,
+; and domain/test should be used for evaluation.
+; For now, only equations-ct has any difference between train and test,
+; but in the future we'll use the test domains to test for systematic
+; generalization (i.e. problems requiring longer solutions, which can be
+; obtained by tweaking the difficulty parameter in the generator).
+
 (define EquationsDomain
   (Domain
    "equations"
@@ -15,12 +23,19 @@
    fact-solves-goal?
    d:equations))
 
+(define EquationsTestDomain
+  (Domain
+   "equations/test"
+   generate-problem
+   fact-solves-goal?
+   d:equations))
+
 ; Equations domain where problems come from the Cognitive Tutor logs.
 ; We take the last 90 templates to be a 'test set', and the
 ; remaining to be the 'training set' (there are 290 in total).
-(define EquationsCTTrainDomain
+(define EquationsCTDomain
   (Domain
-   "equations-ct-train"
+   "equations-ct"
    (generator-from-templates (take-right cognitive-tutor-templates 90))
    fact-solves-goal?
    d:equations))
@@ -28,7 +43,7 @@
 ; Equations domain where problems come from the Cognitive Tutor logs.
 (define EquationsCTTestDomain
   (Domain
-   "equations-ct-test"
+   "equations-ct/test"
    (generator-from-templates (drop-right cognitive-tutor-templates 90))
    fact-solves-goal?
    d:equations))
@@ -36,6 +51,13 @@
 (define TernaryAdditionDomain
   (Domain
    "ternary-addition"
+   generate-ternary-addition-problem
+   is-ternary-number-simplified?
+   d:ternary))
+
+(define TernaryAdditionTestDomain
+  (Domain
+   "ternary-addition/test"
    generate-ternary-addition-problem
    is-ternary-number-simplified?
    d:ternary))
@@ -56,11 +78,10 @@
 
 (define AllDomains
   (list
-   EquationsDomain
-   EquationsCTTrainDomain
-   EquationsCTTestDomain
-   TernaryAdditionDomain
-   SortingDomain
+   EquationsDomain EquationsTestDomain
+   EquationsCTDomain EquationsCTTestDomain
+   TernaryAdditionDomain TernaryAdditionTestDomain
+   SortingDomain SortingTestDomain
    FractionDomain
    ))
 

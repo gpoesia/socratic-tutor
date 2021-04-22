@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.distributions.categorical import Categorical
 import pytorch_lightning as pl
+from tqdm import tqdm
 
 from domain_learner import CharEncoding, LearnerValueFunction, collate_concat
 from util import register
@@ -37,13 +38,16 @@ class State:
         self.parent_action = parent_action
 
     def __hash__(self):
-        return hash(self.facts)
+        return hash(self.facts[-1])
 
     def __str__(self):
         return 'State({})'.format(self.facts[-1])
 
     def __repr__(self):
         return str(self)
+
+    def __eq__(self, rhs):
+        return isinstance(rhs, State) and self.facts[-1] == rhs.facts[-1]
 
 SUCCESS_STATE = State(['success'], [], 1.0)
 
@@ -76,14 +80,17 @@ class QFunction(nn.Module):
         """Runs beam search using the Q value until either
         max_steps have been made or reached a terminal state."""
         beam = [state]
-        history = []
+        history = [beam]
+        seen = set([state])
         success = False
 
         for i in range(max_steps):
             if debug:
                 print(f'Beam #{i}: {beam}')
 
-            history.append(beam)
+            if not len(beam):
+                break
+
             rewards, s_actions = zip(*environment.step(beam))
             actions = [a for s_a in s_actions for a in s_a]
 
@@ -101,14 +108,15 @@ class QFunction(nn.Module):
             for a, v in zip(actions, q_values):
                 a.next_state.value = a.state.value + math.log(v)
 
-            ns = [a.next_state for a in actions]
+            ns = list(set([a.next_state for a in actions]) - seen)
             ns.sort(key=lambda s: s.value, reverse=True)
 
             if debug:
-                print(f'Candidates: {[(s, s.value) for s in ns[::-1]]}')
+                print(f'Candidates: {[(s, s.value) for s in ns]}')
 
             beam = ns[:beam_size]
-            history.append(beam)
+            history.append(ns)
+            seen.update(ns)
 
         return success, history
 
@@ -146,11 +154,12 @@ class SuccessRatePolicyEvaluator:
         self.beam_size = config.get('beam_size', 1) # Size of the beam in beam search.
         self.debug = config.get('debug', False) # Whether to print all steps during evaluation.
 
-    def evaluate(self, q, verbose=False):
+    def evaluate(self, q, verbose=False, show_progress=False):
         successes, failures, solution_lengths = [], [], []
         max_solution_length = 0
+        wrapper = tqdm if show_progress else lambda x: x
 
-        for i in range(self.n_problems):
+        for i in wrapper(range(self.n_problems)):
             problem = self.environment.generate_new(seed=(self.seed + i))
             success, history = q.rollout(self.environment, problem,
                                          self.max_steps, self.beam_size, self.debug)
@@ -185,10 +194,24 @@ class Environment:
 
     def step(self, states, domain=None):
         domain = domain or self.default_domain
-        response = requests.post(self.url + '/step',
-                                 json={'domain': domain,
-                                       'states': [s.facts for s in states],
-                                       'goals': [s.goals for s in states]}).json()
+        try:
+            response = requests.post(self.url + '/step',
+                                     json={'domain': domain,
+                                           'states': [s.facts for s in states],
+                                           'goals': [s.goals for s in states]}).json()
+        except Exception as e:
+            print('Error: diagnosing')
+            try:
+                for s in states:
+                    print(s)
+                    self.problematic_state = s
+                    requests.post(self.url + '/step',
+                                  json={'domain': domain,
+                                        'states': [s.facts],
+                                        'goals': [s.goals]}).json()
+            except Exception as e2:
+                print('Problem in stepping', s.facts, s.goals)
+                raise
 
         rewards = [int(r['success']) for r in response]
         actions = [[Action(state,
@@ -261,7 +284,7 @@ class EnvironmentWithEvaluationProxy:
         name, domain = self.agent.name(), self.environment.default_domain
 
         evaluator = SuccessRatePolicyEvaluator(self.environment, self.eval_config)
-        results = evaluator.evaluate(self.agent.q_function)
+        results = evaluator.evaluate(self.agent.get_q_function())
         results['n_steps'] = self.n_steps
         results['name'] = name
         results['domain'] = domain
@@ -427,7 +450,10 @@ class LearnerValueFunctionAdapter(QFunction):
     def forward(self, actions):
         s = [a.state.facts[-1] for a in actions]
         a = [a.action for a in actions]
-        return self.model(s, a)
+        return self.model.forward(s, a)
+
+    def __call__(self, actions):
+        return self.forward(actions)
 
     def embed_states(self, states):
         s = [s.facts[-1] for s in states]
@@ -437,11 +463,20 @@ class LearnerValueFunctionAdapter(QFunction):
         return self.model.embed_action([a.action for a in actions])
 
 class RandomQFunction(QFunction):
-    def __init__(self):
+    def __init__(self, device=None):
         super().__init__()
+        self.device = device
 
     def forward(self, actions):
-        return torch.rand(len(actions))
+        return torch.rand(len(actions)).to(device=self.device)
+
+class InverseLength(QFunction):
+    def __init__(self, device=None):
+        super().__init__()
+        self.device = device
+
+    def forward(self, actions):
+        return torch.tensor([1 / len(a.next_state.facts[-1]) for a in actions]).to(device=self.device)
 
 class LearningAgent:
     '''Algorithm that guides learning via interaction with the enviroment.
@@ -464,6 +499,10 @@ class LearningAgent:
         "Returns a string with learning statistics for this agent, for debugging."
         return ""
 
+    def get_q_function(self):
+        "Returns a QFunction that encodes the current learned model."
+        raise NotImplementedError()
+
     @staticmethod
     def new(q_fn, config):
         return LearningAgent.subtypes[config['type']](q_fn, config)
@@ -472,6 +511,7 @@ class LearningAgent:
 class BeamSearchIterativeDeepening(LearningAgent):
     def __init__(self, q_function, config):
         self.q_function = q_function
+        self.bootstrapping = True
         self.replay_buffer_size = config['replay_buffer_size']
 
         self.replay_buffer_pos = collections.deque(maxlen=self.replay_buffer_size)
@@ -492,6 +532,11 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.n_gradient_steps = config.get('n_gradient_steps', 10)
         self.discard_unsolved_problems = config.get('discard_unsolved', False)
         self.full_imitation_learning = config.get('full_imitation_learning', False)
+
+        if config.get('bootstrap_from', 'Random') == 'InverseLength':
+            self.bootstrap_policy = InverseLength(self.q_function.device)
+        else:
+            self.bootstrap_policy = RandomQFunction(self.q_function.device)
 
         # Knob: whether to add an artificial 'success' state in the end
         # of the solution in training examples. The idea is that this would align
@@ -516,6 +561,8 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
     def learn_from_environment(self, environment):
         self.current_depth = self.initial_depth
+        self.bootstrapping = True
+
         beam_size = self.beam_size
         step_every = self.step_every
 
@@ -541,6 +588,11 @@ class BeamSearchIterativeDeepening(LearningAgent):
             logging.info('Running Imitation learning')
             self.gradient_steps(True)
 
+    def get_q_function(self):
+        if self.bootstrapping:
+            return self.bootstrap_policy
+        return self.q_function
+
     def beam_search(self, state, environment):
         '''Performs beam search in a train problem while recording particular examples
         in the replay buffer (according to the various knobs in the algorithm, see config)'''
@@ -550,6 +602,10 @@ class BeamSearchIterativeDeepening(LearningAgent):
         beam = [state]
         solution = None # The state that we found that solves the problem.
         action_reward = {} # Remember rewards we attribute to each action.
+        q = self.get_q_function()
+        seen = {state}
+
+        logging.info(f'Trying {state}')
 
         for i in range(self.current_depth):
             rewards, actions = zip(*environment.step(beam))
@@ -594,7 +650,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
             # Query model, sort next states by value, then update beam.
             with torch.no_grad():
-                q_values = self.q_function(all_actions).tolist()
+                q_values = q(all_actions).tolist()
 
             for a, v in zip(all_actions, q_values):
                 a.value = v
@@ -603,11 +659,21 @@ class BeamSearchIterativeDeepening(LearningAgent):
             for s, state_actions in zip(beam, actions):
                 for a in state_actions:
                     ns = a.next_state
-                    next_states.append(ns)
                     ns.value = s.value + math.log(a.value)
+                    next_states.append(ns)
 
             next_states.sort(key=lambda s: s.value, reverse=True)
+            # Remove duplicates while keeping the order (i.e. if a state appears multiple times,
+            # keep the one with the largest value). Works because dict is ordered in Python 3.6+.
+            next_states = [s for s in dict.fromkeys(next_states) if s not in seen]
+            seen.update(next_states)
             beam = next_states[:self.beam_size]
+            logging.info(f'Beam #{i}: {beam}:')
+
+        logging.info('Solved? {} (solution len {}, q={})'
+                     .format(solution is not None,
+                             solution and len(solution),
+                             type(q)))
 
         # Add all edges traversed as examples in the experience replay buffer.
         if solution is not None or not self.discard_unsolved_problems:
@@ -665,12 +731,14 @@ class BeamSearchIterativeDeepening(LearningAgent):
             loss.backward()
             self.optimizer.step()
 
+        self.bootstrapping = False
+
 # A tuple of the replay buffer. We don't need to store the current state or the next state
 # because a0 is an Action object, which already has a0.state and a0.next_state.
 QReplayBufferTuple = collections.namedtuple('QReplayBufferTuple',
                                             ['a0', 'r', 'A1'])
 
-@register
+@register(LearningAgent)
 class QLearning(LearningAgent):
     def __init__(self, q_function, config):
         self.q_function = q_function
@@ -690,6 +758,9 @@ class QLearning(LearningAgent):
 
     def name(self):
         return 'QLearning'
+
+    def get_q_function(self):
+        return self.q_function
 
     def learn_from_environment(self, environment):
         for i in itertools.count():
@@ -789,6 +860,7 @@ def evaluate_policy_checkpoints(config, device):
     try:
         while True:
             path = checkpoint_path.format(i)
+            i += 1
 
             with open(path, 'rb') as f:
                 h = hashlib.md5(f.read()).hexdigest()
@@ -799,17 +871,17 @@ def evaluate_policy_checkpoints(config, device):
             q = torch.load(path, map_location=device)
             q.to(device)
             q.device = device
-            result = evaluator.evaluate(q)
+            result = evaluator.evaluate(q, show_progress=True)
 
-            for i, p in result['successes']:
-                if i not in previous_successes:
-                    print(f'New success: {i} :: {p.facts[-1]} (length: {result["solution_lengths"][i]})')
+            for j, p in result['successes']:
+                if j not in previous_successes:
+                    print(f'New success: {j} :: {p.facts[-1]} (length: {result["solution_lengths"][j]})')
 
-            for i, p in result['failures']:
-                if i in previous_successes:
-                    print('New failure:', i, '::', p.facts[-1])
+            for j, p in result['failures']:
+                if j in previous_successes or i == 1:
+                    print('New failure:', j, '::', p.facts[-1])
 
-            previous_successes = set([i for i, _ in result['successes']])
+            previous_successes = set([j for j, _ in result['successes']])
 
             print('Success rate:', result['success_rate'])
 
@@ -820,8 +892,9 @@ def run_agent_experiment(config, device):
     experiment_id = config['experiment_id']
     domain = config['domain']
     agent_name = config['agent']['name']
+    run_index = config.get('run_index', 0)
 
-    run_id = "{}-{}-{}".format(experiment_id, agent_name, domain)
+    run_id = "{}-{}-{}{}".format(experiment_id, agent_name, domain, run_index)
 
     wandb.init(id=run_id,
                name=run_id,
@@ -844,6 +917,7 @@ def run_batch_experiment(config):
     experiment_id = util.random_id()
     domains = config['domains']
     agents = [c for c in config['agents'] if not c.get('disable')]
+    n_runs = config.get('n_runs', 1)
 
     environment_port_base = config.get('environment_port_base', 9876)
     run_processes = []
@@ -858,33 +932,35 @@ def run_batch_experiment(config):
             for agent in agents:
                 print(f'Running {agent["name"]} on {domain}')
 
-                port = environment_port_base + agent_index
-                environment_process = subprocess.Popen(
-                    ['racket', 'environment.rkt', '-p', str(port)],
-                    stderr=subprocess.DEVNULL)
-                environments.append(environment_process)
+                for run_index in range(n_runs):
+                    port = environment_port_base + agent_index
+                    environment_process = subprocess.Popen(
+                        ['racket', 'environment.rkt', '-p', str(port)],
+                        stderr=subprocess.DEVNULL)
+                    environments.append(environment_process)
 
-                # Wait for environment to be ready.
-                time.sleep(30)
+                    # Wait for environment to be ready.
+                    time.sleep(30)
 
-                run_config = {
-                    'experiment_id': experiment_id,
-                    'environment_url': 'http://localhost:{}'.format(port),
-                    'agent': agent,
-                    'domain': domain,
-                    'q_function': config['q_function'],
-                    'eval_environment': copy.deepcopy(config['eval_environment'])
-                }
+                    run_config = {
+                        'experiment_id': experiment_id,
+                        'run_index': run_index,
+                        'environment_url': 'http://localhost:{}'.format(port),
+                        'agent': agent,
+                        'domain': domain,
+                        'q_function': config['q_function'],
+                        'eval_environment': copy.deepcopy(config['eval_environment'])
+                    }
 
-                print('Running agent with config', json.dumps(run_config))
+                    print('Running agent with config', json.dumps(run_config))
 
-                agent_process = subprocess.Popen(
-                    ['python3', 'agent.py', '--learn', '--config', json.dumps(run_config),
-                     '--gpu', str(gpus[agent_index % len(gpus)])],
-                    stderr=subprocess.DEVNULL)
-                run_processes.append(agent_process)
+                    agent_process = subprocess.Popen(
+                        ['python3', 'agent.py', '--learn', '--config', json.dumps(run_config),
+                         '--gpu', str(gpus[agent_index % len(gpus)])],
+                        stderr=subprocess.DEVNULL)
+                    run_processes.append(agent_process)
 
-                agent_index += 1
+                    agent_index += 1
 
         print('Waiting for all agents to finish...')
         for p in run_processes:
