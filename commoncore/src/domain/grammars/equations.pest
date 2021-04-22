@@ -1,0 +1,36 @@
+// Equations grammar
+
+term = _{ SOI ~ ( !(expr ~ EOI) ~ predicate | expr ) ~ EOI }
+
+predicate = _{ equality }
+equality = { expr ~ "=" ~ expr }
+expr = _{ expr_l1 }
+
+expr_l1 = _{ sum_or_sub | expr_l2 }
+sum_or_sub = { expr_l2 ~ sub_sum_op ~ expr_l1 }
+sub_sum_op = { "+" | "-" }
+
+expr_l2 = _{ prod_or_div | expr_l3 }
+prod_or_div = { expr_l3 ~ prod_div_op ~ expr_l2 }
+prod_div_op = { "*" | "/" }
+
+varcoeff = { (number | neg_number | int_frac) ~ expr_l4 }
+
+expr_l3 = _{ !(varcoeff | int_frac) ~ (number | neg_number)
+           | !(varcoeff) ~ int_frac
+           | varcoeff
+           | any_number
+           | expr_l4
+           }
+
+expr_l4 = _{ variable | neg_var | paren_expr }
+
+paren_expr = _{ "(" ~ expr ~ ")" }
+neg_var    = { "-" ~ variable }
+variable   = { 'a'..'z' }
+any_number = { "?" }
+number     = @{ ('0'..'9')+ }
+neg_number = @{ "-" ~ ('0'..'9')+ }
+int_frac   = { "[" ~ (number | neg_number) ~ "//" ~ number ~ "]" }
+
+WHITESPACE = _{ " " }
