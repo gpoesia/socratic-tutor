@@ -6,6 +6,7 @@
 (require "equations.rkt")
 (require "ternary.rkt")
 (require "sorting.rkt")
+(require "fraction.rkt")
 
 ; Definition of all implemented domains.
 ; Domains come in pairs: domain should be used for training and learning,
@@ -68,12 +69,12 @@
    is-sorting-list-sorted?
    d:sorting))
 
-(define SortingTestDomain
+(define FractionDomain
   (Domain
-   "sorting/test"
-   generate-sorting-problem
-   is-sorting-list-sorted?
-   d:sorting))
+   "fraction"
+   generate-fraction-problem
+   is-fraction-simplified?
+   d:fraction))
 
 (define AllDomains
   (list
@@ -81,6 +82,7 @@
    EquationsCTDomain EquationsCTTestDomain
    TernaryAdditionDomain TernaryAdditionTestDomain
    SortingDomain SortingTestDomain
+   FractionDomain
    ))
 
 (define (get-domain-by-name name)
@@ -112,6 +114,13 @@
     [(== td:erase-zero) "td:erase-zero"]
     [(== sd:swap) "sd:swap"]
     [(== sd:reverse) "sd:reverse"]
+    [(== fd:cancel-common-factor) "fd:cancel-common-factor"]
+    [(== fd:factorize) "fd:factorize"]
+    [(== fd:merge-two-fractions) "fd:merge-two-fractions"]
+    [(== fd:mul-scaling-factor) "fd:mul-scaling-factor"]
+    [(== fd:binop-eval) "fd:binop-eval"]
+    [(== fd:convert-into-fraction) "fd:convert-into-fraction"]
+    [(== fd:commutativity) "fd:commutativity"]
     ))
 
 ; Inverts axiom->string.
@@ -135,6 +144,13 @@
     [(== "td:erase-zero") td:erase-zero]
     [(== "sd:swap") sd:swap]
     [(== "sd:reverse") sd:reverse]
+    [(== "fd:cancel-common-factor") fd:cancel-common-factor]
+    [(== "fd:factorize") fd:factorize]
+    [(== "fd:merge-two-fractions") fd:merge-two-fractions]
+    [(== "fd:mul-scaling-factor") fd:mul-scaling-factor]
+    [(== "fd:binop-eval") fd:binop-eval]
+    [(== "fd:convert-into-fraction") fd:convert-into-fraction]
+    [(== "fd:commutativity") fd:commutativity]
     ))
 
 (provide

@@ -19,7 +19,8 @@
       CountingSequence
       ; Sorting domain
       SortingList
-
+      ; Fraction domain
+      FractionExpression
       ; A Marker is a "fake" wrapper term, only used for doing formatting
       ; tricks (e.g. see generate-term-boundary-string in questions.rkt).
       ; The parser (term-parser.rkt) never returns markers, and general functions
@@ -41,7 +42,9 @@
     (TernaryNumber? t)
     (TernaryDigit? t)
     (CountingSequence? t)
-    (SortingList? t)))
+    (SortingList? t)
+    (FractionExpression? t)
+    ))
 
 (define Number-value (phi (Number n) n))
 
@@ -56,6 +59,7 @@
 (define CountingSequence-right (phi (CountingSequence _ r) r))
 
 (define SortingList-elems (phi (SortingList l) l))
+(define FractionExpression-elems (phi (FractionExpression l) l))
 
 (define (compute-bin-op op a b)
   (match op
@@ -78,6 +82,7 @@
     [(TernaryNumber digits) (length digits)]
     [(CountingSequence l r) 2]
     [(SortingList l) (length l)]
+    [(FractionExpression terms) (foldl + 0 (map term-size terms)) ]
     ))
 
 ; Returns a list with the direct subterms of `t`.
@@ -112,6 +117,20 @@
       (lambda (st r)
         (let ([(sts . idx) r])
           (filter-subterms-aux sts st p idx)))
+      (cons result (+ 1 index))
+      (subterms t))))
+; Returns a list of all indices of subterms of `t` for which `p` is true, when given c
+; For example, filter all terms that can be factored into aX, varying a to be 2,3,5 etc ...
+(define (filter-subterms-w-context t p c)
+  (car (filter-subterms-w-context-aux (list) t p c 0)))
+
+; Returns (l . index)
+(define (filter-subterms-w-context-aux l t p c index)
+  (let ([result (if (p t c) (cons index l) l)])
+    (foldl
+      (lambda (st r)
+        (let ([(sts . idx) r])
+          (filter-subterms-w-context-aux sts st p c idx)))
       (cons result (+ 1 index))
       (subterms t))))
 
@@ -180,6 +199,30 @@
                        (cons (append sts (list st)) (- idx s)))))))
              (cons (list) (- index 1))
              (subterms term))))))
+; Same as rewrite-subterm but with additional context
+; For example, factor the term `10` into 2*5.
+(define (rewrite-subterm-w-context term transform index context)
+  (if
+    (= index 0)
+    (or (transform term context) term)
+    (replace-subterms
+      term
+      (car (foldl
+             (lambda (st result)
+               (let ([(sts . idx) result])
+                 (if (not idx)
+                   (cons (append sts (list st)) #f)
+                   (let ([s (term-size st)])
+                     (if (< idx s)
+                       ; The term to rewrite is in st - rewrite.
+                       (cons (append sts
+                                     (list (rewrite-subterm-w-context st transform idx context)))
+                                     #f)
+                       (cons (append sts (list st)) (- idx s)))))))
+             (cons (list) (- index 1))
+             (subterms term))))))
+
+
 
 ; Adds markers around the term with index `i` inside `t`.
 (define (mark-term t i)
@@ -386,6 +429,9 @@
    [(SortingList l) (string-join
                      (map (lambda (n) (string-join (map (const "_") (range n)) "")) l)
                      " | ")]
+   ;FractionExpression
+   [(FractionExpression t)
+    (format "~a" (format-term t))]
    ; Marker
    [(Marker t)
     (format "~a~a~a" BEGIN-MARKER (format-term t) END-MARKER)]
@@ -442,8 +488,8 @@
   simpl-term
   simpl-example
   format-term format-term-debug format-term-tex
-  rewrite-subterm
-  filter-subterms
+  rewrite-subterm rewrite-subterm-w-context
+  filter-subterms filter-subterms-w-context
   substitute-term
   enumerate-subterms
   map-subterms
@@ -456,6 +502,7 @@
   TernaryNumber-digits TernaryDigit-digit TernaryDigit-power
   CountingSequence CountingSequence-left CountingSequence-right
   SortingList SortingList-elems
+  FractionExpression FractionExpression-elems
   mark-term BEGIN-MARKER END-MARKER
   get-term-by-index
   Operator? op+ op* op- op/ is-commutative? is-associative? is-distributive? compute-bin-op op->string string->op)
