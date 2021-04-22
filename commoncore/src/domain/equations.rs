@@ -533,11 +533,12 @@ fn a_distributivity(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, Strin
 fn a_eval(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String)> {
     if let BinaryOperation(op, t1, t2) = t.t.borrow() {
         if let (Number(n1), Number(n2)) = (t1.t.borrow(), t2.t.borrow()) {
-            return Some((SizedTerm::new(Number(op.evaluate(n1, n2)), 1),
-                         format!("eval {}, {}", i, t.to_string()),
-                         format!("Calculate {}", t.to_string())))
+            if *op != Div || !n2.is_integer() || n2.to_integer() != 0 {
+                return Some((SizedTerm::new(Number(op.evaluate(n1, n2)), 1),
+                             format!("eval {}, {}", i, t.to_string()),
+                             format!("Calculate {}", t.to_string())))
+            }
         }
-
     }
     None
 }
