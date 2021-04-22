@@ -57,3 +57,36 @@ This is roughly what you need to implement a new domain:
 Several learning algorithms are implemented to learn the domains.
 They are all in `agent.py`, which is a file that also implements evaluation.
 More on this soon!
+
+## Rust environments
+
+We're testing a faster implementation of the environments in Rust. Right now, the Racket environments
+are the gold standard, and only the equations domain has an implementation in Rust. However, to train
+larger models, we'll likely need the Rust environments, since they can be more than 100x faster.
+If you want to try this new setup, follow the steps below:
+
+* First, install a recent Rust compiler (1.50+). The easiest way to do it is with rust-up. Simply
+  visit [https://rustup.rs/](https://rustup.rs/) and follow the instructions there. To check your
+  installation, run `rustc --version` in the command line: you should get something like
+  `rustc 1.51.0 (2fd73fabe 2021-03-23)`.
+* Then, compile the dynamic library:
+
+```
+$ cd /path/to/socratic-tutor/commoncore
+$ cargo build --release
+```
+
+  This might take a few minutes. It should download all dependencies and then compile our library.
+  If all goes well, you should find the library at `target/release/libcommoncore.so`
+  (or the equivalent extension in your operating system).
+* Finally, we only need to place that library in a location that we can import from Python.
+  Simply create a symbolic link at the root of the project and named `commoncore.so`, that points
+  to the compiled library:
+
+```
+user@machine:~/socratic-tutor$ ln -s commoncore/target/release/libcommoncore.so ./commoncore.so
+```
+
+And that's it! If you open a Python shell, you should be able to directly `import commoncore`.
+Also, now that you set up the symlink, if you compile the Rust library again (e.g. after it was updated),
+we'll automatically pick up the latest version from Python.

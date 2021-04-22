@@ -108,6 +108,13 @@ struct SizedTerm {
 }
 
 impl SizedTerm {
+    fn is_predicate(&self) -> bool {
+        match self.t.borrow() {
+            Equality(_, _) => true,
+            _ => false,
+        }
+    }
+
     fn collect_children(&self, v: &mut Vec<SizedTerm>) {
         v.push(self.clone());
 
@@ -165,16 +172,20 @@ impl ToString for SizedTerm {
     }
 }
 
+fn format_rational(n: &Rational32) -> String {
+    if n.is_integer() {
+        n.numer().to_string()
+    } else {
+        format!("[{}/{}]", n.numer(), n.denom())
+    }
+}
+
 impl ToString for Term {
     fn to_string(&self) -> String {
         match self {
             AnyNumber => "?".to_string(),
             Number(n) => {
-                let inner = if n.is_integer() {
-                    n.numer().to_string()
-                } else {
-                    format!("[{} // {}]", n.numer(), n.denom())
-                };
+                let inner = format_rational(n);
                 return if *n < Rational32::new(0, 1) { format!("({})", inner) } else { inner };
             }
             Variable(v) => v.to_string(),
@@ -183,7 +194,7 @@ impl ToString for Term {
             BinaryOperation(op, t1, t2) => {
                 match (op, t1.t.borrow(), t2.t.borrow()) {
                     (Times, Number(n), Variable(v)) =>
-                        format!("{}{}", Number(*n).to_string(), v.to_string()),
+                        format!("{}{}", format_rational(n), v.to_string()),
                     _ => format!("({} {} {})",
                                  t1.to_string(),
                                  op.to_string(),
@@ -311,6 +322,10 @@ impl SizedTerm {
 
 pub struct Equations {}
 
+// Cap size of the equations to avoid overly large states.
+// Otherwise, the number of steps available can grow out of control.
+const MAX_SIZE: usize = 30;
+
 impl super::Domain for Equations {
     fn name(&self) -> String {
         return "equations".to_string();
@@ -328,6 +343,10 @@ impl super::Domain for Equations {
         let t = SizedTerm::from_str(&state).unwrap();
         if t.is_solved() {
             return None;
+        }
+
+        if t.size > MAX_SIZE {
+            return Some(Vec::new());
         }
 
         let mut actions = Vec::new();
@@ -358,7 +377,9 @@ impl super::Domain for Equations {
 
         // Apply an operation to both sides.
         for st in children.iter() {
-            if st.size <= 3 && *(st.t.borrow() as &Term) != Number(Rational32::from_integer(0)) {
+            if st.size <= 3 &&
+                !st.is_predicate() &&
+                *(st.t.borrow() as &Term) != Number(Rational32::from_integer(0)) {
                 for op in &[Add, Sub, Times, Div] {
                     let (next_state, fd, hd) = a_op_both_sides(Rc::clone(&rct), *op, st);
                     if seen_before.insert(fd.clone()) {

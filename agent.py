@@ -8,62 +8,29 @@ import datetime
 import hashlib
 import time
 import itertools
-import urllib
-import requests
 import random
 import traceback
-import sys
 import pickle
 import json
-import torch
 import math
-import util
-import wandb
-import logging
 import subprocess
+import logging
+
+import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.distributions.categorical import Categorical
 import pytorch_lightning as pl
 from tqdm import tqdm
+import wandb
 
 from domain_learner import CharEncoding, LearnerValueFunction, collate_concat
+import util
 from util import register
+from environment import Environment, State, Action
 
-class State:
-    def __init__(self, facts, goals, value, parent_action=None):
-        self.facts = tuple(facts)
-        self.goals = tuple(goals)
-        self.value = value
-        self.parent_action = parent_action
-
-    def __hash__(self):
-        return hash(self.facts[-1])
-
-    def __str__(self):
-        return 'State({})'.format(self.facts[-1])
-
-    def __repr__(self):
-        return str(self)
-
-    def __eq__(self, rhs):
-        return isinstance(rhs, State) and self.facts[-1] == rhs.facts[-1]
 
 SUCCESS_STATE = State(['success'], [], 1.0)
-
-class Action:
-    def __init__(self, state, action, next_state, reward, value=0.0):
-        self.state = state
-        self.action = action
-        self.next_state = next_state
-        self.reward = reward
-        self.value = value
-
-    def __str__(self):
-        return 'Action({})'.format(self.action)
-
-    def __repr__(self):
-        return str(self)
 
 
 class QFunction(nn.Module):
@@ -74,7 +41,7 @@ class QFunction(nn.Module):
     subtypes = {}
 
     def forward(self, state, actions):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def rollout(self, environment, state, max_steps, beam_size=1, debug=False):
         """Runs beam search using the Q value until either
@@ -88,7 +55,7 @@ class QFunction(nn.Module):
             if debug:
                 print(f'Beam #{i}: {beam}')
 
-            if not len(beam):
+            if not beam:
                 break
 
             rewards, s_actions = zip(*environment.step(beam))
@@ -156,7 +123,6 @@ class SuccessRatePolicyEvaluator:
 
     def evaluate(self, q, verbose=False, show_progress=False):
         successes, failures, solution_lengths = [], [], []
-        max_solution_length = 0
         wrapper = tqdm if show_progress else lambda x: x
 
         for i in wrapper(range(self.n_problems)):
@@ -178,55 +144,6 @@ class SuccessRatePolicyEvaluator:
             'successes': successes,
             'failures': failures,
         }
-
-class Environment:
-    def __init__(self, url, default_domain=None):
-        self.url = url
-        self.default_domain = default_domain
-
-    def generate_new(self, domain=None, seed=None):
-        domain = domain or self.default_domain
-        params = {'domain': domain}
-        if seed is not None:
-            params['seed'] = seed
-        response = requests.post(self.url + '/generate', json=params).json()
-        return State(response['state'], response['goals'], 0.0)
-
-    def step(self, states, domain=None):
-        domain = domain or self.default_domain
-        try:
-            response = requests.post(self.url + '/step',
-                                     json={'domain': domain,
-                                           'states': [s.facts for s in states],
-                                           'goals': [s.goals for s in states]}).json()
-        except Exception as e:
-            print('Error: diagnosing')
-            try:
-                for s in states:
-                    print(s)
-                    self.problematic_state = s
-                    requests.post(self.url + '/step',
-                                  json={'domain': domain,
-                                        'states': [s.facts],
-                                        'goals': [s.goals]}).json()
-            except Exception as e2:
-                print('Problem in stepping', s.facts, s.goals)
-                raise
-
-        rewards = [int(r['success']) for r in response]
-        actions = [[Action(state,
-                           a['action'],
-                           State(state.facts + (a['state'],), state.goals, 0.0),
-                           0.0)
-                    for a in r['actions']]
-                   for state, r in zip(states, response)]
-
-        for i, (s, sa) in enumerate(zip(states, actions)):
-            s.value = rewards[i]
-            for a in sa:
-                a.next_state.parent_action = a
-
-        return list(zip(rewards, actions))
 
 class EndOfLearning(Exception):
     '''Exception used to signal the end of the learning budget for an agent.'''
@@ -828,6 +745,8 @@ class QLearning(LearningAgent):
 def evaluate_policy(config, device):
     if config.get('random_policy'):
         q = RandomQFunction()
+    elif config.get('inverse_length'):
+        q = InverseLength()
     else:
         q = torch.load(config['model_path'], map_location=device)
 
@@ -838,8 +757,7 @@ def evaluate_policy(config, device):
     q.to(device)
     q.device = device
 
-    domain = config['domain']
-    env = Environment(config['environment_url'], domain)
+    env = Environment.from_config(config)
     evaluator = SuccessRatePolicyEvaluator(env, config.get('eval_config', {}))
     result = evaluator.evaluate(q, verbose=True)
 
@@ -850,9 +768,8 @@ def evaluate_policy(config, device):
 
 def evaluate_policy_checkpoints(config, device):
     previous_successes = set()
-    domain = config['domain']
     checkpoint_path = config['checkpoint_path']
-    env = Environment(config['environment_url'], domain)
+    env = Environment.from_config(config)
     evaluator = SuccessRatePolicyEvaluator(env, config.get('eval_config', {}))
     i = 0
     last_hash = None
@@ -902,8 +819,7 @@ def run_agent_experiment(config, device):
                project='solver-agent',
                reinit=True)
 
-    env = Environment(config['environment_url'], domain)
-
+    env = Environment.from_config(config)
     q_fn = QFunction.new(config['q_function'], device)
     agent = LearningAgent.new(q_fn, config['agent'])
 
@@ -919,7 +835,10 @@ def run_batch_experiment(config):
     agents = [c for c in config['agents'] if not c.get('disable')]
     n_runs = config.get('n_runs', 1)
 
+    environment_backend = config.get('environment_backend', 'Racket')
     environment_port_base = config.get('environment_port_base', 9876)
+    port = 0
+
     run_processes = []
     environments = []
     agent_index = 0
@@ -933,22 +852,24 @@ def run_batch_experiment(config):
                 print(f'Running {agent["name"]} on {domain}')
 
                 for run_index in range(n_runs):
-                    port = environment_port_base + agent_index
-                    environment_process = subprocess.Popen(
-                        ['racket', 'environment.rkt', '-p', str(port)],
-                        stderr=subprocess.DEVNULL)
-                    environments.append(environment_process)
+                    if environment_backend == 'Racket':
+                        port = environment_port_base + agent_index
+                        environment_process = subprocess.Popen(
+                            ['racket', 'environment.rkt', '-p', str(port)],
+                            stderr=subprocess.DEVNULL)
+                        environments.append(environment_process)
 
-                    # Wait for environment to be ready.
-                    time.sleep(30)
+                        # Wait for environment to be ready.
+                        time.sleep(30)
 
                     run_config = {
                         'experiment_id': experiment_id,
                         'run_index': run_index,
-                        'environment_url': 'http://localhost:{}'.format(port),
                         'agent': agent,
                         'domain': domain,
                         'q_function': config['q_function'],
+                        'environment_backend': environment_backend,
+                        'environment_url': 'http://localhost:{}'.format(port),
                         'eval_environment': copy.deepcopy(config['eval_environment'])
                     }
 
