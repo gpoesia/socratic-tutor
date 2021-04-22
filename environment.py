@@ -24,6 +24,9 @@ class State:
         return hash(self.facts[-1])
 
     def __str__(self):
+        if self.parent_action:
+            return 'State({} | {})'.format(self.facts[-1],
+                                           self.parent_action.action)
         return 'State({})'.format(self.facts[-1])
 
     def __repr__(self):
@@ -56,6 +59,14 @@ class Environment:
 
     def step(self, states, domain):
         raise NotImplementedError()
+
+    @staticmethod
+    def from_config(config):
+        'Returns the appropriate environment given the experiment configuration options.'
+        if config.get('environment_backend') == 'Rust':
+            return RustEnvironment(config.get('domain'))
+        else:
+            return RacketEnvironment(config['environment_url'], config.get('domain'))
 
 
 class RacketEnvironment(Environment):
@@ -125,7 +136,11 @@ class RustEnvironment(Environment):
     def step(self, states, domain=None):
         domain = domain or self.default_domain
 
-        next_states = commoncore.step(domain, [s.facts[-1] for s in states])
+        try:
+            next_states = commoncore.step(domain, [s.facts[-1] for s in states])
+        except:
+            print('Error stepping', states)
+            raise
 
         rewards = [int(ns is None) for ns in next_states]
         actions = [[Action(state,
