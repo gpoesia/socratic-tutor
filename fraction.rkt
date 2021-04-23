@@ -19,7 +19,7 @@
 ;;; D.  a number divided by 1 is itself ⇒  25/1 = 25
 ;;; E.  multiply a fraction by a scaling factor ⇒  1/1 = 2/2
 ;;; F.  merge two fractions ⇒  2/2 + 3/2 = (2+3)/2
-;;; G.  A number over a multiple of itself should be simplied ⇒ 10/5 = 2
+;;; G.  A number over 1 is itself ⇒ 10/1 = 10
 ;;; H.  Evaluates a binary operation on numbers, except for fractions
 ;;; I. Commutativity
 
@@ -73,7 +73,7 @@
         (BinOp op* (Number (/ N k)) (Number k))))
 
 (define (divisible? n x)
-  (zero? (remainder n x)))
+  (and (not (eq? x 0)) (zero? (remainder n x))))
 
 ; C.  convert a number into fraction by dividing one ⇒  3 = 3/1
 (define fd:convert-into-fraction?
@@ -126,7 +126,7 @@
 
 
 ; H. Evaluates binary operations, except for division with one exception:
-; G. A number over a multiple of itself should be simplied 10/5 = 2
+; G. A number over 1 is itself and 0 over anything is 0
 
 (define fd:binop-eval?
   (function
@@ -134,7 +134,7 @@
     #:if (not (eq? op op/))
     #t]
    [(BinOp op (Number n1) (Number n2))
-    #:if (divisible? n1 n2)
+    #:if (or (eq? n2 1) (eq? n1 0))
     #t]
    [_ #f]))
 
