@@ -1,6 +1,7 @@
 // Definition of a domain
 
 pub mod equations;
+pub mod ternary;
 
 use rand_pcg::Pcg64;
 

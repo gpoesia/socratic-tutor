@@ -620,6 +620,9 @@ fn a_cancel_ops(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String)> 
 }
 
 mod tests {
+    // use std::str::FromStr;
+    // use crate::domain::Domain;
+
     #[test]
     fn test_parsing_cognitive_tutor_templates() {
         for s in super::COGNITIVE_TUTOR_TEMPLATES.iter() {
