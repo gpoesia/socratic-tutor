@@ -82,7 +82,7 @@
     [(TernaryNumber digits) (length digits)]
     [(CountingSequence l r) 2]
     [(SortingList l) (length l)]
-    [(FractionExpression terms) (foldl + 0 (map term-size terms)) ]
+    [(FractionExpression terms) (term-size terms) ]
     ))
 
 ; Returns a list with the direct subterms of `t`.
@@ -431,7 +431,7 @@
                      " | ")]
    ;FractionExpression
    [(FractionExpression t)
-    (format "~a" (format-term t))]
+    (format "F ~a" (format-term t))]
    ; Marker
    [(Marker t)
     (format "~a~a~a" BEGIN-MARKER (format-term t) END-MARKER)]

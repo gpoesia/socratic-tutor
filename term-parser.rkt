@@ -74,7 +74,7 @@
          [`(sorting_single ,n) (list n)]
          [`(sorting_many ,h ,_ ,t) (cons h (parse-tree-to-term t))]
          ; Fraction domain
-        [`(Dfraction ,_ ,t) (parse-tree-to-term t)]
+        [`(Dfraction ,_ ,t) (FractionExpression (parse-tree-to-term t))]
         [`(fexpr_l1 ,t) (parse-tree-to-term t)]
         [`(fsum ,a ,_ ,b) (BinOp op+ (parse-tree-to-term a) (parse-tree-to-term b))]
         [`(fsub ,a ,_ ,b) (BinOp op- (parse-tree-to-term a) (parse-tree-to-term b))]

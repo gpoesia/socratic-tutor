@@ -2,3 +2,5 @@
 /curly-fn-lib
 /variational-item-response-theory-public
 .DS_Store
+/wandb
+/checkpoints

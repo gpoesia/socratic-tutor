@@ -2,7 +2,6 @@
 #lang algebraic/racket/base
 
 (require "terms.rkt")
-
 (require racket/list)
 (require racket/string)
 (require racket/function)
@@ -174,17 +173,17 @@
   (define (name unmet-goals old-facts new-facts)
     (apply append
            (map (lambda (f)
-                  (log-debug "fact ~a\n" (format-term (Fact-term f)))
-                  (let ([indices (filter-subterms (Fact-term f) predicate)])
-                    (log-debug "indices ~a\n" indices)
+                  ;;; (log-debug "fact ~a\n" (format-term (Fact-term f)))
+                  (let ([indices (filter-subterms (FractionExpression-elems (Fact-term f)) predicate)])
+                    ;;; (log-debug "indices ~a\n" indices)
                     (map (lambda (i)
-                           (let ([rewritten (rewrite-subterm (Fact-term f) transform i)])
-                             (log-debug "~a rewrote ~a => ~a\n"
-                                        #(name)
-                                        (format-term (Fact-term f))
-                                        (format-term rewritten))
+                           (let ([rewritten (rewrite-subterm (FractionExpression-elems(Fact-term f)) transform i)])
+                            ;;;  (log-debug "~a rewrote ~a => ~a\n"
+                                        ;;; #(name)
+                                        ;;; (format-term (Fact-term f))
+                                        ;;; (format-term (FractionExpression rewritten)))
                              (if rewritten
-                                 (fact rewritten
+                                 (fact (FractionExpression rewritten)
                                        (FactProof
                                         transform
                                         (list (FactId (Fact-id f)) i))) ;
@@ -200,19 +199,19 @@
   (define (name unmet-goals old-facts new-facts)
     (apply append
            (map (lambda (f)
-                  (log-debug "fact-term ~a \n" (Fact-term f))
+                  ;;; (log-debug "fact-term ~a \n" (Fact-term f))
                   (let ([context-options (context (Fact-term f))])
                     (apply append
                            (map (lambda (c)
-                                  (let ([indices (filter-subterms-w-context (Fact-term f) predicate c)])
+                                  (let ([indices (filter-subterms-w-context (FractionExpression-elems (Fact-term f)) predicate c)])
                                     (map (lambda (i)
-                                           (let ([rewritten (rewrite-subterm-w-context (Fact-term f) transform i c)])
-                                             (log-debug "~a rewrote ~a => ~a\n"
-                                                        #(name)
-                                                        (format-term (Fact-term f))
-                                                        (format-term rewritten))
+                                           (let ([rewritten (rewrite-subterm-w-context (FractionExpression-elems(Fact-term f)) transform i c)])
+                                            ;;;  (log-debug "~a rewrote ~a => ~a\n"
+                                                        ;;; #(name)
+                                                        ;;; (format-term (Fact-term f))
+                                                        ;;; (format-term (FractionExpression rewritten)))
                                              (if rewritten
-                                                 (fact rewritten
+                                                 (fact (FractionExpression rewritten)
                                                        (FactProof
                                                         transform
                                                         (list (FactId (Fact-id f)) i))) ;need toincorportate context into factid?
@@ -227,12 +226,12 @@
 ;List all numbers appearing in the expression
 (define enumerate-all-numbers-in-expression
   (function
+  [ (FractionExpression f) (enumerate-all-numbers-in-expression f)]
    [(Number a) (list a)]
    [(BinOp op t1 t2) (append (enumerate-all-numbers-in-expression t1) (enumerate-all-numbers-in-expression t2))]
    ))
 ;List all numbers appearing in the expression + numbers in the `primes` list
 (define (enumerate-all-numbers f)
-  (log-debug "enumerate-all-numbers ~a \n" f)
   (remove-duplicates (append (enumerate-all-numbers-in-expression f)  primes) );
   )
 
@@ -263,7 +262,6 @@
            (map (lambda (t) (t unmet-goals old-facts new-facts))
                 tactics))))
 
-
 ; Applies all tactics.
 (define fdt:all (combine-tactics
                  (list
@@ -279,7 +277,7 @@
 ; Domain function: given a node, lists all child nodes.
 (define (d:fraction facts)
   ; Avoid huge equations.
-  (if (> (term-size (Fact-term (last facts))) MAX-SIZE)
+ (if (> (term-size (Fact-term (last facts))) MAX-SIZE)
       empty
       (filter (lambda (f) (not (member f facts fact-terms-equal?)))
               (fdt:all #f empty (list (last facts))))))
@@ -290,7 +288,7 @@
          [fractions (map (lambda (_) (generate-fraction))(range number-of-terms))])
     (Problem
      (list (assumption (FractionExpression (list-to-sum fractions))))
-     (list (Number)))
+     (list (AnyNumber)))
     ))
 
 ; Convert a list of single elements into a sum through BinOp
