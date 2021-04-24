@@ -462,9 +462,8 @@ class BeamSearchIterativeDeepening(LearningAgent):
         # Knob: how many future states to use as examples.
         self.n_future_states = config.get('n_future_states', 1)
         self.n_negatives = config.get('n_negatives', 1)
+        self.learning_rate = config.get('lr', 1e-4)
 
-        self.optimizer = torch.optim.Adam(q_function.parameters(),
-                                          lr=config.get('learning_rate', 1e-4))
 
     def name(self):
         if self.full_imitation_learning:
@@ -634,11 +633,13 @@ class BeamSearchIterativeDeepening(LearningAgent):
         if batch_size == 0:
             return
 
+        optimizer = torch.optim.Adam(self.q_function.parameters(), lr=self.learning_rate)
+
         for i in range(self.n_gradient_steps):
             batch = random.sample(examples, batch_size)
             batch_s, batch_a, batch_r = zip(*batch)
 
-            self.optimizer.zero_grad()
+            optimizer.zero_grad()
 
             r_pred = self.q_function(batch_a)
             loss = F.binary_cross_entropy(r_pred, torch.tensor(batch_r,
@@ -646,7 +647,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
                                                                device=r_pred.device))
             wandb.log({ 'train_loss': loss.item() })
             loss.backward()
-            self.optimizer.step()
+            optimizer.step()
 
         self.bootstrapping = False
 
