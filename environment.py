@@ -14,7 +14,7 @@ except ModuleNotFoundError:
 
 class State:
     'Represents a state, which is equivalent to a problem in our domains.'
-    def __init__(self, facts, goals, value, parent_action=None):
+    def __init__(self, facts: list[str], goals: list[str], value: float, parent_action: 'Action' = None):
         self.facts = tuple(facts)
         self.goals = tuple(goals)
         self.value = value
@@ -54,14 +54,14 @@ class Action:
 
 class Environment:
     'Generic environment back-end'
-    def generate_new(self, domain, seed):
+    def generate_new(self, domain: str, seed: int = None) -> State:
         raise NotImplementedError()
 
-    def step(self, states, domain):
+    def step(self, states: list[State], domain: str = None) -> list[tuple[bool, list[Action]]]:
         raise NotImplementedError()
 
     @staticmethod
-    def from_config(config):
+    def from_config(config: dict):
         'Returns the appropriate environment given the experiment configuration options.'
         if config.get('environment_backend') == 'Rust':
             return RustEnvironment(config.get('domain'))
@@ -138,7 +138,7 @@ class RustEnvironment(Environment):
 
         try:
             next_states = commoncore.step(domain, [s.facts[-1] for s in states])
-        except:
+        except Exception:
             print('Error stepping', states)
             raise
 
@@ -194,7 +194,7 @@ if __name__ == '__main__':
 
     if opt.rust:
         assert COMMONCORE_AVAILABLE, "Could not find commoncore.so"
-        env = RustEnvironment(opt.domain)
+        env: Environment = RustEnvironment(opt.domain)
     else:
         assert opt.racket_url, 'Need a URL to use the Racket environment: either pass --racket-url or --rust'
         env = RacketEnvironment(opt.racket_url, opt.domain)
