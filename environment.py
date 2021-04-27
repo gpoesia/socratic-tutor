@@ -3,6 +3,7 @@
 import argparse
 import requests
 import random
+import time
 
 try:
     import commoncore
@@ -182,11 +183,28 @@ def interact(environment):
         state = actions[int(choice)].next_state
 
 
+def benchmark(environment):
+    before = time.time()
+
+    for i in range(10):
+        problem = env.generate_new(seed=i)
+        for i in range(30):
+            r, actions = env.step([problem])[0]
+            if r or not actions:
+                break
+            problem = actions[0].next_state
+
+    after = time.time()
+    print(after - before)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Interact directly with the environment.")
     parser.add_argument('--rust', help='Use the Rust back-end', action='store_true')
     parser.add_argument('--racket-url', type=str,
                         help='Use the Racket backend at the provided URL.')
+    parser.add_argument('--interact', help='Solve problems interactively', action='store_true')
+    parser.add_argument('--benchmark', help='Run a small benchmark of the environment', action='store_true')
     parser.add_argument('--domain', type=str,
                         help='What domain to use.', default='equations-ct')
 
@@ -199,4 +217,7 @@ if __name__ == '__main__':
         assert opt.racket_url, 'Need a URL to use the Racket environment: either pass --racket-url or --rust'
         env = RacketEnvironment(opt.racket_url, opt.domain)
 
-    interact(env)
+    if opt.benchmark:
+        benchmark(env)
+    elif opt.interact:
+        interact(env)
