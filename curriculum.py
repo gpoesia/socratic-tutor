@@ -235,6 +235,6 @@ if __name__ == '__main__':
     config = json.load(open(opt.config))
 
     if opt.build:
-        build_curriculum(config, torch.device('cpu') if not opt.gpu else torch.device(opt.gpu))
+        build_curriculum(config, torch.device('cpu') if opt.gpu is None else torch.device(opt.gpu))
     elif opt.serve:
         serve_curriculum(config)
