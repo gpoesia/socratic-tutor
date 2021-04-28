@@ -10,6 +10,7 @@
       "lstm_layers": 2,
       "action_label_type": "state"
     },
+
     "agent": {
       "type": "BeamSearchIterativeDeepening",
       "name": "Knobs52",
@@ -42,5 +43,7 @@
       "model_output": "test_knobs.pt",
       "max_steps": 1000000,
       "checkpoint_path": "checkpoints/{}-ck{}.pt"
-    }
+    },
+    "output_root":"results"
+
   }
