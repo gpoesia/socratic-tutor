@@ -23,7 +23,14 @@
       "depth_step": 1,
       "optimize_every": 10,
       "optimize_on": "solution",
-      "step_every": 200
+      "step_every": 200,
+      "q_function": {
+        "type": "DRRN",
+        "char_emb_dim": 64,
+        "hidden_dim": 256,
+        "lstm_layers": 2,
+        "action_label_type": "state"
+      }
     },
     "eval_environment": {
       "domains": ["fraction"],
