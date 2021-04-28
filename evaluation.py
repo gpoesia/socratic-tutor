@@ -2,6 +2,7 @@ import datetime
 import pickle
 import traceback
 import hashlib
+import os
 
 import util
 from environment import Environment
@@ -54,16 +55,19 @@ class EndOfLearning(Exception):
 
 class EnvironmentWithEvaluationProxy:
     '''Wrapper around the environment that triggers an evaluation every K calls'''
-    def __init__(self, experiment_id, agent, environment, config={}):
+    def __init__(self, experiment_id: str, run_index: int, agent_name: str, domain: str,
+                 agent, environment: Environment, config: dict = {}):
+
         self.experiment_id = experiment_id
+        self.run_index = experiment_id
+        self.agent_name = agent_name
+        self.domain = domain
         self.environment = environment
         self.n_steps = 0
 
         self.evaluate_every = config['evaluate_every']
         self.eval_config = config['eval_config']
         self.agent = agent
-        self.output_path = config['output']
-        self.checkpoint_path = config['checkpoint_path']
         self.max_steps = config['max_steps']
         self.print_every = config.get('print_every', 100)
 
@@ -72,6 +76,15 @@ class EnvironmentWithEvaluationProxy:
         self.cumulative_reward = 0
         self.begin_time = datetime.datetime.now()
         self.n_checkpoints = 0
+
+        output_root = os.path.join(config['output_root'], experiment_id, agent_name, domain, f'run{run_index}')
+        checkpoint_dir = os.path.join(output_root, 'checkpoints')
+
+        os.makedirs(output_root, exist_ok=True)
+        os.makedirs(checkpoint_dir, exist_ok=True)
+
+        self.results_path = os.path.join(output_root, 'results.pkl')
+        self.checkpoint_dir = checkpoint_dir
 
     def generate_new(self, domain=None, seed=None):
         self.n_new_problems += 1
@@ -122,23 +135,21 @@ class EnvironmentWithEvaluationProxy:
         print('Success rate:', results['success_rate'],
               '\tMax length:', results['max_solution_length'])
 
-        output_path = self.output_path.format(self.experiment_id)
-
         try:
-            with open(output_path, 'rb') as f:
+            with open(self.results_path, 'rb') as f:
                 existing_results = pickle.load(f)
         except Exception as e:
-            print(f'Starting new results log at {self.output_path} ({e})')
+            print(f'Starting new results log at {self.results_path} ({e})')
             existing_results = []
 
         existing_results.append(results)
 
-        with open(output_path, 'wb') as f:
+        with open(self.results_path, 'wb') as f:
             pickle.dump(existing_results, f)
 
         torch.save(self.agent.q_function,
-                   self.checkpoint_path.format(self.experiment_id,
-                                               self.n_checkpoints))
+                   os.path.join(self.checkpoint_dir,
+                                f'{self.n_checkpoints}.pt'))
         self.n_checkpoints += 1
 
     def evaluate_agent(self):

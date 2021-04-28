@@ -67,7 +67,7 @@ class QFunction(nn.Module):
 
         return success, history
 
-    def recover_solutions(self, rollout_history: list[list[State]]) -> list[State]:
+    def recover_solutions(self, rollout_history: list[list[State]]) -> list[list[State]]:
         '''Reconstructs the solutions (lists of states) from the history of a successful rollout.'''
 
         solution_states = [s for s in rollout_history[-1] if s.value > 0]
@@ -185,6 +185,46 @@ class StateRNNValueFn(QFunction):
 
     def name(self):
         return 'StateRNNValueFn'
+
+
+# A simple architecture that just estimates the value of the next state.
+@register(QFunction)
+class Bilinear(QFunction):
+    def __init__(self, config, device):
+        super().__init__()
+
+        char_emb_dim = config.get('char_emb_dim', 128)
+        self.hidden_dim = hidden_dim = config.get('hidden_dim', 256)
+        self.lstm_layers = config.get('lstm_layers', 2)
+
+        self.vocab = CharEncoding({'embedding_dim': char_emb_dim})
+        self.encoder = nn.LSTM(char_emb_dim, hidden_dim,
+                               self.lstm_layers, bidirectional=True)
+        self.bilinear_comb = nn.Linear(2*hidden_dim, 2*hidden_dim)
+        self.to(device)
+        self.device = device
+
+    def forward(self, actions):
+        current_state_embedding = self.embed_states([a.state for a in actions])
+        next_state_embedding = self.embed_states([a.next_state for a in actions])
+        q_values = ((self.bilinear_comb(current_state_embedding) * next_state_embedding)
+                    .sum(dim=1)
+                    .exp())
+        return q_values
+
+    def embed_states(self, states):
+        N, H = len(states), self.hidden_dim
+        states = [s.facts[-1] for s in states]
+        state_seq, _ = self.vocab.embed_batch(states, self.device)
+        state_seq = state_seq.transpose(0, 1)
+        _, (state_hn, state_cn) = self.encoder(state_seq)
+        state_embedding = (state_hn
+                           .view(self.lstm_layers, 2, N, self.hidden_dim)[-1]
+                           .permute((1, 2, 0)).reshape(N, 2*H))
+        return state_embedding
+
+    def name(self):
+        return 'Bilinear'
 
 
 class LearnerValueFunctionAdapter(QFunction):

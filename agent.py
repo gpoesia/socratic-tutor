@@ -4,6 +4,7 @@
 import argparse
 import collections
 import copy
+from dataclasses import dataclass
 import time
 import itertools
 import random
@@ -35,7 +36,7 @@ class LearningAgent:
     Any learning algorithm can be combined with any Q-Function.
     '''
 
-    subtypes = {}
+    subtypes: dict = {}
 
     def learn_from_environment(self, environment):
         "Lets the agent learn by interaction using any algorithm."
@@ -55,6 +56,179 @@ class LearningAgent:
     @staticmethod
     def new(q_fn, config):
         return LearningAgent.subtypes[config['type']](q_fn, config)
+
+
+@dataclass
+class ContrastiveExample:
+    "Keeps track of one contrastive example (one positive vs N negative actions)"
+    positive: Action
+    negatives: list[Action]
+    gap: int  # How many steps into the future is this example for.
+
+
+@register(LearningAgent)
+class NCE(LearningAgent):
+    "Agent that uses the InfoNCE contrastive loss to differentiate positive/negative actions"
+    def __init__(self, q_function, config):
+        self.q_function = q_function
+        self.bootstrapping = True
+        replay_buffer_size = config.get('replay_buffer_size', 10**6)
+        self.examples = collections.deque(maxlen=replay_buffer_size)
+
+        self.training_problems_solved = 0
+
+        self.max_depth = config['max_depth']
+        self.depth_step = config['depth_step']
+        self.initial_depth = config['initial_depth']
+        self.step_every = config['step_every']
+        self.beam_size = config['beam_size']
+
+        self.optimize_every = config.get('optimize_every', 1)
+        self.n_gradient_steps = config.get('n_gradient_steps', 64)
+
+        if config.get('bootstrap_from', 'Random') == 'InverseLength':
+            self.bootstrap_policy = InverseLength(self.q_function.device)
+        else:
+            self.bootstrap_policy = RandomQFunction(self.q_function.device)
+
+        self.n_bootstrap_problems = config.get('n_bootstrap_problems', 100)
+
+        # Knob: whether to add an artificial 'success' state in the end
+        # of the solution in training examples. The idea is that this would align
+        # all states that are in the path to a solution closer together.
+        self.add_success_state = config.get('add_success_state', False)
+        self.keep_optimizer = config.get('keep_optimizer', True)
+        # Knob: how many future states to use as examples.
+        self.n_future_states = config.get('n_future_states', 1)
+        self.learning_rate = config.get('lr', 1e-4)
+        self.reset_optimizer()
+
+    def reset_optimizer(self):
+        self.optimizer = torch.optim.Adam(self.q_function.parameters(), lr=self.learning_rate)
+
+    def name(self):
+        return 'NCE'
+
+    def learn_from_environment(self, environment):
+        self.current_depth = self.initial_depth
+        self.bootstrapping = True
+
+        for i in itertools.count():
+            problem = environment.generate_new()
+            solution = self.beam_search(problem, environment)
+
+            if solution is not None:
+                self.training_problems_solved += 1
+
+                if self.training_problems_solved > self.n_bootstrap_problems:
+                    self.bootstrapping = False
+
+                    if self.training_problems_solved % self.optimize_every == 0:
+                        logging.info('Running SGD steps.')
+                        self.gradient_steps()
+
+            if (i + 1) % self.step_every == 0:
+                self.current_depth = min(self.max_depth, self.current_depth + self.depth_step)
+                logging.info(f'Beam search depth increased to {self.current_depth}.')
+
+    def get_q_function(self):
+        if self.bootstrapping:
+            return self.bootstrap_policy
+        return self.q_function
+
+    def beam_search(self, state, environment):
+        '''Performs beam search in a train problem while recording particular examples
+        in the replay buffer (according to the various knobs in the algorithm, see config)'''
+
+        states_by_id = {id(state): state}
+        state_parent_edge = {}
+        beam = [state]
+        solution = None  # The state that we found that solves the problem.
+        q = self.get_q_function()
+        seen = {state}
+        visited_states = [[state]]  # List of states visited in each iteration (used to retrieve negatives).
+
+        logging.info(f'Trying {state}')
+
+        for i in range(self.current_depth):
+            rewards, actions = zip(*environment.step(beam))
+
+            for s, r, state_actions in zip(beam, rewards, actions):
+                for a in state_actions:
+                    # Remember how we got to this state.
+                    states_by_id[id(a.next_state)] = a.next_state
+                    state_parent_edge[id(a.next_state)] = (s, a)
+                # Record solution, if found.
+                if r:
+                    solution = s
+
+            if solution is not None:
+                break
+
+            all_actions = [a for state_actions in actions for a in state_actions]
+
+            if not len(all_actions):
+                break
+
+            # Query model, sort next states by value, then update beam.
+            with torch.no_grad():
+                q_values = q(all_actions).tolist()
+
+            for a, v in zip(all_actions, q_values):
+                a.value = v
+
+            next_states = []
+            for s, state_actions in zip(beam, actions):
+                for a in state_actions:
+                    ns = a.next_state
+                    ns.value = s.value + math.log(a.value)
+                    next_states.append(ns)
+
+            next_states.sort(key=lambda s: s.value, reverse=True)
+            # Remove duplicates while keeping the order (i.e. if a state appears multiple times,
+            # keep the one with the largest value). Works because dict is ordered in Python 3.6+.
+            next_states = [s for s in dict.fromkeys(next_states) if s not in seen]
+            visited_states.append(next_states)
+            seen.update(next_states)
+            beam = next_states[:self.beam_size]
+            logging.info(f'Beam #{i}: {beam}:')
+
+        logging.info('Solved? {} (solution len {}, q={})'
+                     .format(solution is not None,
+                             solution and len(visited_states),
+                             type(q)))
+
+        # If found a solution, make contrastive examples from each iteration.
+        if solution is not None:
+            positive = solution
+
+            for states in reversed(visited_states):
+                negatives = [s for s in states if id(s) != id(positive)]
+                example = ContrastiveExample(positive=positive, negatives=negatives, gap=1)
+                self.examples.append(example)
+
+        return solution
+
+    def stats(self):
+        return "{} solutions found, {} contrastive examples".format(
+            self.training_problems_solved,
+            len(self.examples))
+
+    def gradient_steps(self):
+        if not self.examples:
+            return
+
+        for i in range(self.n_gradient_steps):
+            e = random.choice(self.examples)
+            all_actions = [e.positive] + e.negatives
+
+            self.optimizer.zero_grad()
+
+            f_pred = self.q_function(all_actions)
+            loss = -(f_pred[0] / f_pred.sum()).log()
+            wandb.log({'train_loss': loss.item()})
+            loss.backward()
+            self.optimizer.step()
 
 
 @register(LearningAgent)
@@ -391,18 +565,19 @@ def run_agent_experiment(config, device):
                reinit=True)
 
     env = Environment.from_config(config)
-    q_fn = QFunction.new(config['q_function'], device)
+    q_fn = QFunction.new(config['agent']['q_function'], device)
     agent = LearningAgent.new(q_fn, config['agent'])
 
     print('Running', q_fn.name(), agent.name(), 'on', domain)
 
-    eval_env = EnvironmentWithEvaluationProxy(run_id, agent, env, config['eval_environment'])
+    eval_env = EnvironmentWithEvaluationProxy(experiment_id, run_index, agent_name, domain,
+                                              agent, env, config['eval_environment'])
     eval_env.evaluate_agent()
 
 
 def run_batch_experiment(config):
     'Spawns a series of processes to run experiments for each agent/domain pair.'
-    experiment_id = util.random_id()
+    experiment_id = config.get('experiment_id', util.random_id())
     domains = config['domains']
     agents = [c for c in config['agents'] if not c.get('disable')]
     n_runs = config.get('n_runs', 1)
@@ -414,7 +589,10 @@ def run_batch_experiment(config):
     run_processes = []
     environments = []
     agent_index = 0
-    gpus = config['gpus']
+    gpus = config.get('gpus', [])
+
+    if not gpus:
+        print('WARNING: no GPUs specified.')
 
     print('Starting experiment', experiment_id)
 
@@ -439,7 +617,6 @@ def run_batch_experiment(config):
                         'run_index': run_index,
                         'agent': agent,
                         'domain': domain,
-                        'q_function': config['q_function'],
                         'environment_backend': environment_backend,
                         'environment_url': 'http://localhost:{}'.format(port),
                         'eval_environment': copy.deepcopy(config['eval_environment'])
@@ -448,8 +625,8 @@ def run_batch_experiment(config):
                     print('Running agent with config', json.dumps(run_config))
 
                     agent_process = subprocess.Popen(
-                        ['python3', 'agent.py', '--learn', '--config', json.dumps(run_config),
-                         '--gpu', str(gpus[agent_index % len(gpus)])],
+                        ['python3', 'agent.py', '--learn', '--config', json.dumps(run_config)]
+                        + (['--gpu', str(gpus[agent_index % len(gpus)])] if gpus else []),
                         stderr=subprocess.DEVNULL)
                     run_processes.append(agent_process)
 
