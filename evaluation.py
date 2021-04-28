@@ -1,9 +1,11 @@
 import datetime
 import pickle
 import traceback
+import hashlib
 
 import util
 from environment import Environment
+from q_function import InverseLength, RandomQFunction
 
 import torch
 import wandb
@@ -173,10 +175,6 @@ def evaluate_policy(config, device):
         q = InverseLength()
     else:
         q = torch.load(config['model_path'], map_location=device)
-
-    if isinstance(q, LearnerValueFunction):
-        q.encoding.max_line_length = 100
-        q = LearnerValueFunctionAdapter(q)
 
     q.to(device)
     q.device = device
