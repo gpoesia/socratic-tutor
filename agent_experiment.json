@@ -42,8 +42,9 @@
       "output": "knobs_output.json",
       "model_output": "test_knobs.pt",
       "max_steps": 1000000,
-      "checkpoint_path": "checkpoints/{}-ck{}.pt"
-    },
-    "output_root":"results"
+      "checkpoint_path": "checkpoints/{}-ck{}.pt",
+      "output_root":"results"
+
+    }
 
   }
