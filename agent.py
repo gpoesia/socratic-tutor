@@ -210,8 +210,11 @@ class NCE(LearningAgent):
                 example = ContrastiveExample(positive=positive.parent_action,
                                              negatives=negatives,
                                              gap=1)
-                positive = positive.parent_action.state
                 self.examples.append(example)
+
+                if positive.parent_action is None:
+                    break
+                positive = positive.parent_action.state
 
         return solution
 
