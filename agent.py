@@ -140,8 +140,6 @@ class NCE(LearningAgent):
         '''Performs beam search in a train problem while recording particular examples
         in the replay buffer (according to the various knobs in the algorithm, see config)'''
 
-        states_by_id = {id(state): state}
-        state_parent_edge = {}
         beam = [state]
         solution = None  # The state that we found that solves the problem.
         q = self.get_q_function()
@@ -154,10 +152,6 @@ class NCE(LearningAgent):
             rewards, actions = zip(*environment.step(beam))
 
             for s, r, state_actions in zip(beam, rewards, actions):
-                for a in state_actions:
-                    # Remember how we got to this state.
-                    states_by_id[id(a.next_state)] = a.next_state
-                    state_parent_edge[id(a.next_state)] = (s, a)
                 # Record solution, if found.
                 if r:
                     solution = s
@@ -541,7 +535,7 @@ class QLearning(LearningAgent):
         # Compute ys.
         with torch.no_grad():
             for t in batch:
-                if t.r > 0:  # Next state is terminal.
+                if t.r > 0 or not t.A1:  # Next state is terminal.
                     ys.append(t.r)
                 else:
                     # Need to compute maximum Q value for all actions.
