@@ -193,6 +193,9 @@ class NCE(LearningAgent):
             beam = next_states[:self.beam_size]
             logging.info(f'Beam #{i}: {beam}:')
 
+            if not beam:
+                break
+
         logging.info('Solved? {} (solution len {}, q={})'
                      .format(solution is not None,
                              solution and len(visited_states),
