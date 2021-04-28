@@ -206,14 +206,14 @@ class NCE(LearningAgent):
             positive = solution
 
             for states in reversed(visited_states):
+                if positive.parent_action is None:
+                    break
+
                 negatives = [s for s in states if id(s) != id(positive)]
                 example = ContrastiveExample(positive=positive.parent_action,
                                              negatives=negatives,
                                              gap=1)
                 self.examples.append(example)
-
-                if positive.parent_action is None:
-                    break
                 positive = positive.parent_action.state
 
         return solution
