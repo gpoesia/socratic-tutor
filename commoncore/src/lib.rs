@@ -18,7 +18,7 @@ thread_local!{
     static DOMAINS: HashMap<&'static str, Arc<dyn Domain>> = {
         let mut map : HashMap<&'static str, Arc<dyn Domain>>  = HashMap::new();
         map.insert("equations-ct", Arc::new(Equations {}));
-        map.insert("ternary-addition", Arc::new(TernaryAddition::new(10)));
+        map.insert("ternary-addition", Arc::new(TernaryAddition::new(15)));
         map
     };
 }
