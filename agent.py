@@ -570,7 +570,8 @@ def run_agent_experiment(config, device):
     wandb.init(id=run_id,
                name=run_id,
                config=config,
-               project='solver-agent',
+               project='test',
+               entity = "socratic",
                reinit=True)
 
     env = Environment.from_config(config)
