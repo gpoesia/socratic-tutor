@@ -78,7 +78,7 @@
    ))
 
 (define host (make-parameter "127.0.0.1"))
-(define port (make-parameter 9898))
+(define port (make-parameter 9876))
 
 (command-line
   #:program "environment-server"

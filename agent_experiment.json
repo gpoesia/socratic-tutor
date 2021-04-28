@@ -2,7 +2,7 @@
     "experiment_id": "knobs-state",
     "domain": "fraction",
     "gpus":[9],
-    "environment_url": "http://localhost:9898",
+    "environment_url": "http://localhost:9876",
     "q_function": {
       "type": "DRRN",
       "char_emb_dim": 64,
