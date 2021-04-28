@@ -1,0 +1,39 @@
+{
+    "experiment_id": "knobs-state",
+    "domain": "fraction",
+    "gpus":[9],
+    "environment_url": "http://localhost:9898",
+    "q_function": {
+      "type": "DRRN",
+      "char_emb_dim": 64,
+      "hidden_dim": 256,
+      "lstm_layers": 2,
+      "action_label_type": "state"
+    },
+    "agent": {
+      "type": "BeamSearchIterativeDeepening",
+      "name": "Knobs52",
+      "add_success_state": true,
+      "n_future_states": 5,
+      "n_negatives": 10,
+      "replay_buffer_size": 1000000,
+      "max_depth": 30,
+      "beam_size": 10,
+      "initial_depth": 6,
+      "depth_step": 1,
+      "optimize_every": 10,
+      "optimize_on": "solution",
+      "step_every": 200
+    },
+    "eval_environment": {
+      "domains": ["fraction"],
+      "evaluate_every": 10000,
+      "eval_config": {
+        "n_problems": 200
+      },
+      "output": "knobs_output.json",
+      "model_output": "test_knobs.pt",
+      "max_steps": 1000000,
+      "checkpoint_path": "checkpoints/{}-ck{}.pt"
+    }
+  }
