@@ -203,7 +203,7 @@ class NCE(LearningAgent):
                 if positive.parent_action is None:
                     break
 
-                negatives = [s for s in states if id(s) != id(positive)]
+                negatives = [s.parent_action for s in states if id(s) != id(positive)]
                 example = ContrastiveExample(positive=positive.parent_action,
                                              negatives=negatives,
                                              gap=1)
