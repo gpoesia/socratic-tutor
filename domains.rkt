@@ -69,6 +69,13 @@
    is-sorting-list-sorted?
    d:sorting))
 
+(define SortingTestDomain
+  (Domain
+   "sorting/test"
+   generate-sorting-problem
+   is-sorting-list-sorted?
+   d:sorting))
+
 (define FractionDomain
   (Domain
    "fraction"

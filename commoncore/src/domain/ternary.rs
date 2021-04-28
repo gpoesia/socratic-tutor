@@ -58,8 +58,10 @@ impl FromStr for TernaryNumber {
 
         let mut digits = Vec::new();
 
-        for d in s[2..(s.len() - 1)].split(' ') {
-            digits.push(TernaryDigit::from_str(&d)?);
+        if s.len() > 3 {
+            for d in s[2..(s.len() - 1)].split(' ') {
+                digits.push(TernaryDigit::from_str(&d)?);
+            }
         }
 
         Ok(TernaryNumber{digits: digits})
@@ -170,8 +172,14 @@ impl super::Domain for TernaryAddition {
 }
 
 mod test {
+    use std::str::FromStr;
+
     #[test]
-    fn test_domain() {
-        println!("Yes!");
+    fn test_parser() {
+        let d = super::TernaryNumber::from_str("#()").unwrap();
+        assert_eq!(d.digits.len(), 0);
+
+        let d = super::TernaryNumber::from_str("#(a0)").unwrap();
+        assert_eq!(d.digits.len(), 1);
     }
 }
