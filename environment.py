@@ -139,7 +139,7 @@ class RustEnvironment(Environment):
 
         try:
             next_states = commoncore.step(domain, [s.facts[-1] for s in states])
-        except Exception:
+        except:
             print('Error stepping', states)
             raise
 

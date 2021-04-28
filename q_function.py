@@ -112,7 +112,14 @@ class DRRN(QFunction):
         self.action_label_type = config.get('action_label_type', 'action')
 
         self.to(device)
+
+    def to(self, device):
+        QFunction.to(self, device)
         self.device = device
+        self.state_vocab.to(device)
+        self.state_vocab.device = device
+        self.action_vocab.to(device)
+        self.action_vocab.device = device
 
     def forward(self, actions):
         state_embedding = self.embed_states([a.state for a in actions])
@@ -165,6 +172,10 @@ class StateRNNValueFn(QFunction):
                                self.lstm_layers, bidirectional=True)
         self.output = nn.Linear(2*hidden_dim, 1)
         self.to(device)
+
+    def to(self, device):
+        QFunction.to(self, device)
+        self.vocab.device = device
         self.device = device
 
     def forward(self, actions):
