@@ -83,12 +83,6 @@
    is-fraction-simplified?
    d:fraction))
 
-(define SortingTestDomain
-  (Domain
-   "sorting/test"
-   generate-sorting-problem
-   is-sorting-list-sorted?
-   d:sorting))
 
 (define AllDomains
   (list
