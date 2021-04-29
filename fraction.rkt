@@ -134,7 +134,7 @@
     #:if (not (eq? op op/))
     #t]
    [(BinOp op (Number n1) (Number n2))
-    #:if (or (eq? n2 1) (eq? n1 0))
+    #:if (or (eq? n2 1) (eq? n2 -1) (eq? n1 0))
     #t]
    [_ #f]))
 
@@ -276,6 +276,7 @@
 
 ; Domain function: given a node, lists all child nodes.
 (define (d:fraction facts)
+(log-debug "here\n")
   ; Avoid huge equations.
  (if (> (term-size (Fact-term (last facts))) MAX-SIZE)
       empty
@@ -317,15 +318,16 @@
 
 (define (is-fraction-simplified? f g)
   (let ([x (FractionExpression-elems (Fact-term f))])
-    (or (Number? x) (is-simple-fraction? x) )
+     (or (Number? x) (is-simple-fraction? x) )
     ))
 
 ; a simple fraction is of the form A / B
 ; where B is not 1, and gcd(A, B) = 1
 (define is-simple-fraction?
+
   (function
    [(BinOp op (Number n) (Number d))
-    #:if (and (eq? op/ op) (not (eq? 1 d))  (eq? 1 (gcd n d)))
+    #:if (and (eq? op/ op) (not (eq? 1 d)) (not (eq? -1 d)) (eq? 1 (gcd (abs n) (abs d))))
     #t]
    [_ #f]))
 
