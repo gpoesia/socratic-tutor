@@ -333,9 +333,8 @@
 
 (define (gcd a b)
   (cond
-    [(> a b) (gcd b (- a b))]
-    [(< a b) (gcd a (- b a))]
-    [else a])
+    [(eq? 0 b) a]
+    [else (gcd b (modulo a b))])
   )
 
 (provide
