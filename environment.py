@@ -53,6 +53,10 @@ class Action:
         return str(self)
 
 
+def random_initial_seed():
+    return random.randint(10**7, 10**8)
+
+
 class Environment:
     'Generic environment back-end'
     def generate_new(self, domain: str, seed: int = None) -> State:
@@ -75,7 +79,7 @@ class RacketEnvironment(Environment):
     def __init__(self, url, default_domain=None):
         self.url = url
         self.default_domain = default_domain
-        self.next_seed = random.randint(10**8)
+        self.next_seed = random_initial_seed()
 
     def generate_new(self, domain=None, seed=None):
         domain = domain or self.default_domain
@@ -124,7 +128,7 @@ class RustEnvironment(Environment):
         if not COMMONCORE_AVAILABLE:
             raise RuntimeError('Could not load commoncore.so')
         self.default_domain = default_domain
-        self.next_seed = random.randint(10**8)
+        self.next_seed = random_initial_seed()
 
     def generate_new(self, domain=None, seed=None):
         domain = domain or self.default_domain
