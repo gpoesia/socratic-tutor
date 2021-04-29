@@ -79,6 +79,9 @@ $ cargo build --release
   This might take a few minutes. It should download all dependencies and then compile our library.
   If all goes well, you should find the library at `target/release/libcommoncore.so`
   (or the equivalent extension in your operating system).
+
+  If you are a Mac user, you might see an error when running the above script. If that is the case, please check this issue ticket [https://github.com/rust-lang/rust/issues/60149](https://github.com/rust-lang/rust/issues/60149) and follow the instructions there to set additional linker arguments.
+
 * Finally, we only need to place that library in a location that we can import from Python.
   Simply create a symbolic link at the root of the project and named `commoncore.so`, that points
   to the compiled library:
