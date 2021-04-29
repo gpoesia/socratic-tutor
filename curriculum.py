@@ -63,6 +63,8 @@ def build_curriculum(config, device):
     if config.get('normalize'):
         X /= X.sum(axis=1).reshape(-1, 1)
 
+    X = X.cpu()
+
     d = sklearn.metrics.pairwise_distances(X)
 
     # Pick smallest problem to be the initial.
