@@ -59,7 +59,7 @@ class EnvironmentWithEvaluationProxy:
                  agent, environment: Environment, config: dict = {}):
 
         self.experiment_id = experiment_id
-        self.run_index = experiment_id
+        self.run_index = run_index
         self.agent_name = agent_name
         self.domain = domain
         self.environment = environment
@@ -132,11 +132,13 @@ class EnvironmentWithEvaluationProxy:
 
     def evaluate(self):
         print('Evaluating...')
-        name, domain = self.agent.name(), self.environment.default_domain
+        name, domain = self.agent_name, self.environment.default_domain
 
         evaluator = SuccessRatePolicyEvaluator(self.environment, self.eval_config)
         results = evaluator.evaluate(self.agent.get_q_function())
         results['n_steps'] = self.n_steps
+        results['experiment_id'] = self.experiment_id
+        results['run_index'] = self.run_index
         results['name'] = name
         results['domain'] = domain
         results['problems_seen'] = self.n_new_problems
@@ -149,8 +151,8 @@ class EnvironmentWithEvaluationProxy:
                    'max_solution_length': results['max_solution_length'],
                    })
 
-        print('Success rate:', results['success_rate'],
-              '\tMax length:', results['max_solution_length'])
+        print(util.now(), f'Success rate ({name}-{domain}-run{self.run_index}):',
+              results['success_rate'], '\tMax length:', results['max_solution_length'])
 
         try:
             with open(self.results_path, 'rb') as f:
@@ -192,7 +194,7 @@ class EnvironmentWithEvaluationProxy:
                 print('Ignoring exception and continuing...')
 
     def print_progress(self):
-        print('{} steps ({:.3}%, ETA: {}), {} total reward, explored {} problems. {}'
+        print(util.now(), '{} steps ({:.3}%, ETA: {}), {} total reward, explored {} problems. {}'
               .format(self.n_steps,
                       100 * (self.n_steps / self.max_steps),
                       util.format_eta(datetime.datetime.now() - self.begin_time,
