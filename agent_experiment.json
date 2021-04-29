@@ -13,7 +13,7 @@
 
     "agent": {
       "type": "BeamSearchIterativeDeepening",
-      "name": "Knobs52",
+      "name": "Knobs53",
       "add_success_state": true,
       "n_future_states": 5,
       "n_negatives": 10,
