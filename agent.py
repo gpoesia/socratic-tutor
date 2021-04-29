@@ -578,7 +578,7 @@ def run_agent_experiment(config, device):
     eval_env.evaluate_agent()
 
 
-def run_batch_experiment(config):
+def run_batch_experiment(config, range_to_run):
     'Spawns a series of processes to run experiments for each agent/domain pair.'
     experiment_id = config.get('experiment_id', util.random_id())
     domains = config['domains']
@@ -605,6 +605,11 @@ def run_batch_experiment(config):
                 print(f'Running {agent["name"]} on {domain}')
 
                 for run_index in range(n_runs):
+                    if agent_index < range_to_run[0] or agent_index >= range_to_run[1]:
+                        print(f'Run {run_index} not in range - skipping')
+                        agent_index += 1
+                        continue
+
                     if environment_backend == 'Racket':
                         port = environment_port_base + agent_index
                         environment_process = subprocess.Popen(
@@ -661,6 +666,9 @@ if __name__ == '__main__':
     parser.add_argument('--eval-checkpoints', help='Show the evolution of a learned policy during interaction',
                         action='store_true')
     parser.add_argument('--debug', help='Enable debug messages.', action='store_true')
+    parser.add_argument('--range', type=str, default=None,
+                        help='Range of experiments to run. Format: 2-5 means range [2, 5).'
+                        'Used to split experiments across multiple machines. Default: all')
     parser.add_argument('--gpu', type=int, default=None, help='Which GPU to use.')
 
     opt = parser.parse_args()
@@ -680,6 +688,11 @@ if __name__ == '__main__':
     if opt.debug:
         logging.getLogger().setLevel(logging.INFO)
 
+    if opt.range:
+        range_to_run = tuple(map(int, opt.range.split('-')))
+    else:
+        range_to_run = (0, 10**9)
+
     # Only shown in debug mode.
     logging.info('Running in debug mode.')
 
@@ -690,4 +703,4 @@ if __name__ == '__main__':
     elif opt.eval_checkpoints:
         evaluate_policy_checkpoints(config, device)
     elif opt.experiment:
-        run_batch_experiment(config)
+        run_batch_experiment(config, range_to_run)
