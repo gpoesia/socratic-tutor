@@ -103,6 +103,9 @@ class NCE(LearningAgent):
         self.learning_rate = config.get('lr', 1e-4)
         self.reset_optimizer()
 
+        self.current_depth = self.initial_depth
+        self.bootstrapping = True
+
     def reset_optimizer(self):
         self.optimizer = torch.optim.Adam(self.q_function.parameters(), lr=self.learning_rate)
 
@@ -110,9 +113,6 @@ class NCE(LearningAgent):
         return 'NCE'
 
     def learn_from_environment(self, environment):
-        self.current_depth = self.initial_depth
-        self.bootstrapping = True
-
         for i in itertools.count():
             problem = environment.generate_new()
             solution = self.beam_search(problem, environment)
@@ -274,6 +274,9 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.n_negatives = config.get('n_negatives', 1)
         self.learning_rate = config.get('lr', 1e-4)
 
+        self.current_depth = self.initial_depth
+        self.bootstrapping = True
+
     def name(self):
         if self.full_imitation_learning:
             return 'ImitationLearning'
@@ -285,9 +288,6 @@ class BeamSearchIterativeDeepening(LearningAgent):
             return 'IDCDagger'
 
     def learn_from_environment(self, environment):
-        self.current_depth = self.initial_depth
-        self.bootstrapping = True
-
         for i in itertools.count():
             problem = environment.generate_new()
             solution = self.beam_search(problem, environment)

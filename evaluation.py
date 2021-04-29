@@ -71,7 +71,7 @@ class EnvironmentWithEvaluationProxy:
         self.max_steps = config['max_steps']
         self.print_every = config.get('print_every', 100)
 
-        self.results = []
+        self.results: list = []
         self.n_new_problems = 0
         self.cumulative_reward = 0
         self.begin_time = datetime.datetime.now()
@@ -85,6 +85,23 @@ class EnvironmentWithEvaluationProxy:
 
         self.results_path = os.path.join(output_root, 'results.pkl')
         self.checkpoint_dir = checkpoint_dir
+
+        self.load_checkpoint()
+
+    def load_checkpoint(self):
+        'Loads an existing training checkpoint, if available.'
+        checkpoint_path = os.path.join(self.checkpoint_dir, 'training-state.pt')
+
+        if os.path.exists(checkpoint_path):
+            print('Training checkpoint exists - restoring...')
+            device = self.agent.q_function.device
+            previous_state = torch.load(checkpoint_path, map_location=device)
+            self.agent = previous_state.agent
+            self.agent.q_function.to(device)
+            self.n_steps = previous_state.n_steps
+            self.n_new_problems = previous_state.n_new_problems
+            self.cumulative_reward = previous_state.cumulative_reward
+            self.n_checkpoints = previous_state.n_checkpoints
 
     def generate_new(self, domain=None, seed=None):
         self.n_new_problems += 1
@@ -150,10 +167,17 @@ class EnvironmentWithEvaluationProxy:
         torch.save(self.agent.q_function,
                    os.path.join(self.checkpoint_dir,
                                 f'{self.n_checkpoints}.pt'))
+
         self.n_checkpoints += 1
 
+        torch.save(self,
+                   os.path.join(self.checkpoint_dir,
+                                'training-state.pt'))
+
+
     def evaluate_agent(self):
-        self.evaluate()
+        if self.n_checkpoints == 0:  # False when loading an existing training run.
+            self.evaluate()
         while True:
             try:
                 self.agent.learn_from_environment(self)
