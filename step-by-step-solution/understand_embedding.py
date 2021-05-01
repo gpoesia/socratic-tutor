@@ -23,10 +23,11 @@ config_example = {
 }
 
 ## Command to visualize step by step solution:
-## python understand_embedding.py --visualize --visualize_file_path trimmed_solutions.pickle --visualiz_idx 20
+## python understand_embedding.py --visualize --visualize_file_path trimmed_solutions.pickle --visualize_idx 20
 
-## Command to try different separation distance and save result to file:
-## python understand_embedding.py --experiment --experiment_file_path equations-ct-embeddings.pkl --experiment_save_file_path trimmed_solutions_pairwise.pickle
+## Command to visualize stats for different separation distance
+## python understand_embedding.py --experiment --experiment_file_path equations-ct-embeddings.pkl
+
 
 def plot_embeddings(embeddings, annotations: list = None, plt_name = None):
     'PCA plot for a list of embeddings (from a single problem)'
@@ -130,11 +131,12 @@ def plot_embeddings_from_file(config:dict, device, file_path:str, num_plots = 10
 def trim_solutions(solutions: list[list[State]], embeddings, min_separation_dist: float):
     '''Trim step-by-step solutions by grouping nearby states'''
     trimmed_solutions: list[list[State]] = []
+    ignored_actions = {}
     for solution, embedding in zip(solutions, embeddings):
         trimmed_solution = [solution[0]] #always add the last step
         trimmed_embedding = [embedding[0]]
         solution_actions = [s.parent_action for s in solution]
-        solution_actions_str = [action.action if action else "" for action in solution_actions]
+        solution_actions_str = [action.action.split(' ')[0] if action else "" for action in solution_actions]
 
         for i in range(1, len(embedding)-1):
             'calculate the distance between the current state and the last state in the trimmed solution'
@@ -143,9 +145,11 @@ def trim_solutions(solutions: list[list[State]], embeddings, min_separation_dist
                 trimmed_solution.append(solution[i])
                 trimmed_embedding.append(embedding[i])
             else:
-                print(solution_actions_str[i])
+                ignored_actions[solution_actions_str[i]] = ignored_actions.get(solution_actions_str[i], 0) + 1
         trimmed_solution.append(solution[-1]) #always add the last step
         trimmed_solutions.append(trimmed_solution)
+    print("frequency of ignored actions", sorted(ignored_actions.items(), key =
+             lambda kv:(kv[1], kv[0])))
     return trimmed_solutions
 
 
@@ -153,19 +157,26 @@ def trim_solutions(solutions: list[list[State]], embeddings, min_separation_dist
 def trim_solutions_pairwise(solutions: list[list[State]], embeddings, min_separation_dist: float):
     '''Trim step-by-step solutions by grouping nearby states'''
     trimmed_solutions: list[list[State]] = []
+    ignored_actions = {}
     for solution, embedding in zip(solutions, embeddings):
         trimmed_solution = [solution[0]] #always add the last step
         trimmed_embedding = [embedding[0]]
+        solution_actions = [s.parent_action for s in solution]
+        solution_actions_str = [action.action.split(' ')[0] if action else "" for action in solution_actions]
+
         for i in range(1, len(embedding)-1):
-            'calculate the distance between the current state and the prior state in the full solution'
+            'calculate the distance between the current state and the last state in the fall solution'
             dist = np.linalg.norm(embedding[i] - embedding[i-1])
             if dist>= min_separation_dist:
                 trimmed_solution.append(solution[i])
                 trimmed_embedding.append(embedding[i])
+            else:
+                ignored_actions[solution_actions_str[i]] = ignored_actions.get(solution_actions_str[i], 0) + 1
         trimmed_solution.append(solution[-1]) #always add the last step
         trimmed_solutions.append(trimmed_solution)
+    print("frequency of ignored actions", sorted(ignored_actions.items(), key =
+             lambda kv:(kv[1], kv[0])))
     return trimmed_solutions
-
 def print_step_by_step_solution(solution):
     state_str = [state.facts[-1] for state in solution]
     for idx, line in enumerate(state_str):
@@ -217,6 +228,6 @@ if __name__ == '__main__':
     if opt.generate:
         generate_solutions_embeddings(config_example, torch.device("cpu"), num_examples = opt.num_examples, file_path= opt.save_file_name, backup_path=opt.backup_file_name)
     elif opt.experiment:
-        try_diff_separation_dist(opt.experiment_file_path, save_path = opt.experiment_save_file_path)
+        try_diff_separation_dist(opt.experiment_file_path, output_file_name = opt.experiment_save_file_path)
     elif opt.visualize:
         visualize(opt.visualize_file_path, opt.visualize_idx)
