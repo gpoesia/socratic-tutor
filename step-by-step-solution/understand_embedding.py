@@ -186,6 +186,7 @@ def try_diff_separation_dist(file_name, output_file_name:str = None):
     solutions, embeddings = load_solutions_and_embeddings(file_name)
     try_dist = [0, 1, 2, 3, 4, 5,6, 7, 8,9, 10, 11, 12, 13, 14, 15]
     trimmed_solutions_dict = {}
+    baseline(solutions, trimmed_solutions_dict)
     for min_separation_dist in try_dist:
         trimmed_solutions = trim_solutions(solutions, embeddings, min_separation_dist)
         sol_lens = [len(solution) for solution in trimmed_solutions]
@@ -197,6 +198,17 @@ def try_diff_separation_dist(file_name, output_file_name:str = None):
     if output_file_name:
         with open(output_file_name, 'wb') as file:
             pickle.dump(trimmed_solutions_dict, file)
+
+
+def baseline(solutions, trimmed_solutions_dict):
+    '''Hide every other step'''
+    trimmed_solutions = []
+    for solution in solutions:
+        trimmed_solution = solution[:-1:2]
+        trimmed_solution.append(solution[-1])
+        trimmed_solutions.append(trimmed_solution)
+    trimmed_solutions_dict["baseline"] = trimmed_solutions
+
 
 def visualize(file_name, problem_idx):
     '''Print step-by-step solutions for a particular problem specified by problem_idx'''
