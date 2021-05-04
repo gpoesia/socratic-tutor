@@ -3,6 +3,7 @@
 pub mod equations;
 pub mod ternary;
 pub mod sorting;
+pub mod rubiks_cube;
 
 use rand_pcg::Pcg64;
 

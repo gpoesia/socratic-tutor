@@ -9,6 +9,7 @@ use crate::domain::Domain;
 use crate::domain::equations::Equations;
 use crate::domain::ternary::TernaryAddition;
 use crate::domain::sorting::Sorting;
+use crate::domain::rubiks_cube::RubiksCube;
 
 extern crate num_rational;
 extern crate pest;
@@ -21,6 +22,8 @@ thread_local!{
         map.insert("equations-ct", Arc::new(Equations {}));
         map.insert("ternary-addition", Arc::new(TernaryAddition::new(15)));
         map.insert("sorting", Arc::new(Sorting::new(12)));
+        map.insert("rubiks-cube", Arc::new(RubiksCube::new(20)));
+        map.insert("rubiks-cube-50", Arc::new(RubiksCube::new(50)));
         map
     };
 }
