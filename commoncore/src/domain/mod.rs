@@ -2,6 +2,7 @@
 
 pub mod equations;
 pub mod ternary;
+pub mod sorting;
 
 use rand_pcg::Pcg64;
 
