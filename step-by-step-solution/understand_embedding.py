@@ -23,7 +23,7 @@ config_example = {
 }
 
 ## Command to visualize step by step solution:
-## python understand_embedding.py --visualize --visualize_file_path trimmed_solutions.pickle --visualize_idx 20
+## python understand_embedding.py --visualize --visualize_file_path trimmed_solutions_centriods.pickle --visualize_idx 20
 
 ## Command to visualize stats for different separation distance
 ## python understand_embedding.py --experiment --experiment_file_path equations-ct-embeddings.pkl
@@ -177,6 +177,36 @@ def trim_solutions_pairwise(solutions: list[list[State]], embeddings, min_separa
     print("frequency of ignored actions", sorted(ignored_actions.items(), key =
              lambda kv:(kv[1], kv[0])))
     return trimmed_solutions
+
+
+
+###current method for shortening solutions
+def trim_solutions_centriod(solutions: list[list[State]], embeddings, min_separation_dist: float):
+    '''Trim step-by-step solutions by grouping nearby states into segments'''
+    '''Let centriod be the step with minimum length'''
+
+    trimmed_solutions: list[list[State]] = []
+    for solution, embedding in zip(solutions, embeddings):
+        centriods= [] #break solution path into segments
+        solution_actions = [s.parent_action for s in solution]
+        solution_actions_str = [action.action.split(' ')[0] if action else "" for action in solution_actions]
+
+        for i in range(1, len(embedding)-1):
+            'calculate the distance between the current state and the last state in the trimmed solution'
+            dist = np.linalg.norm(embedding[i] - embedding[i-1])
+            if dist>= min_separation_dist:
+                '''new segment begins'''
+                centriods.append(i)
+            elif len(centriods):
+                '''update last segment'''
+                if len(solution_actions_str[i]) < len(solution_actions_str[i-1]):
+                    centriods[-1] = i
+
+        trimmed_solution = [solution[0]] + [solution[centriod] for centriod in centriods]+[solution[-1]]
+        trimmed_solutions.append(trimmed_solution)
+    return trimmed_solutions
+
+
 def print_step_by_step_solution(solution):
     state_str = [state.facts[-1] for state in solution]
     for idx, line in enumerate(state_str):
@@ -188,7 +218,7 @@ def try_diff_separation_dist(file_name, output_file_name:str = None):
     trimmed_solutions_dict = {}
     baseline(solutions, trimmed_solutions_dict)
     for min_separation_dist in try_dist:
-        trimmed_solutions = trim_solutions(solutions, embeddings, min_separation_dist)
+        trimmed_solutions = trim_solutions_centriod(solutions, embeddings, min_separation_dist)
         sol_lens = [len(solution) for solution in trimmed_solutions]
         print("min_separation_dist = ", min_separation_dist)
         print("average solution length: ", sum(sol_lens)/(len(sol_lens)+0.000001))
