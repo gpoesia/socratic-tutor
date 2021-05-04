@@ -577,7 +577,8 @@ def run_agent_experiment(config, device):
     wandb.init(id=run_id,
                name=run_id,
                config=config,
-               project='solver-agent',
+               entity='socratic',
+               project=config.get('wandb_project', 'test'),
                reinit=True)
 
     env = Environment.from_config(config)
@@ -640,7 +641,8 @@ def run_batch_experiment(config, range_to_run):
                         'domain': domain,
                         'environment_backend': environment_backend,
                         'environment_url': 'http://localhost:{}'.format(port),
-                        'eval_environment': copy.deepcopy(config['eval_environment'])
+                        'eval_environment': copy.deepcopy(config['eval_environment']),
+                        'wandb_project': config.get('wandb_project')
                     }
 
                     print('Running agent with config', json.dumps(run_config))
