@@ -134,7 +134,6 @@ impl CubeState {
         }
 
         self.colors = new_colors;
-        println!("Applying move {}", n_move);
     }
 }
 
@@ -194,13 +193,10 @@ mod test {
     #[test]
     fn test_step() {
         let mut c = super::CubeState::new();
-        println!("Cube: {}", c.to_string());
         assert!(c.is_solved());
         c.apply(0);
-        println!("Cube: {}", c.to_string());
         assert!(!c.is_solved());
         c.apply(6);
-        println!("Cube: {}", c.to_string());
         assert!(c.is_solved());
     }
 }
