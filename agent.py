@@ -232,7 +232,6 @@ class NCE(LearningAgent):
         if not self.examples:
             return
 
-        print('Here!')
         celoss = nn.CrossEntropyLoss()
 
         for i in range(self.n_gradient_steps):
