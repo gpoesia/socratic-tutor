@@ -98,10 +98,6 @@ class NCE(LearningAgent):
 
         self.n_bootstrap_problems = config.get('n_bootstrap_problems', 100)
 
-        # Which function to use to aggregate logits during beam search
-        # (use log if QFunction outputs probabilities, else don't).
-        self.log_beam_search = config.get('log_beam_search', False)
-
         # Knob: whether to add an artificial 'success' state in the end
         # of the solution in training examples. The idea is that this would align
         # all states that are in the path to a solution closer together.
@@ -155,7 +151,7 @@ class NCE(LearningAgent):
         seen = {state}
         visited_states = [[state]]  # List of states visited in each iteration (used to retrieve negatives).
 
-        t = math.log if self.log_beam_search else lambda x: x
+        t = q.get_aggregation_transform()
 
         logging.info(f'Trying {state}')
 

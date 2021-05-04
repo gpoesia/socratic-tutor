@@ -18,6 +18,12 @@ class QFunction(nn.Module):
     def forward(self, state: list[State], actions: list[Action]):
         raise NotImplementedError()
 
+    def get_aggregation_transform(self):
+        '''Returns a function that needs to be applied to the outputs of this QFunction
+        so that its return values can be combined with a simple sum during beam search.'''
+        # The default is for QFunctions to return probabilities, so log works.
+        return math.log
+
     def rollout(self,
                 environment: Environment,
                 state: State,
@@ -30,6 +36,7 @@ class QFunction(nn.Module):
         history = [beam]
         seen = set([state])
         success = False
+        t = self.get_aggregation_transform()
 
         for i in range(max_steps):
             if debug:
@@ -53,7 +60,7 @@ class QFunction(nn.Module):
                 q_values = self(actions).tolist()
 
             for a, v in zip(actions, q_values):
-                a.next_state.value = a.state.value + math.log(v)
+                a.next_state.value = a.state.value + t(v)
 
             ns = list(set([a.next_state for a in actions]) - seen)
             ns.sort(key=lambda s: s.value, reverse=True)
@@ -235,6 +242,9 @@ class Bilinear(QFunction):
 
     def name(self):
         return 'Bilinear'
+
+    def get_aggregation_transform(self):
+        return lambda x: x
 
 
 class LearnerValueFunctionAdapter(QFunction):
