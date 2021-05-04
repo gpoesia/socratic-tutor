@@ -198,7 +198,8 @@ class StateRNNValueFn(QFunction):
         return 'StateRNNValueFn'
 
 
-# A simple architecture that just estimates the value of the next state.
+# A simple architecture that combines the current and next state embeddings with
+# a bilinear transformation.
 @register(QFunction)
 class Bilinear(QFunction):
     def __init__(self, config, device):
@@ -218,10 +219,8 @@ class Bilinear(QFunction):
     def forward(self, actions):
         current_state_embedding = self.embed_states([a.state for a in actions])
         next_state_embedding = self.embed_states([a.next_state for a in actions])
-        q_values = ((self.bilinear_comb(current_state_embedding) * next_state_embedding)
-                    .sum(dim=1)
-                    .exp())
-        return q_values
+        q_values = (self.bilinear_comb(current_state_embedding) * next_state_embedding)
+        return q_values.sum(dim=1)
 
     def embed_states(self, states):
         N, H = len(states), self.hidden_dim

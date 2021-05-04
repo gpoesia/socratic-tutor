@@ -14,6 +14,7 @@ import subprocess
 import logging
 
 import torch
+from torch import nn
 from torch.nn import functional as F
 from torch.distributions.categorical import Categorical
 import wandb
@@ -97,6 +98,10 @@ class NCE(LearningAgent):
 
         self.n_bootstrap_problems = config.get('n_bootstrap_problems', 100)
 
+        # Which function to use to aggregate logits during beam search
+        # (use log if QFunction outputs probabilities, else don't).
+        self.log_beam_search = config.get('log_beam_search', False)
+
         # Knob: whether to add an artificial 'success' state in the end
         # of the solution in training examples. The idea is that this would align
         # all states that are in the path to a solution closer together.
@@ -124,7 +129,7 @@ class NCE(LearningAgent):
             if solution is not None:
                 self.training_problems_solved += 1
 
-                if self.training_problems_solved > self.n_bootstrap_problems:
+                if self.training_problems_solved >= self.n_bootstrap_problems:
                     self.bootstrapping = False
 
                     if self.training_problems_solved % self.optimize_every == 0:
@@ -149,6 +154,8 @@ class NCE(LearningAgent):
         q = self.get_q_function()
         seen = {state}
         visited_states = [[state]]  # List of states visited in each iteration (used to retrieve negatives).
+
+        t = math.log if self.log_beam_search else lambda x: x
 
         logging.info(f'Trying {state}')
 
@@ -179,7 +186,7 @@ class NCE(LearningAgent):
             for s, state_actions in zip(beam, actions):
                 for a in state_actions:
                     ns = a.next_state
-                    ns.value = s.value + math.log(a.value)
+                    ns.value = s.value + t(a.value)
                     next_states.append(ns)
 
             next_states.sort(key=lambda s: s.value, reverse=True)
@@ -225,14 +232,16 @@ class NCE(LearningAgent):
         if not self.examples:
             return
 
+        print('Here!')
+        celoss = nn.CrossEntropyLoss()
+
         for i in range(self.n_gradient_steps):
             e = random.choice(self.examples)
             all_actions = [e.positive] + e.negatives
 
             self.optimizer.zero_grad()
-
             f_pred = self.q_function(all_actions)
-            loss = -(f_pred[0] / f_pred.sum()).log()
+            loss = celoss(f_pred.unsqueeze(0), torch.zeros(1, dtype=int, device=f_pred.device))
             wandb.log({'train_loss': loss.item()})
             loss.backward()
             self.optimizer.step()
