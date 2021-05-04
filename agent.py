@@ -22,7 +22,7 @@ import util
 from util import register
 from environment import Environment, State, Action
 from evaluation import EnvironmentWithEvaluationProxy, evaluate_policy, evaluate_policy_checkpoints
-from q_function import QFunction, InverseLength, RandomQFunction
+from q_function import QFunction, InverseLength, RandomQFunction, RubiksGreedyHeuristic
 
 
 SUCCESS_STATE = State(['success'], [], 1.0)
@@ -86,8 +86,12 @@ class NCE(LearningAgent):
         self.optimize_every = config.get('optimize_every', 1)
         self.n_gradient_steps = config.get('n_gradient_steps', 64)
 
-        if config.get('bootstrap_from', 'Random') == 'InverseLength':
+        bootstrap_from = config.get('bootstrap_from', 'Random')
+
+        if bootstrap_from == 'InverseLength':
             self.bootstrap_policy = InverseLength(self.q_function.device)
+        elif bootstrap_from == 'RubiksGreedyHeuristic':
+            self.bootstrap_policy = RubiksGreedyHeuristic(self.q_function.device)
         else:
             self.bootstrap_policy = RandomQFunction(self.q_function.device)
 

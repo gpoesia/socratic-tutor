@@ -277,3 +277,20 @@ class InverseLength(QFunction):
 
     def forward(self, actions):
         return torch.tensor([1 / len(a.next_state.facts[-1]) for a in actions]).to(device=self.device)
+
+
+class RubiksGreedyHeuristic(QFunction):
+    'Simple bootstrap heuristic for the Rubik\'s cube that counts how many stickers are correct.'
+    def __init__(self, device=None):
+        super().__init__()
+        self.device = device
+        self.target = torch.tensor([0]*9 + [1]*9 + [2]*9 + [3]*9 + [4]*9 + [5]*9)
+
+    def forward(self, actions):
+        q = []
+
+        for a in actions:
+            digits = torch.tensor([int(d) for d in a.next_state.facts[-1] if d.isdigit()])
+            q.append((digits == self.target).float().mean().item())
+
+        return torch.tensor(q, device=self.device)
