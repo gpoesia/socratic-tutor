@@ -483,6 +483,7 @@ class QLearning(LearningAgent):
 
         self.discount_factor = config.get('discount_factor', 1.0)
         self.batch_size = config.get('batch_size', 64)
+        self.optimize_every = config.get('optimize_every', 16)
         self.softmax_alpha = config.get('softmax_alpha', 1.0)
 
         self.replay_buffer = collections.deque(maxlen=self.replay_buffer_size)
@@ -521,6 +522,8 @@ class QLearning(LearningAgent):
                 self.replay_buffer.append(QReplayBufferTuple(actions[a],
                                                              r,
                                                              next_actions))
+
+            if i % self.optimize_every == 0:
                 self.gradient_steps()
 
     def learn_from_experience(self):
