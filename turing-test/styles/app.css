@@ -1,0 +1,41 @@
+.content {
+  padding: 3em;
+}
+
+.invisible-list {
+  list-style: none;
+}
+
+.problem {
+  border: 1px solid black;
+  padding: 0.5em;
+  margin-bottom: 1em;
+}
+
+.action {
+    margin-right: 1em;
+}
+
+.challenge {
+    border-bottom: 1px dashed black;
+    margin-bottom: 1em;
+}
+
+.challenge label {
+    margin-right: 1em;
+}
+
+.challenge-root {
+    display: flex;
+    flex-direction: row;
+}
+
+.challenge-content {
+    flex: 2;
+}
+
+.challenge-instructions {
+    flex: 1;
+    padding: 2em;
+    font-size: 80%;
+}
