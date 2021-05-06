@@ -17,13 +17,13 @@ from sklearn.decomposition import PCA
 import random
 
 config_example = {
-    "checkpoint_path":"simple-vf-SimpleVF-equations-ct0-ck400.pt",
+    "checkpoint_path":"nce-equations-ct.pt",
     "domain": "equations-ct",
     "environment_url": "http://localhost:9876",
 }
 
 ## Command to visualize step by step solution:
-## python understand_embedding.py --visualize --visualize_file_path trimmed_solutions_centriods.pickle --visualize_idx 20
+## python understand_embedding.py --visualize --visualize_file_path trimmed_solutions_nce.pickle --visualize_idx 20
 
 ## Command to visualize stats for different separation distance
 ## python understand_embedding.py --experiment --experiment_file_path equations-ct-embeddings.pkl
@@ -109,7 +109,7 @@ def generate_solutions_embeddings(config:dict, device, num_problems = 100, save_
                 if generate_plots:
                     'plot embeddings'
                     state_str = [state.facts[-1] for state in solution]
-                    plot_embeddings(embedding, annotations = state_str, plt_name="equations-ct-"+str(seed) + "-"+str(i))
+                    plot_embeddings(embedding, annotations = state_str, plt_name=generate_plots+"-"+str(seed) + "-"+str(i))
                 if save_embeddings:
                     'Save on every iteration to avoid lose due to crashes'
                     save_solutions_and_embeddings([solution], [embedding], file_path, backup_path)
@@ -128,6 +128,7 @@ def plot_embeddings_from_file(config:dict, device, file_path:str, num_plots = 10
         state_str = [state.facts[-1] for state in solutions]
         plot_solution_embeddings(embedding, annotations = state_str, plt_name=file_path.split(".")[0]+"-"+ str(idx))
 
+###current method for shortening solutions
 def trim_solutions(solutions: list[list[State]], embeddings, min_separation_dist: float):
     '''Trim step-by-step solutions by grouping nearby states'''
     trimmed_solutions: list[list[State]] = []
@@ -180,7 +181,6 @@ def trim_solutions_pairwise(solutions: list[list[State]], embeddings, min_separa
 
 
 
-###current method for shortening solutions
 def trim_solutions_centriod(solutions: list[list[State]], embeddings, min_separation_dist: float):
     '''Trim step-by-step solutions by grouping nearby states into segments'''
     '''Let centriod be the step with minimum length'''
@@ -218,7 +218,7 @@ def try_diff_separation_dist(file_name, output_file_name:str = None):
     trimmed_solutions_dict = {}
     baseline(solutions, trimmed_solutions_dict)
     for min_separation_dist in try_dist:
-        trimmed_solutions = trim_solutions_centriod(solutions, embeddings, min_separation_dist)
+        trimmed_solutions = trim_solutions(solutions, embeddings, min_separation_dist)
         sol_lens = [len(solution) for solution in trimmed_solutions]
         print("min_separation_dist = ", min_separation_dist)
         print("average solution length: ", sum(sol_lens)/(len(sol_lens)+0.000001))
@@ -252,11 +252,13 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser("Shorten step by step solutions")
     parser.add_argument('--generate', help='Generate embeddings from solving random problems', action='store_true', default = False)
+    parser.add_argument('--generate_plots', type = str, help='Generate PCA plots for embeddings while solving problems', default = None)
+
     parser.add_argument('--num_examples', type = int, help='How many examples to generate', default = 100)
     parser.add_argument('--save_file_name', type=str,
-                        help='Save generated embedding to this file path (backup)')
-    parser.add_argument('--backup_file_name', type=str,
                         help='Save generated embedding to this file path')
+    parser.add_argument('--backup_file_name', type=str,
+                        help='Save generated embedding to this file path (backup)')
 
     parser.add_argument('--experiment', help='Try different minimum separation distance', action='store_true', default=False)
     parser.add_argument('--experiment_file_path', type=str, help='Apply different minimum separation distance on solutions in this file')
@@ -268,7 +270,7 @@ if __name__ == '__main__':
 
     opt = parser.parse_args()
     if opt.generate:
-        generate_solutions_embeddings(config_example, torch.device("cpu"), num_examples = opt.num_examples, file_path= opt.save_file_name, backup_path=opt.backup_file_name)
+        generate_solutions_embeddings(config_example, torch.device("cpu"), num_problems = opt.num_examples, file_path= opt.save_file_name, backup_path=opt.backup_file_name, generate_plots=opt.generate_plots)
     elif opt.experiment:
         try_diff_separation_dist(opt.experiment_file_path, output_file_name = opt.experiment_save_file_path)
     elif opt.visualize:

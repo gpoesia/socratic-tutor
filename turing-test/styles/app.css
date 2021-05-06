@@ -29,7 +29,18 @@
     display: flex;
     flex-direction: row;
 }
+.solutions_root{
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+}
 
+.solutionWrapper{
+
+  display:inline-block;
+  width:fit-content;
+
+}
 .challenge-content {
     flex: 2;
 }
