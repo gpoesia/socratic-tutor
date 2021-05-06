@@ -50,3 +50,7 @@
     padding: 2em;
     font-size: 80%;
 }
+
+.center-button {
+  text-align: center;
+}
