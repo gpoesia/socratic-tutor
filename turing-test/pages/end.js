@@ -35,7 +35,7 @@ const End = () => {
         To finalize, we'd just like to know a little bit more about your experience.
       </p>
       <p>
-        What is your age? <input type="text" size="1" value={age}
+        What is your age? <input type="text" size="2" value={age}
                                  onChange={e => setAge(e.target.value)} />
       </p>
       <p>

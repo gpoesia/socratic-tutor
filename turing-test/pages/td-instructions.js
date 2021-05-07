@@ -28,11 +28,9 @@ const TuringTestInstructions = () => {
       <p>Consider this equation problem,</p>
       <p>{Example["question"]}</p>
       <p>
-        The following are 4 solutions, of which two are written by human. Please
+        The following are 4 step-by-step solutions, of which two are written by human. Please
         pick the two solutions that you believe are most likely to be written by
-        human. [Please rank them according to your confidence in which one is
-        written by a human. Your rank 1 choice should be the solution you are
-        most confident about.]
+        human.
       </p>
       <RankSolutions
         solutions={Example["solutions"]}
@@ -40,7 +38,7 @@ const TuringTestInstructions = () => {
         setChecked={setChecked}
       />
       <p>
-        To pick a solution, just click on the checkbox. You must pick exactly
+      To pick a solution, please check the box. You must pick exactly
         two solutions.
       </p>
       <p>To begin the experiment, please click on "Start".</p>
