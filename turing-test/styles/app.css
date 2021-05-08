@@ -54,3 +54,8 @@
 .center-button {
   text-align: center;
 }
+.left-right-buttons {
+  text-align: center;
+  justify-content:space-between;
+  display: flex;
+}

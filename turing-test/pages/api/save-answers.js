@@ -9,11 +9,12 @@ export default async (req, res) => {
   const timestamp = _.now();
 
   if (!(sessionId)) {
+
     return res.json({ "error": "No session ID provided." });
   }
   const session = await UserSession.findOne({ id: sessionId });
   session.exerciseResponses = _.concat(session.exerciseResponses, {"question": qStr, "answer": qAns, "timestamp": timestamp});
-  console.log(session)
+  console.log(session, qAns)
   await session.save();
 
   res.json({});

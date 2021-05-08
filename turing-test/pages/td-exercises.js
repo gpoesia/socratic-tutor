@@ -3,9 +3,9 @@ import dynamic from "next/dynamic";
 import useStore from "../lib/state";
 import { useRouter } from "next/router";
 import { apiRequest } from "../lib/api";
-import { Button } from "@material-ui/core";
 import _ from "lodash";
 import CircularProgress from "@material-ui/core/CircularProgress";
+import LinearProgress from "@material-ui/core/LinearProgress";
 
 const TestQuestionsJson = require("./turing_test.json");
 
@@ -23,7 +23,7 @@ const TuringTest = () => {
   const [currQIdx, setQIdx] = useState(0);
 
   useEffect(() => {
-    //load questions from json file. shuffle questions.
+    //load questions from Json file. Shuffle questions.
     if (TestQuestions === null) {
       let questions = TestQuestionsJson["experiment"]
         .map((a) => ({ sort: Math.random(), value: a }))
@@ -34,20 +34,26 @@ const TuringTest = () => {
   });
 
   const canAdvance = checked.size == 2;
+  const canGoBack = currQIdx - 1 >= 0;
   const next = async () => {
-    //first save answers for current problem
+    //save answer for current problem
     await apiRequest("save-answers", {
       id: sessionId,
       qStr: TestQuestions[currQIdx]["question"],
       qAns: Array.from(checked),
     });
-    //then go to the next problem/next page
+    //advance to the next problem/end of experiment
     if (currQIdx + 1 == TestQuestions.length) {
       router.push("/end");
     } else {
       setQIdx(currQIdx + 1);
       setChecked(new Set());
     }
+  };
+
+  const back = () => {
+    setQIdx(currQIdx - 1);
+    setChecked(new Set());
   };
 
   if (TestQuestions === null) {
@@ -60,6 +66,11 @@ const TuringTest = () => {
 
   return (
     <div className="content">
+      <LinearProgress
+        variant="determinate"
+        value={((currQIdx + 1) / TestQuestions.length) * 100}
+      />
+
       <h1>Human or Machine: Step-by-Step Solutions for Equation Problems</h1>
       <p>Consider this equation problem,</p>
       <p>{TestQuestions[currQIdx]["question"]}</p>
@@ -77,15 +88,13 @@ const TuringTest = () => {
         To pick a solution, please check the box. You must pick exactly two
         solutions.
       </p>
-      <div className="center-button">
-        <Button
-          onClick={() => {
-            if (canAdvance) next();
-            else alert("You must select two solutions.");
-          }}
-        >
+      <div className="left-right-buttons">
+        <button disabled={!canGoBack} onClick={back}>
+          Go Back
+        </button>
+        <button disabled={!canAdvance} onClick={next}>
           Continue
-        </Button>
+        </button>
       </div>
     </div>
   );
