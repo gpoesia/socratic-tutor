@@ -695,7 +695,7 @@ if __name__ == '__main__':
     except json.decoder.JSONDecodeError:
         config = json.load(open(opt.config))
 
-    device = torch.device('cpu') if not opt.gpu else torch.device(opt.gpu)
+    device = torch.device('cpu') if opt.gpu is None else torch.device(opt.gpu)
 
     # configure logging.
     FORMAT = '%(asctime)-15s %(message)s'
