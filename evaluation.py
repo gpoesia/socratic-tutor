@@ -3,6 +3,9 @@ import pickle
 import traceback
 import hashlib
 import os
+import json
+import subprocess
+import copy
 
 import util
 from environment import Environment
@@ -264,3 +267,31 @@ def evaluate_policy_checkpoints(config, device):
 
     except FileNotFoundError:
         print('Checkpoint', i, 'does not exist -- stopping.')
+
+def normalize_human_solutions(path):
+    human_solutions = json.load(open(path))
+
+    all_steps = []
+
+    for h in human_solutions:
+        for sol in h['solutions']:
+            all_steps.extend(sol)
+
+    with open('input.txt', 'w') as f:
+        for l in all_steps:
+            f.write(l)
+            f.write('\n')
+
+    sp = subprocess.run(["racket", "-tm", "canonicalize-terms.rkt"], capture_output=True)
+    steps = list(filter(None, sp.stdout.decode("utf8").split("\n")))
+    print(len(all_steps), len(steps))
+
+    normalized_solutions = copy.deepcopy(human_solutions)
+    i = 0
+
+    for h in normalized_solutions:
+        for i in range(len(h['solutions'])):
+            h['solutions'][i] = [steps.pop(0) for s in range(len(h['solutions'][i]))]
+
+    with open('normalized_human_solutions.json', 'w') as f:
+        json.dump(normalized_solutions, f)
