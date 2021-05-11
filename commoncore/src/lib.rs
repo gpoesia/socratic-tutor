@@ -4,7 +4,7 @@ use pyo3::wrap_pyfunction;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-mod domain;
+pub mod domain;
 use crate::domain::Domain;
 use crate::domain::equations::Equations;
 use crate::domain::fractions::Fractions;
@@ -18,7 +18,7 @@ extern crate pest;
 extern crate pest_derive;
 
 thread_local!{
-    static DOMAINS: HashMap<&'static str, Arc<dyn Domain>> = {
+    pub static DOMAINS: HashMap<&'static str, Arc<dyn Domain>> = {
         let mut map : HashMap<&'static str, Arc<dyn Domain>>  = HashMap::new();
         map.insert("equations-ct", Arc::new(Equations {}));
         map.insert("fractions", Arc::new(Fractions::new(4, 4)));
