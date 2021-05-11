@@ -18,6 +18,12 @@ class QFunction(nn.Module):
     def forward(self, state: list[State], actions: list[Action]):
         raise NotImplementedError()
 
+    def get_aggregation_transform(self):
+        '''Returns a function that needs to be applied to the outputs of this QFunction
+        so that its return values can be combined with a simple sum during beam search.'''
+        # The default is for QFunctions to return probabilities, so log works.
+        return math.log
+
     def rollout(self,
                 environment: Environment,
                 state: State,
@@ -30,6 +36,7 @@ class QFunction(nn.Module):
         history = [beam]
         seen = set([state])
         success = False
+        t = self.get_aggregation_transform()
 
         for i in range(max_steps):
             if debug:
@@ -53,7 +60,7 @@ class QFunction(nn.Module):
                 q_values = self(actions).tolist()
 
             for a, v in zip(actions, q_values):
-                a.next_state.value = a.state.value + math.log(v)
+                a.next_state.value = a.state.value + t(v)
 
             ns = list(set([a.next_state for a in actions]) - seen)
             ns.sort(key=lambda s: s.value, reverse=True)
@@ -112,7 +119,14 @@ class DRRN(QFunction):
         self.action_label_type = config.get('action_label_type', 'action')
 
         self.to(device)
+
+    def to(self, device):
+        QFunction.to(self, device)
         self.device = device
+        self.state_vocab.to(device)
+        self.state_vocab.device = device
+        self.action_vocab.to(device)
+        self.action_vocab.device = device
 
     def forward(self, actions):
         state_embedding = self.embed_states([a.state for a in actions])
@@ -165,7 +179,12 @@ class StateRNNValueFn(QFunction):
                                self.lstm_layers, bidirectional=True)
         self.output = nn.Linear(2*hidden_dim, 1)
         self.to(device)
+
+    def to(self, device):
+        QFunction.to(self, device)
         self.device = device
+        self.vocab.device = device
+        self.vocab.to(device)
 
     def forward(self, actions):
         state_embedding = self.embed_states([a.next_state for a in actions])
@@ -187,7 +206,8 @@ class StateRNNValueFn(QFunction):
         return 'StateRNNValueFn'
 
 
-# A simple architecture that just estimates the value of the next state.
+# A simple architecture that combines the current and next state embeddings with
+# a bilinear transformation.
 @register(QFunction)
 class Bilinear(QFunction):
     def __init__(self, config, device):
@@ -204,13 +224,18 @@ class Bilinear(QFunction):
         self.to(device)
         self.device = device
 
+    def to(self, device):
+        QFunction.to(self, device)
+        self.device = device
+        self.vocab.to(device)
+        self.vocab.device = device
+
+
     def forward(self, actions):
         current_state_embedding = self.embed_states([a.state for a in actions])
         next_state_embedding = self.embed_states([a.next_state for a in actions])
-        q_values = ((self.bilinear_comb(current_state_embedding) * next_state_embedding)
-                    .sum(dim=1)
-                    .exp())
-        return q_values
+        q_values = (self.bilinear_comb(current_state_embedding) * next_state_embedding)
+        return q_values.sum(dim=1)
 
     def embed_states(self, states):
         N, H = len(states), self.hidden_dim
@@ -225,6 +250,9 @@ class Bilinear(QFunction):
 
     def name(self):
         return 'Bilinear'
+
+    def get_aggregation_transform(self):
+        return lambda x: x
 
 
 class LearnerValueFunctionAdapter(QFunction):
@@ -266,3 +294,20 @@ class InverseLength(QFunction):
 
     def forward(self, actions):
         return torch.tensor([1 / len(a.next_state.facts[-1]) for a in actions]).to(device=self.device)
+
+
+class RubiksGreedyHeuristic(QFunction):
+    'Simple bootstrap heuristic for the Rubik\'s cube that counts how many stickers are correct.'
+    def __init__(self, device=None):
+        super().__init__()
+        self.device = device
+        self.target = torch.tensor([0]*9 + [1]*9 + [2]*9 + [3]*9 + [4]*9 + [5]*9)
+
+    def forward(self, actions):
+        q = []
+
+        for a in actions:
+            digits = torch.tensor([int(d) for d in a.next_state.facts[-1] if d.isdigit()])
+            q.append((digits == self.target).float().mean().item())
+
+        return torch.tensor(q, device=self.device)

@@ -13,10 +13,13 @@ from tqdm import tqdm
 import numpy as np
 from flask import Flask, request
 
-from agent import Environment, QFunction, DRRN
+from q_function import QFunction, DRRN, StateRNNValueFn
+from environment import Environment
+
 
 def l2_distance(u, v):
     return np.sqrt(np.sum((u - v)**2))
+
 
 def find_all_solutions(env, problems, q_fn, max_steps):
     problems_with_solution = []
@@ -30,20 +33,18 @@ def find_all_solutions(env, problems, q_fn, max_steps):
 
     return problems_with_solution
 
+
 def build_curriculum(config, device):
     domain = config['domain']
     radius = config['radius']
 
-    env = Environment(config['environment_url'], domain)
-    q_fn = torch.load('models/drrn-ternary-q-m3.pt', map_location=device)
-
-    q_fn.device = device
-    q_fn.state_vocab.device = device
-    q_fn.action_vocab.device = device
+    env = Environment.from_config(config)
+    q_fn = torch.load(config['q_function'], map_location=device)
+    q_fn.to(device)
 
     print('Fetching problems...')
     problems = [env.generate_new(domain, seed=(i + config.get('seed', 0)))
-                                 for i in tqdm(range(config['n_problems']))]
+                for i in tqdm(range(config['n_problems']))]
 
     print('Finding solutions...')
     problems_with_solution = find_all_solutions(env, problems, q_fn, config.get('max_steps', 30))
@@ -57,10 +58,12 @@ def build_curriculum(config, device):
 
     print('Starting with embeddings matrix', embeddings.shape)
 
-    if config.get('tsne'):
-        X = TSNE().fit_transform(embeddings)
+    X = TSNE().fit_transform(embeddings) if config.get('tsne') else embeddings
+
     if config.get('normalize'):
         X /= X.sum(axis=1).reshape(-1, 1)
+
+    X = X.cpu()
 
     d = sklearn.metrics.pairwise_distances(X)
 
@@ -234,6 +237,6 @@ if __name__ == '__main__':
     config = json.load(open(opt.config))
 
     if opt.build:
-        build_curriculum(config, torch.device('cpu') if not opt.gpu else torch.device(opt.gpu))
+        build_curriculum(config, torch.device('cpu') if opt.gpu is None else torch.device(opt.gpu))
     elif opt.serve:
         serve_curriculum(config)

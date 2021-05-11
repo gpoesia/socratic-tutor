@@ -1,0 +1,14 @@
+// Fractions parser
+
+term = _{ SOI ~ ( !fraction_op ~ fraction | fraction_op | number_expr ) ~ EOI }
+
+fraction = {"[" ~ number_expr ~ "]" ~ "/" ~ "[" ~ number_expr ~ "]"}
+fraction_op = {(fraction | number_expr) ~ op ~ (fraction | number_expr)}
+number_expr = _{ number_op | number | neg_number }
+number_op = { "(" ~ number_expr ~ op ~ number_expr ~ ")" }
+
+number     = @{ ('0'..'9')+ }
+neg_number = @{ "-" ~ ('0'..'9')+ }
+op = @{"+" | "-" | "*"}
+
+WHITESPACE = _{ " " }

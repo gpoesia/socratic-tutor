@@ -53,6 +53,10 @@ class Action:
         return str(self)
 
 
+def random_initial_seed():
+    return random.randint(10**7, 10**8)
+
+
 class Environment:
     'Generic environment back-end'
     def generate_new(self, domain: str, seed: int = None) -> State:
@@ -75,7 +79,7 @@ class RacketEnvironment(Environment):
     def __init__(self, url, default_domain=None):
         self.url = url
         self.default_domain = default_domain
-        self.next_seed = 0
+        self.next_seed = random_initial_seed()
 
     def generate_new(self, domain=None, seed=None):
         domain = domain or self.default_domain
@@ -124,7 +128,7 @@ class RustEnvironment(Environment):
         if not COMMONCORE_AVAILABLE:
             raise RuntimeError('Could not load commoncore.so')
         self.default_domain = default_domain
-        self.next_seed = 0
+        self.next_seed = random_initial_seed()
 
     def generate_new(self, domain=None, seed=None):
         domain = domain or self.default_domain
@@ -139,7 +143,7 @@ class RustEnvironment(Environment):
 
         try:
             next_states = commoncore.step(domain, [s.facts[-1] for s in states])
-        except Exception:
+        except:
             print('Error stepping', states)
             raise
 
@@ -177,7 +181,7 @@ def interact(environment):
             break
 
         for i, s in enumerate(actions):
-            print(f'{i}.\t{s.next_state.facts[-1]}')
+            print(f'{i}.\t{s.next_state.facts[-1]}\t| {s.action}')
 
         choice = input('Choose next state: ')
         state = actions[int(choice)].next_state
@@ -197,6 +201,10 @@ def benchmark(environment):
     after = time.time()
     print(after - before)
 
+def generate(environment):
+    for i in range(20):
+        p = environment.generate_new(seed=i)
+        print(p.facts[-1])
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Interact directly with the environment.")
@@ -204,6 +212,7 @@ if __name__ == '__main__':
     parser.add_argument('--racket-url', type=str,
                         help='Use the Racket backend at the provided URL.')
     parser.add_argument('--interact', help='Solve problems interactively', action='store_true')
+    parser.add_argument('--generate', help='Prints a list of 20 problems', action='store_true')
     parser.add_argument('--benchmark', help='Run a small benchmark of the environment', action='store_true')
     parser.add_argument('--domain', type=str,
                         help='What domain to use.', default='equations-ct')
@@ -221,3 +230,5 @@ if __name__ == '__main__':
         benchmark(env)
     elif opt.interact:
         interact(env)
+    elif opt.generate:
+        generate(env)

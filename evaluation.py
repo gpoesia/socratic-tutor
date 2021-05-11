@@ -3,6 +3,9 @@ import pickle
 import traceback
 import hashlib
 import os
+import json
+import subprocess
+import copy
 
 import util
 from environment import Environment
@@ -59,7 +62,7 @@ class EnvironmentWithEvaluationProxy:
                  agent, environment: Environment, config: dict = {}):
 
         self.experiment_id = experiment_id
-        self.run_index = experiment_id
+        self.run_index = run_index
         self.agent_name = agent_name
         self.domain = domain
         self.environment = environment
@@ -71,7 +74,7 @@ class EnvironmentWithEvaluationProxy:
         self.max_steps = config['max_steps']
         self.print_every = config.get('print_every', 100)
 
-        self.results = []
+        self.results: list = []
         self.n_new_problems = 0
         self.cumulative_reward = 0
         self.begin_time = datetime.datetime.now()
@@ -85,6 +88,23 @@ class EnvironmentWithEvaluationProxy:
 
         self.results_path = os.path.join(output_root, 'results.pkl')
         self.checkpoint_dir = checkpoint_dir
+
+        self.load_checkpoint()
+
+    def load_checkpoint(self):
+        'Loads an existing training checkpoint, if available.'
+        checkpoint_path = os.path.join(self.checkpoint_dir, 'training-state.pt')
+
+        if os.path.exists(checkpoint_path):
+            print('Training checkpoint exists - restoring...')
+            device = self.agent.q_function.device
+            previous_state = torch.load(checkpoint_path, map_location=device)
+            self.agent = previous_state.agent
+            self.agent.q_function.to(device)
+            self.n_steps = previous_state.n_steps
+            self.n_new_problems = previous_state.n_new_problems
+            self.cumulative_reward = previous_state.cumulative_reward
+            self.n_checkpoints = previous_state.n_checkpoints
 
     def generate_new(self, domain=None, seed=None):
         self.n_new_problems += 1
@@ -115,11 +135,13 @@ class EnvironmentWithEvaluationProxy:
 
     def evaluate(self):
         print('Evaluating...')
-        name, domain = self.agent.name(), self.environment.default_domain
+        name, domain = self.agent_name, self.environment.default_domain
 
         evaluator = SuccessRatePolicyEvaluator(self.environment, self.eval_config)
         results = evaluator.evaluate(self.agent.get_q_function())
         results['n_steps'] = self.n_steps
+        results['experiment_id'] = self.experiment_id
+        results['run_index'] = self.run_index
         results['name'] = name
         results['domain'] = domain
         results['problems_seen'] = self.n_new_problems
@@ -132,8 +154,8 @@ class EnvironmentWithEvaluationProxy:
                    'max_solution_length': results['max_solution_length'],
                    })
 
-        print('Success rate:', results['success_rate'],
-              '\tMax length:', results['max_solution_length'])
+        print(util.now(), f'Success rate ({name}-{domain}-run{self.run_index}):',
+              results['success_rate'], '\tMax length:', results['max_solution_length'])
 
         try:
             with open(self.results_path, 'rb') as f:
@@ -150,10 +172,17 @@ class EnvironmentWithEvaluationProxy:
         torch.save(self.agent.q_function,
                    os.path.join(self.checkpoint_dir,
                                 f'{self.n_checkpoints}.pt'))
+
         self.n_checkpoints += 1
 
+        torch.save(self,
+                   os.path.join(self.checkpoint_dir,
+                                'training-state.pt'))
+
+
     def evaluate_agent(self):
-        self.evaluate()
+        if self.n_checkpoints == 0:  # False when loading an existing training run.
+            self.evaluate()
         while True:
             try:
                 self.agent.learn_from_environment(self)
@@ -168,7 +197,7 @@ class EnvironmentWithEvaluationProxy:
                 print('Ignoring exception and continuing...')
 
     def print_progress(self):
-        print('{} steps ({:.3}%, ETA: {}), {} total reward, explored {} problems. {}'
+        print(util.now(), '{} steps ({:.3}%, ETA: {}), {} total reward, explored {} problems. {}'
               .format(self.n_steps,
                       100 * (self.n_steps / self.max_steps),
                       util.format_eta(datetime.datetime.now() - self.begin_time,
@@ -238,3 +267,31 @@ def evaluate_policy_checkpoints(config, device):
 
     except FileNotFoundError:
         print('Checkpoint', i, 'does not exist -- stopping.')
+
+def normalize_human_solutions(path):
+    human_solutions = json.load(open(path))
+
+    all_steps = []
+
+    for h in human_solutions:
+        for sol in h['solutions']:
+            all_steps.extend(sol)
+
+    with open('input.txt', 'w') as f:
+        for l in all_steps:
+            f.write(l)
+            f.write('\n')
+
+    sp = subprocess.run(["racket", "-tm", "canonicalize-terms.rkt"], capture_output=True)
+    steps = list(filter(None, sp.stdout.decode("utf8").split("\n")))
+    print(len(all_steps), len(steps))
+
+    normalized_solutions = copy.deepcopy(human_solutions)
+    i = 0
+
+    for h in normalized_solutions:
+        for i in range(len(h['solutions'])):
+            h['solutions'][i] = [steps.pop(0) for s in range(len(h['solutions'][i]))]
+
+    with open('normalized_human_solutions.json', 'w') as f:
+        json.dump(normalized_solutions, f)

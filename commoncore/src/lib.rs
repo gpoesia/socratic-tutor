@@ -4,10 +4,13 @@ use pyo3::wrap_pyfunction;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-mod domain;
+pub mod domain;
 use crate::domain::Domain;
 use crate::domain::equations::Equations;
+use crate::domain::fractions::Fractions;
 use crate::domain::ternary::TernaryAddition;
+use crate::domain::sorting::Sorting;
+use crate::domain::rubiks_cube::RubiksCube;
 
 extern crate num_rational;
 extern crate pest;
@@ -15,10 +18,14 @@ extern crate pest;
 extern crate pest_derive;
 
 thread_local!{
-    static DOMAINS: HashMap<&'static str, Arc<dyn Domain>> = {
+    pub static DOMAINS: HashMap<&'static str, Arc<dyn Domain>> = {
         let mut map : HashMap<&'static str, Arc<dyn Domain>>  = HashMap::new();
         map.insert("equations-ct", Arc::new(Equations {}));
-        map.insert("ternary-addition", Arc::new(TernaryAddition::new(10)));
+        map.insert("fractions", Arc::new(Fractions::new(4, 4)));
+        map.insert("ternary-addition", Arc::new(TernaryAddition::new(15)));
+        map.insert("sorting", Arc::new(Sorting::new(12)));
+        map.insert("rubiks-cube-20", Arc::new(RubiksCube::new(20)));
+        map.insert("rubiks-cube-50", Arc::new(RubiksCube::new(50)));
         map
     };
 }

@@ -1,6 +1,7 @@
 # Utilities.
 
 import random
+import datetime
 
 
 def format_eta(elapsed_time, elapsed_steps, total_steps):
@@ -19,3 +20,8 @@ def register(superclass):
         superclass.subtypes[subclass.__name__] = subclass
         return subclass
     return decorator
+
+
+def now():
+    'The current time as string, to be printed in log messages.'
+    return datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")

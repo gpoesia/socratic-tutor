@@ -14,6 +14,7 @@ import subprocess
 import logging
 
 import torch
+from torch import nn
 from torch.nn import functional as F
 from torch.distributions.categorical import Categorical
 import wandb
@@ -22,7 +23,7 @@ import util
 from util import register
 from environment import Environment, State, Action
 from evaluation import EnvironmentWithEvaluationProxy, evaluate_policy, evaluate_policy_checkpoints
-from q_function import QFunction, InverseLength, RandomQFunction
+from q_function import QFunction, InverseLength, RandomQFunction, RubiksGreedyHeuristic
 
 
 SUCCESS_STATE = State(['success'], [], 1.0)
@@ -86,8 +87,12 @@ class NCE(LearningAgent):
         self.optimize_every = config.get('optimize_every', 1)
         self.n_gradient_steps = config.get('n_gradient_steps', 64)
 
-        if config.get('bootstrap_from', 'Random') == 'InverseLength':
+        bootstrap_from = config.get('bootstrap_from', 'Random')
+
+        if bootstrap_from == 'InverseLength':
             self.bootstrap_policy = InverseLength(self.q_function.device)
+        elif bootstrap_from == 'RubiksGreedyHeuristic':
+            self.bootstrap_policy = RubiksGreedyHeuristic(self.q_function.device)
         else:
             self.bootstrap_policy = RandomQFunction(self.q_function.device)
 
@@ -103,6 +108,9 @@ class NCE(LearningAgent):
         self.learning_rate = config.get('lr', 1e-4)
         self.reset_optimizer()
 
+        self.current_depth = self.initial_depth
+        self.bootstrapping = True
+
     def reset_optimizer(self):
         self.optimizer = torch.optim.Adam(self.q_function.parameters(), lr=self.learning_rate)
 
@@ -110,9 +118,6 @@ class NCE(LearningAgent):
         return 'NCE'
 
     def learn_from_environment(self, environment):
-        self.current_depth = self.initial_depth
-        self.bootstrapping = True
-
         for i in itertools.count():
             problem = environment.generate_new()
             solution = self.beam_search(problem, environment)
@@ -120,7 +125,7 @@ class NCE(LearningAgent):
             if solution is not None:
                 self.training_problems_solved += 1
 
-                if self.training_problems_solved > self.n_bootstrap_problems:
+                if self.training_problems_solved >= self.n_bootstrap_problems:
                     self.bootstrapping = False
 
                     if self.training_problems_solved % self.optimize_every == 0:
@@ -140,13 +145,13 @@ class NCE(LearningAgent):
         '''Performs beam search in a train problem while recording particular examples
         in the replay buffer (according to the various knobs in the algorithm, see config)'''
 
-        states_by_id = {id(state): state}
-        state_parent_edge = {}
         beam = [state]
         solution = None  # The state that we found that solves the problem.
         q = self.get_q_function()
         seen = {state}
         visited_states = [[state]]  # List of states visited in each iteration (used to retrieve negatives).
+
+        t = q.get_aggregation_transform()
 
         logging.info(f'Trying {state}')
 
@@ -154,10 +159,6 @@ class NCE(LearningAgent):
             rewards, actions = zip(*environment.step(beam))
 
             for s, r, state_actions in zip(beam, rewards, actions):
-                for a in state_actions:
-                    # Remember how we got to this state.
-                    states_by_id[id(a.next_state)] = a.next_state
-                    state_parent_edge[id(a.next_state)] = (s, a)
                 # Record solution, if found.
                 if r:
                     solution = s
@@ -181,7 +182,7 @@ class NCE(LearningAgent):
             for s, state_actions in zip(beam, actions):
                 for a in state_actions:
                     ns = a.next_state
-                    ns.value = s.value + math.log(a.value)
+                    ns.value = s.value + t(a.value)
                     next_states.append(ns)
 
             next_states.sort(key=lambda s: s.value, reverse=True)
@@ -209,7 +210,7 @@ class NCE(LearningAgent):
                 if positive.parent_action is None:
                     break
 
-                negatives = [s for s in states if id(s) != id(positive)]
+                negatives = [s.parent_action for s in states if id(s) != id(positive)]
                 example = ContrastiveExample(positive=positive.parent_action,
                                              negatives=negatives,
                                              gap=1)
@@ -227,14 +228,15 @@ class NCE(LearningAgent):
         if not self.examples:
             return
 
+        celoss = nn.CrossEntropyLoss()
+
         for i in range(self.n_gradient_steps):
             e = random.choice(self.examples)
             all_actions = [e.positive] + e.negatives
 
             self.optimizer.zero_grad()
-
             f_pred = self.q_function(all_actions)
-            loss = -(f_pred[0] / f_pred.sum()).log()
+            loss = celoss(f_pred.unsqueeze(0), torch.zeros(1, dtype=int, device=f_pred.device))
             wandb.log({'train_loss': loss.item()})
             loss.backward()
             self.optimizer.step()
@@ -280,6 +282,9 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.n_negatives = config.get('n_negatives', 1)
         self.learning_rate = config.get('lr', 1e-4)
 
+        self.current_depth = self.initial_depth
+        self.bootstrapping = True
+
     def name(self):
         if self.full_imitation_learning:
             return 'ImitationLearning'
@@ -291,9 +296,6 @@ class BeamSearchIterativeDeepening(LearningAgent):
             return 'IDCDagger'
 
     def learn_from_environment(self, environment):
-        self.current_depth = self.initial_depth
-        self.bootstrapping = True
-
         for i in itertools.count():
             problem = environment.generate_new()
             solution = self.beam_search(problem, environment)
@@ -398,6 +400,9 @@ class BeamSearchIterativeDeepening(LearningAgent):
             beam = next_states[:self.beam_size]
             logging.info(f'Beam #{i}: {beam}:')
 
+            if not beam:
+                break
+
         logging.info('Solved? {} (solution len {}, q={})'
                      .format(solution is not None,
                              solution and len(solution),
@@ -481,6 +486,7 @@ class QLearning(LearningAgent):
 
         self.discount_factor = config.get('discount_factor', 1.0)
         self.batch_size = config.get('batch_size', 64)
+        self.optimize_every = config.get('optimize_every', 16)
         self.softmax_alpha = config.get('softmax_alpha', 1.0)
 
         self.replay_buffer = collections.deque(maxlen=self.replay_buffer_size)
@@ -519,6 +525,8 @@ class QLearning(LearningAgent):
                 self.replay_buffer.append(QReplayBufferTuple(actions[a],
                                                              r,
                                                              next_actions))
+
+            if i % self.optimize_every == 0:
                 self.gradient_steps()
 
     def learn_from_experience(self):
@@ -541,7 +549,7 @@ class QLearning(LearningAgent):
         # Compute ys.
         with torch.no_grad():
             for t in batch:
-                if t.r > 0:  # Next state is terminal.
+                if t.r > 0 or not t.A1:  # Next state is terminal.
                     ys.append(t.r)
                 else:
                     # Need to compute maximum Q value for all actions.
@@ -570,8 +578,8 @@ def run_agent_experiment(config, device):
     wandb.init(id=run_id,
                name=run_id,
                config=config,
-               project='test',
-               entity = "socratic",
+               entity='socratic',
+               project=config.get('wandb_project', 'test'),
                reinit=True)
 
     env = Environment.from_config(config)
@@ -585,7 +593,7 @@ def run_agent_experiment(config, device):
     eval_env.evaluate_agent()
 
 
-def run_batch_experiment(config):
+def run_batch_experiment(config, range_to_run):
     'Spawns a series of processes to run experiments for each agent/domain pair.'
     experiment_id = config.get('experiment_id', util.random_id())
     domains = config['domains']
@@ -612,6 +620,11 @@ def run_batch_experiment(config):
                 print(f'Running {agent["name"]} on {domain}')
 
                 for run_index in range(n_runs):
+                    if agent_index < range_to_run[0] or agent_index >= range_to_run[1]:
+                        print(f'Run {run_index} not in range - skipping')
+                        agent_index += 1
+                        continue
+
                     if environment_backend == 'Racket':
                         port = environment_port_base + agent_index
                         environment_process = subprocess.Popen(
@@ -629,7 +642,8 @@ def run_batch_experiment(config):
                         'domain': domain,
                         'environment_backend': environment_backend,
                         'environment_url': 'http://localhost:{}'.format(port),
-                        'eval_environment': copy.deepcopy(config['eval_environment'])
+                        'eval_environment': copy.deepcopy(config['eval_environment']),
+                        'wandb_project': config.get('wandb_project')
                     }
 
                     print('Running agent with config', json.dumps(run_config))
@@ -668,6 +682,9 @@ if __name__ == '__main__':
     parser.add_argument('--eval-checkpoints', help='Show the evolution of a learned policy during interaction',
                         action='store_true')
     parser.add_argument('--debug', help='Enable debug messages.', action='store_true')
+    parser.add_argument('--range', type=str, default=None,
+                        help='Range of experiments to run. Format: 2-5 means range [2, 5).'
+                        'Used to split experiments across multiple machines. Default: all')
     parser.add_argument('--gpu', type=int, default=None, help='Which GPU to use.')
 
     opt = parser.parse_args()
@@ -678,7 +695,7 @@ if __name__ == '__main__':
     except json.decoder.JSONDecodeError:
         config = json.load(open(opt.config))
 
-    device = torch.device('cpu') if not opt.gpu else torch.device(opt.gpu)
+    device = torch.device('cpu') if opt.gpu is None else torch.device(opt.gpu)
 
     # configure logging.
     FORMAT = '%(asctime)-15s %(message)s'
@@ -686,6 +703,11 @@ if __name__ == '__main__':
 
     if opt.debug:
         logging.getLogger().setLevel(logging.INFO)
+
+    if opt.range:
+        range_to_run = tuple(map(int, opt.range.split('-')))
+    else:
+        range_to_run = (0, 10**9)
 
     # Only shown in debug mode.
     logging.info('Running in debug mode.')
@@ -697,4 +719,4 @@ if __name__ == '__main__':
     elif opt.eval_checkpoints:
         evaluate_policy_checkpoints(config, device)
     elif opt.experiment:
-        run_batch_experiment(config)
+        run_batch_experiment(config, range_to_run)

@@ -2,6 +2,9 @@
 
 pub mod equations;
 pub mod ternary;
+pub mod sorting;
+pub mod rubiks_cube;
+pub mod fractions;
 
 use rand_pcg::Pcg64;
 
