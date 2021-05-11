@@ -181,7 +181,7 @@ def interact(environment):
             break
 
         for i, s in enumerate(actions):
-            print(f'{i}.\t{s.next_state.facts[-1]}')
+            print(f'{i}.\t{s.next_state.facts[-1]}\t| {s.action}')
 
         choice = input('Choose next state: ')
         state = actions[int(choice)].next_state
@@ -201,6 +201,10 @@ def benchmark(environment):
     after = time.time()
     print(after - before)
 
+def generate(environment):
+    for i in range(20):
+        p = environment.generate_new(seed=i)
+        print(p.facts[-1])
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Interact directly with the environment.")
@@ -208,6 +212,7 @@ if __name__ == '__main__':
     parser.add_argument('--racket-url', type=str,
                         help='Use the Racket backend at the provided URL.')
     parser.add_argument('--interact', help='Solve problems interactively', action='store_true')
+    parser.add_argument('--generate', help='Prints a list of 20 problems', action='store_true')
     parser.add_argument('--benchmark', help='Run a small benchmark of the environment', action='store_true')
     parser.add_argument('--domain', type=str,
                         help='What domain to use.', default='equations-ct')
@@ -225,3 +230,5 @@ if __name__ == '__main__':
         benchmark(env)
     elif opt.interact:
         interact(env)
+    elif opt.generate:
+        generate(env)
