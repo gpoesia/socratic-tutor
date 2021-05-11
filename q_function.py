@@ -182,8 +182,9 @@ class StateRNNValueFn(QFunction):
 
     def to(self, device):
         QFunction.to(self, device)
-        self.vocab.device = device
         self.device = device
+        self.vocab.device = device
+        self.vocab.to(device)
 
     def forward(self, actions):
         state_embedding = self.embed_states([a.next_state for a in actions])
@@ -222,6 +223,13 @@ class Bilinear(QFunction):
         self.bilinear_comb = nn.Linear(2*hidden_dim, 2*hidden_dim)
         self.to(device)
         self.device = device
+
+    def to(self, device):
+        QFunction.to(self, device)
+        self.device = device
+        self.vocab.to(device)
+        self.vocab.device = device
+
 
     def forward(self, actions):
         current_state_embedding = self.embed_states([a.state for a in actions])
