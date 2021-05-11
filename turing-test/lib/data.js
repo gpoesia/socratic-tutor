@@ -8,6 +8,7 @@ module.exports.UserSession = Mongoose.models.UserSession || Mongoose.model(
   'UserSession',
   new Mongoose.Schema({
     id: String,
+    type: String,
     beginTimestamp: Date,
     endTimestamp: Date,
     exerciseResponses: Array,

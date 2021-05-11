@@ -149,8 +149,8 @@ def trim_solutions(solutions: list[list[State]], embeddings, min_separation_dist
                 ignored_actions[solution_actions_str[i]] = ignored_actions.get(solution_actions_str[i], 0) + 1
         trimmed_solution.append(solution[-1]) #always add the last step
         trimmed_solutions.append(trimmed_solution)
-    print("frequency of ignored actions", sorted(ignored_actions.items(), key =
-             lambda kv:(kv[1], kv[0])))
+    # print("frequency of ignored actions", sorted(ignored_actions.items(), key =
+            #  lambda kv:(kv[1], kv[0])))
     return trimmed_solutions
 
 

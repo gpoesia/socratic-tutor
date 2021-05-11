@@ -6,7 +6,8 @@ export default async (req, res) => {
   const session = new UserSession({ id: newSessionId });
 
   session.beginTimestamp = new Date();
-  session.exerciseResponses = {};
+  session.type = "turing"
+  session.exerciseResponses = [];
 
   await session.save();
 
