@@ -57,7 +57,7 @@ impl Operator {
 
     fn distributes_over(&self, rhs: Operator) -> bool {
         match self {
-            Times | Div => rhs == Add || rhs == Sub,
+            Times => rhs == Add || rhs == Sub,
             _ => false
         }
     }
