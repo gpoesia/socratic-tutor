@@ -377,9 +377,7 @@ impl super::Domain for Equations {
 
         // Apply an operation to both sides.
         for st in children.iter() {
-            if st.size <= 3 &&
-                !st.is_predicate() &&
-                *(st.t.borrow() as &Term) != Number(Rational32::from_integer(0)) {
+            if is_valid_op_both_sides_term(st.t.borrow()) {
                 for op in &[Add, Sub, Times, Div] {
                     let (next_state, fd, hd) = a_op_both_sides(Rc::clone(&rct), *op, st);
                     if seen_before.insert(fd.clone()) {
@@ -392,6 +390,20 @@ impl super::Domain for Equations {
         Some(actions.into_iter().map(|(t, fd, hd)| Action { next_state: t.to_string(),
                                                             formal_description: fd,
                                                             human_description: hd }).collect())
+    }
+}
+
+fn is_valid_op_both_sides_term(t: &Term) -> bool {
+    match t {
+        Number(n) => *n != Rational32::from_integer(0),
+        Variable(_) => true,
+        BinaryOperation(op, lhs, rhs) => {
+            match (op, lhs.t.borrow(), rhs.t.borrow()) {
+                (Times, Number(n), Variable(_v)) => *n != Rational32::from_integer(0),
+                _ => false,
+            }
+        },
+        _ => false,
     }
 }
 
