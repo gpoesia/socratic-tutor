@@ -295,15 +295,10 @@ def normalize_human_solutions(path):
     human_solutions = json.load(open(path))
 
     solutions = []
-
     for h in human_solutions:
-        solutions.extend(h['solutions'])
+        solutions.append(h['solution'])
 
     normalized_solutions = normalize_solutions(solutions)
-
-    for h in human_solutions:
-        for i in range(len(h['solutions'])):
-            h['solutions'][i] = normalized_solutions.pop(0)
-
-    with open('normalized_human_solutions.json', 'w') as f:
-        json.dump(human_solutions, f)
+    return normalized_solutions
+    # with open('normalized_human_solutions.json', 'w') as f:
+    #     json.dump(human_solutions, f)

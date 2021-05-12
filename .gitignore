@@ -25,3 +25,4 @@ wandb/
 commoncore/target
 lightning_logs/
 */node_modules
+*nce-rust*

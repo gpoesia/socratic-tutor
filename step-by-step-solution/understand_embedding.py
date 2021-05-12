@@ -72,6 +72,8 @@ def save_solutions_and_embeddings(solutions: list[list[State]], embeddings, file
 def load_solutions_and_embeddings(file_path):
     with open(file_path, 'rb') as file:
         sol_emb = pickle.load(file)
+        if sol_emb["problems"]:
+            return sol_emb["solutions"], sol_emb["embeddings"], sol_emb["problems"]
         return sol_emb["solutions"], sol_emb["embeddings"]
 
 def generate_solutions_embeddings(config:dict, device, num_problems = 100, save_embeddings: bool= True, file_path:str = None, backup_path:str = None, generate_plots:bool = False):
