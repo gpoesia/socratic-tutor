@@ -13,7 +13,6 @@ configs/
 models/
 output/
 *.txt
-*.json
 *.org
 *.pkl
 wandb/
@@ -26,3 +25,5 @@ commoncore/target
 lightning_logs/
 */node_modules
 *nce-rust*
+
+*package-lock.json
