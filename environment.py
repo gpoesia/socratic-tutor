@@ -4,6 +4,7 @@ import argparse
 import requests
 import random
 import time
+import torch
 
 try:
     import commoncore
@@ -163,7 +164,14 @@ class RustEnvironment(Environment):
         return list(zip(rewards, actions))
 
 
-def interact(environment):
+def interact(environment, scoring_model_path):
+    if scoring_model_path:
+        device = torch.device('cpu')
+        model = torch.load(scoring_model_path, map_location=device)
+        model.to(device)
+    else:
+        model = None
+
     print('Enter a problem, or empty to generate a random one:')
     problem = input('>>> ')
 
@@ -180,11 +188,35 @@ def interact(environment):
             print('Solved!')
             break
 
+        if model is not None:
+            q = model(actions)
+
         for i, s in enumerate(actions):
-            print(f'{i}.\t{s.next_state.facts[-1]}\t| {s.action}')
+            print(f'{i}.\t{s.next_state.facts[-1]}\t| {s.action} {q[i] if model else ""}')
 
         choice = input('Choose next state: ')
         state = actions[int(choice)].next_state
+
+
+def test(environment, scoring_model_path):
+    device = torch.device('cpu')
+    model = torch.load(scoring_model_path, map_location=device)
+    model.to(device)
+
+    print('Enter a problem, or empty to generate a random one:')
+    problem = input('>>> ')
+
+    if not problem:
+        state = environment.generate_new(seed=random.randint(0, 10**6))
+    else:
+        state = State([problem], ['x = ?'], 0)
+
+    print('State:', state)
+    success, history = model.rollout(environment, state, 30, 20, debug=True)
+
+    print('Success' if success else 'Failed')
+    if success:
+        print('Solution:', ' => '.join(map(lambda s: s.facts[-1], model.recover_solutions(history)[0])))
 
 
 def benchmark(environment):
@@ -201,10 +233,12 @@ def benchmark(environment):
     after = time.time()
     print(after - before)
 
+
 def generate(environment):
     for i in range(20):
         p = environment.generate_new(seed=i)
         print(p.facts[-1])
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Interact directly with the environment.")
@@ -212,6 +246,8 @@ if __name__ == '__main__':
     parser.add_argument('--racket-url', type=str,
                         help='Use the Racket backend at the provided URL.')
     parser.add_argument('--interact', help='Solve problems interactively', action='store_true')
+    parser.add_argument('--test', help='Test a model on a problem.', action='store_true')
+    parser.add_argument('--q-function', help='Show model-generated scores (pass a path to the model).', type=str)
     parser.add_argument('--generate', help='Prints a list of 20 problems', action='store_true')
     parser.add_argument('--benchmark', help='Run a small benchmark of the environment', action='store_true')
     parser.add_argument('--domain', type=str,
@@ -229,6 +265,8 @@ if __name__ == '__main__':
     if opt.benchmark:
         benchmark(env)
     elif opt.interact:
-        interact(env)
+        interact(env, opt.q_function)
+    elif opt.test:
+        test(env, opt.q_function)
     elif opt.generate:
         generate(env)

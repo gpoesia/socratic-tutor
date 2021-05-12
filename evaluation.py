@@ -268,14 +268,13 @@ def evaluate_policy_checkpoints(config, device):
     except FileNotFoundError:
         print('Checkpoint', i, 'does not exist -- stopping.')
 
-def normalize_human_solutions(path):
-    human_solutions = json.load(open(path))
 
+def normalize_solutions(solutions: list[list[str]]) -> list[list[str]]:
+    'Uses the Racket parser to syntactically normalize solutions in the equations domain.'
     all_steps = []
 
-    for h in human_solutions:
-        for sol in h['solutions']:
-            all_steps.extend(sol)
+    for s in solutions:
+        all_steps.extend(s)
 
     with open('input.txt', 'w') as f:
         for l in all_steps:
@@ -284,14 +283,27 @@ def normalize_human_solutions(path):
 
     sp = subprocess.run(["racket", "-tm", "canonicalize-terms.rkt"], capture_output=True)
     steps = list(filter(None, sp.stdout.decode("utf8").split("\n")))
-    print(len(all_steps), len(steps))
 
-    normalized_solutions = copy.deepcopy(human_solutions)
-    i = 0
+    new_solutions = []
+    for s in solutions:
+        new_solutions.append([steps.pop(0) for _ in range(len(s))])
 
-    for h in normalized_solutions:
+    return new_solutions
+
+
+def normalize_human_solutions(path):
+    human_solutions = json.load(open(path))
+
+    solutions = []
+
+    for h in human_solutions:
+        solutions.extend(h['solutions'])
+
+    normalized_solutions = normalize_solutions(solutions)
+
+    for h in human_solutions:
         for i in range(len(h['solutions'])):
-            h['solutions'][i] = [steps.pop(0) for s in range(len(h['solutions'][i]))]
+            h['solutions'][i] = normalized_solutions.pop(0)
 
     with open('normalized_human_solutions.json', 'w') as f:
-        json.dump(normalized_solutions, f)
+        json.dump(human_solutions, f)
