@@ -11,6 +11,7 @@ config = {
 }
 
 
+
 def find_human_sol_avg_length(jsonpath):
     ''' human solution length is 1 step less than machine solution because
         machine solution contains the question as the first step'''
@@ -103,7 +104,7 @@ def save_machine_and_human_sol_to_json(problems, trimmed_solutions, human_json_f
     for q, sol in zip(problems, trimmed_solutions):
         res.append({
         "question": q,
-        "solutions": human_dict[q] + [{"id": "nce", "steps": [state.facts[-1] for state in sol]}]
+        "solutions": human_dict[q] + [{"id": "nce", "steps": [state.facts[-1] for state in sol[1:]]}]
         })
     with open(output_path, 'w') as outfile:
         json.dump(res, outfile)
@@ -117,7 +118,7 @@ if __name__ == '__main__':
     parser.add_argument('--find_dist', help='Find best separation distance tuned for the provided average solution length',
                         action='store_true', default=False)
     parser.add_argument('--opt_sol_len', help='Optimal solution length to aim for', type=float, default=4.2)
-    parser.add_argument('--pkl_file', type=str, help='Pickle file path (Embeddings)', default="nce-embeddings.pickle")
+    parser.add_argument('--pkl_file', type=str, help='Pickle file path (Embeddings)', default="nce_embeddings_rust.pkl")
     opt = parser.parse_args()
 
     if opt.human_avg:
@@ -127,5 +128,10 @@ if __name__ == '__main__':
     else:
         problems = get_problems(opt.json_file)
         solutions, embeddings, problems= solve_problems(config, torch.device("cpu"), problems, "machine_solutions.pickle")
-        # trimmed_solutions = trim_solutions(solutions, embeddings, 3.35)
-        # save_machine_and_human_sol_to_json(problems, trimmed_solutions, opt.json_file, "human_and_machine_sols.json")
+        # solutions, embeddings = load_solutions_and_embeddings("nce_embeddings_rust.pkl")
+        # for solution in solutions[:10]:
+        #     print("-"*20)
+        #     print_step_by_step_solution(solution)
+
+        trimmed_solutions = trim_solutions(solutions, embeddings, 3.8799999999999613)
+        save_machine_and_human_sol_to_json(problems, trimmed_solutions, opt.json_file, "human_and_machine_sols.json")

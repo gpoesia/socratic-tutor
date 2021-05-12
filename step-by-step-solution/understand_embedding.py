@@ -20,6 +20,7 @@ config_example = {
     "checkpoint_path":"nce-equations-ct.pt",
     "domain": "equations-ct",
     "environment_url": "http://localhost:9876",
+    "environment_backend":"Rust"
 }
 
 ## Command to visualize step by step solution:
