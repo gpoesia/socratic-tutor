@@ -24,13 +24,14 @@ const problems = [
 let all_solutions = []
 problems.forEach(problem => {
 
-    let preprossedP =problem.replace(/()/g, '');
+    let preprossedP =problem.replace(/[({})]/g, '');
     const steps = mathsteps.solveEquation(preprossedP);
-
-    let solution = steps.map(step=>step.newEquation.ascii())
-    all_solutions.push({"problem": problem, "solution":solution})
+    if (steps.length){
+        let solution = steps.map(step=>step.newEquation.ascii())
+        all_solutions.push({"problem": problem, "solution":solution})
+    }
 })
-
+console.log("solved " + all_solutions.length + " questions")
 
 const fs = require('fs')
 const jsonString = JSON.stringify(all_solutions)

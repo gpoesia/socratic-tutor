@@ -20,15 +20,17 @@ const TuringTestInstructions = () => {
   return (
     <div className="content">
       <h1>Human or Machine: Step-by-Step Solutions for Equation Problems</h1>
+
       <p>
-        Here is an example task that follows the same structure as the tasks you
+        Here is an example task that follows the same structure as the ones that you
         will see in the actual experiment.
       </p>
-      <p>Consider this equation problem,</p>
-      <p>{TuringTestJson["example"]["question"]}</p>
+      <br/>
+      <p >Consider this equation problem,</p>
+      <p className = "center-button"> {TuringTestJson["example"]["question"]}</p>
       <p>
         The following are 4 step-by-step solutions, of which two are written by human. All of them are correct.
-        Please pick the two solutions that you believe are most likely to be written by
+        Please pick the two that you believe were written by
         human.
       </p>
       <RankSolutions

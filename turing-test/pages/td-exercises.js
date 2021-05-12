@@ -72,8 +72,10 @@ const TuringTest = () => {
       />
 
       <h1>Human or Machine: Step-by-Step Solutions for Equation Problems</h1>
+      <h2>Progress: {(currQIdx + 1)} / {TestQuestions.length}</h2>
       <p>Consider this equation problem,</p>
-      <p>{TestQuestions[currQIdx]["question"]}</p>
+      <br/>
+      <p className="center-button">{TestQuestions[currQIdx]["question"]}</p>
       <p>
         The following are 4 step-by-step solutions, of which two are written by
         human. Please pick the two solutions that you believe are most likely to
