@@ -3,6 +3,14 @@ import argparse
 from understand_embedding import *
 
 
+config = {
+    "checkpoint_path":"nce-equations-ct.pt",
+    "domain": "equations-ct",
+    "environment_url": "http://localhost:9876",
+    "environment_backend":"Rust"
+}
+
+
 def find_human_sol_avg_length(jsonpath):
     ''' human solution length is 1 step less than machine solution because
         machine solution contains the question as the first step'''
@@ -60,11 +68,11 @@ def solve_problems(config: dict, device, problems: list[str], file_path: str):
         q.device = device
         env = Environment.from_config(config)
         max_steps = config.get('max_steps', 30)
-        beam_size = config.get('beam_size', 20)
+        beam_size = config.get('beam_size', 5)
         solutions, embeddings, succ_problems = [], [], []
         print("Solving", len(problems), "problems using", " beam_size ", beam_size, " max_steps ", max_steps, "...")
         for problem in problems:
-            state = State([problem], ['x = ?'], 0)
+            state = State([problem], [''], 0)
             success, history = q.rollout(env, state, max_steps, beam_size)
             if success:
                 solution = q.recover_solutions(history)[0]
@@ -118,6 +126,6 @@ if __name__ == '__main__':
         find_best_separation_dist(opt.pkl_file, opt.opt_sol_len)
     else:
         problems = get_problems(opt.json_file)
-        solutions, embeddings, problems= solve_problems(config_example, torch.device("cpu"), problems, "machine_solutions.json")
+        solutions, embeddings, problems= solve_problems(config, torch.device("cpu"), problems, "machine_solutions.pickle")
         # trimmed_solutions = trim_solutions(solutions, embeddings, 3.35)
         # save_machine_and_human_sol_to_json(problems, trimmed_solutions, opt.json_file, "human_and_machine_sols.json")
