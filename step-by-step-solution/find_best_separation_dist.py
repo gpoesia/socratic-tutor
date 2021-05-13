@@ -103,13 +103,6 @@ def solve_problems(config: dict, device, problems: list[str], file_path: str):
 def save_machine_and_human_sol_to_json(problems, trimmed_solutions, human_json_file, mathsteps_json_file, output_path):
     print("Saving output json file to", output_path, "...")
 
-    print("Unpack mathstep solutions...")
-    succ_problems, mathsteps_sols = normalize_mathstep_solutions(mathsteps_json_file)
-    mathstep_dict = {}
-
-    for p, sol in zip(succ_problems, mathsteps_sols):
-        mathstep_dict[p] = [{ "id": "mathsteps", "steps": sol}]
-
     print("Unpack human solutions...")
     human = json.load(open(human_json_file))
     human_dict = {}
@@ -121,14 +114,27 @@ def save_machine_and_human_sol_to_json(problems, trimmed_solutions, human_json_f
         human_dict[p] = [{ "id": "human1", "steps": sol_1}, {"id": "human2","steps": sol_2}]
 
 
+    print("Unpack mathstep solutions...")
+    succ_problems, mathsteps_sols = normalize_mathstep_solutions(mathsteps_json_file)
+    mathstep_dict = {}
+
+    for p, sol in zip(succ_problems, mathsteps_sols):
+        mathstep_dict[p] = [{ "id": "mathsteps", "steps": sol[:-1] + [human_dict[p][0]["steps"][-1]]} ]
+
+
+
     turing_test = []
     for q, sol in zip(problems, trimmed_solutions):
         if q not in mathstep_dict: continue  #skip problem if mathsteps didn't solve this problem
         turing_test.append({
         "question": q,
-        "solutions": human_dict[q] + mathstep_dict[q] + [{"id": "nce", "steps": [state.facts[-1] for state in sol[1:]]}]
+        "solutions": human_dict[q] + mathstep_dict[q] + [{"id": "nce", "steps": [state.facts[-1] for state in sol[1:-1]] + [human_dict[q][0]["steps"][-1]] }]
         })
 
+    turing_test = {
+        "example": turing_test[0],
+        "experiment": turing_test[1:]
+    }
     with open(output_path, 'w') as outfile:
         json.dump(turing_test, outfile)
 
