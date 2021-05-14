@@ -547,17 +547,17 @@ fn a_distributivity(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, Strin
         }
 
         if let BinaryOperation(op2, t3, t4) = t1.t.borrow() {
-            // Forward direction: (x + 2)*5 => 5x + 5*2
-            // t1 op1 (t3 op2 t4) => (t1 op1 t3) op2 (t1 op2 t4)
-            if op2.distributes_left(*op1) {
+            // Forward direction: (x + 2)*5 => x*5 + 2*5
+            // (t3 op2 t4) op1 t2 => (t3 op1 t2) op2 (t4 op1 t2)
+            if op1.distributes_left(*op2) {
                 return Some((
                     SizedTerm::new(
                         BinaryOperation(
                             *op2,
-                            Rc::new(SizedTerm::new(BinaryOperation(*op2, Rc::clone(t2), Rc::clone(t3)),
-                                                   1 + t2.size + t3.size)),
-                            Rc::new(SizedTerm::new(BinaryOperation(*op2, Rc::clone(t2), Rc::clone(t4)),
-                                                   1 + t2.size + t4.size))),
+                            Rc::new(SizedTerm::new(BinaryOperation(*op1, Rc::clone(t3), Rc::clone(t2)),
+                                                   1 + t3.size + t2.size)),
+                            Rc::new(SizedTerm::new(BinaryOperation(*op1, Rc::clone(t4), Rc::clone(t2)),
+                                                   1 + t4.size + t2.size))),
                         3 + 2*t2.size + t3.size + t4.size),
                     format!("dist {}, {}", i, t.to_string()),
                     format!("Apply distributivity in {}", t.to_string())));
