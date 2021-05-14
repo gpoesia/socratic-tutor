@@ -228,6 +228,9 @@ class NCE(LearningAgent):
         if not self.examples:
             return
 
+        if not self.keep_optimizer:
+            self.reset_optimizer()
+
         celoss = nn.CrossEntropyLoss()
 
         for i in range(self.n_gradient_steps):
