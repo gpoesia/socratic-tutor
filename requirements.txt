@@ -8,3 +8,5 @@ numpy
 scikit-learn
 pytorch_lightning
 GPUtil
+altair
+pymongo
