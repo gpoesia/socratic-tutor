@@ -332,6 +332,7 @@ pub struct Equations {}
 // Cap size of the equations to avoid overly large states.
 // Otherwise, the number of steps available can grow out of control.
 const MAX_SIZE: usize = 30;
+const MAX_LEN: usize = 80;
 
 impl super::Domain for Equations {
     fn name(&self) -> String {
@@ -352,7 +353,7 @@ impl super::Domain for Equations {
             return None;
         }
 
-        if t.size > MAX_SIZE {
+        if t.size > MAX_SIZE || state.len() > MAX_LEN {
             return Some(Vec::new());
         }
 
