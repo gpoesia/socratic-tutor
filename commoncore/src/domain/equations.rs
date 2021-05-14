@@ -2,6 +2,7 @@ use core::str::FromStr;
 use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::rc::Rc;
+use std::ops::Mul;
 
 use rand::Rng;
 use rand_pcg::Pcg64;
@@ -652,6 +653,30 @@ fn a_cancel_ops(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String)> 
             return Some((SizedTerm::new(Number(Rational32::from_integer(0)), 1),
                          format!("sub_self {}, {}", i, t.to_string()),
                          format!("Use that anything minus itself is zero")))
+        }
+        match t2.t.borrow() {
+            Number(n) => {
+                return Some((SizedTerm::new_unsized(BinaryOperation(Add, t1.clone(),
+                                                            Rc::new(SizedTerm::new_unsized(Number(n.mul(
+                                                                Rational32::from_integer(-1))))))),
+                             format!("subsub {}, {}", i, t.to_string()),
+                             format!("Replace the subtraction by addition of the negation in {}", t.to_string())));
+            }
+            BinaryOperation(Times, t3, t4) => {
+                if let Number(n) = t3.t.borrow() {
+                    return Some((SizedTerm::new_unsized(
+                        BinaryOperation(Add,
+                                        t1.clone(),
+                                        Rc::new(SizedTerm::new_unsized(
+                                            BinaryOperation(Times,
+                                                            Rc::new(SizedTerm::new_unsized(Number(n.mul(
+                                                                Rational32::from_integer(-1))))),
+                                                            t4.clone()))))),
+                             format!("subsub {}, {}", i, t.to_string()),
+                             format!("Replace the subtraction by addition of the negation in {}", t.to_string())));
+                }
+            }
+            _ => {}
         }
     }
     if let BinaryOperation(Times, _t1, t2) = t.t.borrow() {
