@@ -210,12 +210,9 @@ class NCE(LearningAgent):
                 if positive.parent_action is None:
                     break
 
-                # Choose negatives from previous state only.
                 negatives = [s.parent_action
                              for s in states
-                             if s.facts[-1] != positive.facts[-1] and
-                                (s.parent_action.state.facts[-1] ==
-                                  positive.parent_action.state.facts[-1])]
+                             if s.facts[-1] != positive.facts[-1]]
                 example = ContrastiveExample(positive=positive.parent_action,
                                              negatives=negatives,
                                              gap=1)
