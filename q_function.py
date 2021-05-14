@@ -221,6 +221,11 @@ class Bilinear(QFunction):
         self.encoder = nn.LSTM(char_emb_dim, hidden_dim,
                                self.lstm_layers, bidirectional=True)
         self.bilinear_comb = nn.Linear(2*hidden_dim, 2*hidden_dim)
+        if config.get('mlp', False):
+            self.mlp = True
+            self.emb_mlp1 = nn.Linear(2*hidden_dim, 2*hidden_dim)
+            self.emb_mlp2 = nn.Linear(2*hidden_dim, 2*hidden_dim)
+
         self.to(device)
         self.device = device
 
@@ -246,6 +251,10 @@ class Bilinear(QFunction):
         state_embedding = (state_hn
                            .view(self.lstm_layers, 2, N, self.hidden_dim)[-1]
                            .permute((1, 2, 0)).reshape(N, 2*H))
+        if getattr(self, 'mlp'):
+            state_embedding = self.emb_mlp1(state_embedding).relu()
+            state_embedding = self.emb_mlp2(state_embedding)
+
         return state_embedding
 
     def name(self):
