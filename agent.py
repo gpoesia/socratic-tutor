@@ -128,9 +128,9 @@ class NCE(LearningAgent):
                 if self.training_problems_solved >= self.n_bootstrap_problems:
                     self.bootstrapping = False
 
-                    if self.training_problems_solved % self.optimize_every == 0:
-                        logging.info('Running SGD steps.')
-                        self.gradient_steps()
+                if self.training_problems_solved % self.optimize_every == 0:
+                    logging.info('Running SGD steps.')
+                    self.gradient_steps()
 
             if (i + 1) % self.step_every == 0:
                 self.current_depth = min(self.max_depth, self.current_depth + self.depth_step)
