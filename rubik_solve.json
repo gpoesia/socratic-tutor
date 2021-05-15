@@ -1,0 +1,8 @@
+{
+    "model_path":"rubiks_models/NCE-slow.pt",
+    "domain": "rubiks-cube-50",
+    "environment_backend":"Rust",
+    "eval_config":{
+        "beam_size":20
+    }
+}
