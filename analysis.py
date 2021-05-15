@@ -1,6 +1,7 @@
 import matplotlib
 from matplotlib import pyplot as plt
 import json
+import os
 import pymongo
 import numpy as np
 import collections
@@ -9,6 +10,8 @@ import argparse
 import pickle
 from agent import State, Action
 import dateutil
+import altair
+
 
 def load_data(config):
     client = pymongo.MongoClient()
@@ -205,6 +208,32 @@ def analyze_user_study(config):
         print(f'Post test: {post_test_score}/{n_post_test_questions} correct')
         print('Post test responses:', post_test_responses)
         print()
+
+def load_run_output(path: str):
+    with open(path, 'rb') as pkl:
+        results = pickle.load(pkl)
+
+    return [{'algorithm': r['name'],
+             'run_index': r.get('run_index', 0),
+             'domain': r['domain'],
+             'success_rate': r['success_rate'],
+             'n_steps': r['n_steps'] - (r['n_steps'] % 1000)}
+            for r in results]
+
+def load_experiment_data(output_root):
+    data_points = []
+
+    for root, dirs, files in os.walk(output_root):
+        if 'results.pkl' in files:
+            data_points.extend(load_run_output(os.path.join(root, 'results.pkl')))
+
+    return data_points
+
+def make_plot(data: list[dict], plot_id: str):
+    with open(os.path.join('vega-lite', plot_id + '.json')) as f:
+        plot_spec = json.load(f)
+    plot_spec['data'] = {'values': data}
+    return altair.Chart.from_dict(plot_spec)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Analyze experiments & user study results')

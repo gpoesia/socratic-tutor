@@ -128,9 +128,9 @@ class NCE(LearningAgent):
                 if self.training_problems_solved >= self.n_bootstrap_problems:
                     self.bootstrapping = False
 
-                    if self.training_problems_solved % self.optimize_every == 0:
-                        logging.info('Running SGD steps.')
-                        self.gradient_steps()
+                if self.training_problems_solved % self.optimize_every == 0:
+                    logging.info('Running SGD steps.')
+                    self.gradient_steps()
 
             if (i + 1) % self.step_every == 0:
                 self.current_depth = min(self.max_depth, self.current_depth + self.depth_step)
@@ -210,7 +210,9 @@ class NCE(LearningAgent):
                 if positive.parent_action is None:
                     break
 
-                negatives = [s.parent_action for s in states if id(s) != id(positive)]
+                negatives = [s.parent_action
+                             for s in states
+                             if s.facts[-1] != positive.facts[-1]]
                 example = ContrastiveExample(positive=positive.parent_action,
                                              negatives=negatives,
                                              gap=1)
@@ -227,6 +229,9 @@ class NCE(LearningAgent):
     def gradient_steps(self):
         if not self.examples:
             return
+
+        if not self.keep_optimizer:
+            self.reset_optimizer()
 
         celoss = nn.CrossEntropyLoss()
 

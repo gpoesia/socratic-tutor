@@ -2,6 +2,7 @@ use core::str::FromStr;
 use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::rc::Rc;
+use std::ops::Mul;
 
 use rand::Rng;
 use rand_pcg::Pcg64;
@@ -55,7 +56,14 @@ impl Operator {
         }
     }
 
-    fn distributes_over(&self, rhs: Operator) -> bool {
+    fn distributes_left(&self, rhs: Operator) -> bool {
+        match self {
+            Times | Div => rhs == Add || rhs == Sub,
+            _ => false
+        }
+    }
+
+    fn distributes_right(&self, rhs: Operator) -> bool {
         match self {
             Times => rhs == Add || rhs == Sub,
             _ => false
@@ -325,6 +333,7 @@ pub struct Equations {}
 // Cap size of the equations to avoid overly large states.
 // Otherwise, the number of steps available can grow out of control.
 const MAX_SIZE: usize = 30;
+const MAX_LEN: usize = 80;
 
 impl super::Domain for Equations {
     fn name(&self) -> String {
@@ -345,7 +354,7 @@ impl super::Domain for Equations {
             return None;
         }
 
-        if t.size > MAX_SIZE {
+        if t.size > MAX_SIZE || state.len() > MAX_LEN {
             return Some(Vec::new());
         }
 
@@ -507,7 +516,7 @@ fn a_distributivity(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, Strin
         if let BinaryOperation(op2, t3, t4) = t2.t.borrow() {
             // Forward direction: 5*(x + 2) => 5x + 5*2
             // t1 op1 (t3 op2 t4) => (t1 op1 t3) op2 (t1 op2 t4)
-            if op1.distributes_over(*op2) {
+            if op1.distributes_right(*op2) {
                 return Some((
                     SizedTerm::new(
                         BinaryOperation(
@@ -524,7 +533,7 @@ fn a_distributivity(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, Strin
             // Inverse direction: 5x + 3x => (5 + 3)x
             // (t5 op3 t4) op1 (t3 op3 t4) => (t5 op1 t3) op3 t4
             if let BinaryOperation(op3, t5, t6) = t1.t.borrow() {
-                if *op3 == *op2 && *t4 == *t6 && op2.distributes_over(*op1) {
+                if *op3 == *op2 && *t4 == *t6 && op2.distributes_right(*op1) {
                 return Some((
                     SizedTerm::new(
                         BinaryOperation(
@@ -536,6 +545,24 @@ fn a_distributivity(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, Strin
                     format!("dist {}, {}", i, t.to_string()),
                     format!("Apply distributivity in {}", t.to_string())));
                 }
+            }
+        }
+
+        if let BinaryOperation(op2, t3, t4) = t1.t.borrow() {
+            // Forward direction: (x + 2)*5 => x*5 + 2*5
+            // (t3 op2 t4) op1 t2 => (t3 op1 t2) op2 (t4 op1 t2)
+            if op1.distributes_left(*op2) {
+                return Some((
+                    SizedTerm::new(
+                        BinaryOperation(
+                            *op2,
+                            Rc::new(SizedTerm::new(BinaryOperation(*op1, Rc::clone(t3), Rc::clone(t2)),
+                                                   1 + t3.size + t2.size)),
+                            Rc::new(SizedTerm::new(BinaryOperation(*op1, Rc::clone(t4), Rc::clone(t2)),
+                                                   1 + t4.size + t2.size))),
+                        3 + 2*t2.size + t3.size + t4.size),
+                    format!("dist {}, {}", i, t.to_string()),
+                    format!("Apply distributivity in {}", t.to_string())));
             }
         }
     }
@@ -627,7 +654,59 @@ fn a_cancel_ops(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String)> 
                          format!("sub_self {}, {}", i, t.to_string()),
                          format!("Use that anything minus itself is zero")))
         }
+        match t2.t.borrow() {
+            Number(n) => {
+                return Some((SizedTerm::new_unsized(BinaryOperation(Add, t1.clone(),
+                                                            Rc::new(SizedTerm::new_unsized(Number(n.mul(
+                                                                Rational32::from_integer(-1))))))),
+                             format!("subsub {}, {}", i, t.to_string()),
+                             format!("Replace the subtraction by addition of the negation in {}", t.to_string())));
+            }
+            BinaryOperation(Times, t3, t4) => {
+                if let Number(n) = t3.t.borrow() {
+                    return Some((SizedTerm::new_unsized(
+                        BinaryOperation(Add,
+                                        t1.clone(),
+                                        Rc::new(SizedTerm::new_unsized(
+                                            BinaryOperation(Times,
+                                                            Rc::new(SizedTerm::new_unsized(Number(n.mul(
+                                                                Rational32::from_integer(-1))))),
+                                                            t4.clone()))))),
+                             format!("subsub {}, {}", i, t.to_string()),
+                             format!("Replace the subtraction by addition of the negation in {}", t.to_string())));
+                }
+            }
+            _ => {}
+        }
     }
+    if let BinaryOperation(Times, _t1, t2) = t.t.borrow() {
+        if let Number(n2) = t2.t.borrow() {
+            if *n2 == Rational32::from_integer(0) {
+                return Some((((t2.borrow() as &SizedTerm).clone()),
+                             format!("mul0 {}, {}", i, t.to_string()),
+                             format!("Remove the multiplication by zero")))
+            }
+        }
+    }
+    if let BinaryOperation(Times, t1, _t2) = t.t.borrow() {
+        if let Number(n1) = t1.t.borrow() {
+            if *n1 == Rational32::from_integer(0) {
+                return Some((((t1.borrow() as &SizedTerm).clone()),
+                             format!("mul0 {}, {}", i, t.to_string()),
+                             format!("Remove the multiplication by zero")))
+            }
+        }
+    }
+    if let BinaryOperation(Div, t1, _t2) = t.t.borrow() {
+        if let Number(n1) = t1.t.borrow() {
+            if *n1 == Rational32::from_integer(0) {
+                return Some((((t1.borrow() as &SizedTerm).clone()),
+                             format!("zero_div {}, {}", i, t.to_string()),
+                             format!("Remove the fraction with numerator zero")))
+            }
+        }
+    }
+
     None
 }
 
@@ -657,6 +736,14 @@ mod tests {
             println!("Stepping {}", s);
             eq.step(s.to_string());
         }
+    }
+
+    #[test]
+    fn test_size() {
+        let s = "(((-1x - 2) / 3) + ((4x + 5) / 6)) = (x + ((7x + 8) / 9))";
+        println!("Size: {}", super::SizedTerm::from_str(s).unwrap().size);
+        let s = "(((-1) + -2x) - -3x) = (((-4) + -5x) - -6x)";
+        println!("Size: {}", super::SizedTerm::from_str(s).unwrap().size);
     }
 }
 
