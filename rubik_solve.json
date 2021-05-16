@@ -1,5 +1,5 @@
 {
-    "checkpoint_path": "rubiks_models/NCE-slow/rubiks-cube-20/run0/checkpoints",
+    "checkpoint_path": "rubiks_models/NCE-slow/rubiks-cube-20/run0/checkpoints/{}.pt",
     "domain": "rubiks-cube-50",
     "environment_backend": "Rust",
     "eval_config": {
