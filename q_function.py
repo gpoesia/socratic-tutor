@@ -29,7 +29,9 @@ class QFunction(nn.Module):
                 state: State,
                 max_steps: int,
                 beam_size: int = 1,
-                debug: bool = False) -> tuple[bool, list[list[State]]]:
+                debug: bool = False,
+                batch_size: int = 128
+                ) -> tuple[bool, list[list[State]]]:
         """Runs beam search using the Q value until either
         max_steps have been made or reached a terminal state."""
         beam = [state]
@@ -45,7 +47,14 @@ class QFunction(nn.Module):
             if not beam:
                 break
 
-            rewards, s_actions = zip(*environment.step(beam))
+            batches = [beam[i:i+batch_size] for i in range(0, len(beam), batch_size)]
+
+            rewards, s_actions = [], []
+            for batch in batches:
+                r, s = zip(*environment.step(beam))
+                rewards.extend(r)
+                s_actions.extend(s)
+
             actions = [a for s_a in s_actions for a in s_a]
 
             if max(rewards):
