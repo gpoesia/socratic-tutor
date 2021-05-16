@@ -1,1 +1,8 @@
-VimCrypt~01!&^F¸S¹–o’ªÀNPËôCñı©icbJŒÖÍ“ÅVboIzvEï0ƒ°8Şù%J/pÛÓØß|¤y‚×ºãÌ¶ø‰s$Èf~$i|?¢hÂí2¬;±ºDÂ× İü9‘RFzÛØQ²Ío¹ÀÆò’²› _ÿÿøÙ|0Ï£SVF.§ZÆ#¤İ‚—¤î­†¤°#7DÊ…ÿrm²‰Yûƒíjj‘oæ‹ö(M]Ñc`¤D„ò…»cöıÓr×[r
+{
+    "checkpoint_path": "rubiks_models/NCE-slow/rubiks-cube-20/run0/checkpoints/{}.pt",
+    "domain": "rubiks-cube-50",
+    "environment_backend": "Rust",
+    "eval_config": {
+        "beam_size": 20
+    }
+}

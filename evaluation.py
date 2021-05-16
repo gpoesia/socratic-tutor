@@ -26,7 +26,7 @@ class SuccessRatePolicyEvaluator:
         self.max_steps = config.get('max_steps', 30)  # Maximum length of an episode.
         self.beam_size = config.get('beam_size', 1)  # Size of the beam in beam search.
         self.debug = config.get('debug', False)  # Whether to print all steps during evaluation.
-
+        self.batch_size = config.get('batch_size', 128)
     def evaluate(self, q, verbose=False, show_progress=False):
         successes, failures, solution_lengths = [], [], []
         wrapper = tqdm if show_progress else lambda x: x
@@ -34,7 +34,7 @@ class SuccessRatePolicyEvaluator:
         for i in wrapper(range(self.n_problems)):
             problem = self.environment.generate_new(seed=(self.seed + i))
             success, history = q.rollout(self.environment, problem,
-                                         self.max_steps, self.beam_size, self.debug)
+                                         self.max_steps, self.beam_size, self.debug, batch_size = self.batch_size)
             if success:
                 successes.append((i, problem))
             else:
@@ -281,7 +281,7 @@ def normalize_solutions(solutions: list[list[str]]) -> list[list[str]]:
             f.write(l)
             f.write('\n')
 
-    sp = subprocess.run(["racket", "-tm", "canonicalize-terms.rkt"], capture_output=True)
+    sp = subprocess.run(["racket", "-tm", "../canonicalize-terms.rkt"], capture_output=True)
     steps = list(filter(None, sp.stdout.decode("utf8").split("\n")))
 
     new_solutions = []
@@ -300,5 +300,3 @@ def normalize_human_solutions(path):
 
     normalized_solutions = normalize_solutions(solutions)
     return normalized_solutions
-    # with open('normalized_human_solutions.json', 'w') as f:
-    #     json.dump(human_solutions, f)
