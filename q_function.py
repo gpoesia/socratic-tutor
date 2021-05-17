@@ -51,7 +51,9 @@ class QFunction(nn.Module):
             print("batches", [len(b) for b in batches])
             rewards, s_actions = [], []
             for batch in batches:
-                r, s = zip(*environment.step(beam))
+                print("step batch")
+                r, s = zip(*environment.step(batch))
+                print("batch complete")
                 rewards.extend(r)
                 s_actions.extend(s)
 
