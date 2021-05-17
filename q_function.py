@@ -53,6 +53,8 @@ class QFunction(nn.Module):
             for batch in batches:
                 print("step batch")
                 r, s = zip(*environment.step(batch))
+                r = r.cpu().numpy()
+                s = s.cpu().numpy()
                 print("batch complete")
                 rewards.extend(r)
                 s_actions.extend(s)
