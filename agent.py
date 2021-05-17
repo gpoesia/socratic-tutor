@@ -720,7 +720,10 @@ if __name__ == '__main__':
     if opt.learn:
         run_agent_experiment(config, device)
     elif opt.eval:
-        evaluate_policy(config, device)
+        res = evaluate_policy(config, device)
+        with open(config['output'], 'wb') as f:
+            pickle.dump(res, f)
+
     elif opt.eval_checkpoints:
         evaluate_policy_checkpoints(config, device)
     elif opt.experiment:
