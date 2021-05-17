@@ -73,7 +73,7 @@ class QFunction(nn.Module):
                 for batch in batches:
                     q_values_b = self(batch).tolist()
                     q_values.extend(q_values_b)
-
+                    print("q_values_b", q_values_b)
             for a, v in zip(actions, q_values):
                 a.next_state.value = a.state.value + t(v)
 
