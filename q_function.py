@@ -48,14 +48,12 @@ class QFunction(nn.Module):
                 break
 
             batches = [beam[i:i+batch_size] for i in range(0, len(beam), batch_size)]
-            print("batches", [len(b) for b in batches])
+            # print("batches", [len(b) for b in batches])
             rewards, s_actions = [], []
             for batch in batches:
-                print("step batch")
+                # print("step batch")
                 r, s = zip(*environment.step(batch))
-                r = r.cpu().numpy()
-                s = s.cpu().numpy()
-                print("batch complete")
+                # print("batch complete")
                 rewards.extend(r)
                 s_actions.extend(s)
 
@@ -70,7 +68,11 @@ class QFunction(nn.Module):
                 break
 
             with torch.no_grad():
-                q_values = self(actions).tolist()
+                q_values = []
+                batches = [actions[i:i+batch_size] for i in range(0, len(actions), batch_size)]
+                for batch in batches:
+                    q_values_b = self(batch).tolist()
+                    q_values.extend(q_values_b)
 
             for a, v in zip(actions, q_values):
                 a.next_state.value = a.state.value + t(v)
