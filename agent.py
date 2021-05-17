@@ -25,7 +25,7 @@ from environment import Environment, State, Action
 from evaluation import EnvironmentWithEvaluationProxy, evaluate_policy, evaluate_policy_checkpoints
 from q_function import QFunction, InverseLength, RandomQFunction, RubiksGreedyHeuristic
 
-
+import pickle
 SUCCESS_STATE = State(['success'], [], 1.0)
 
 
