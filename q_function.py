@@ -258,7 +258,7 @@ class Bilinear(QFunction):
         state_embedding = (state_hn
                            .view(self.lstm_layers, 2, N, self.hidden_dim)[-1]
                            .permute((1, 2, 0)).reshape(N, 2*H))
-        if getattr(self, 'mlp'):
+        if hasattr(self, 'mlp'):
             state_embedding = self.emb_mlp1(state_embedding).relu()
             state_embedding = self.emb_mlp2(state_embedding)
 
