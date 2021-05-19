@@ -103,6 +103,13 @@ class QFunction(nn.Module):
 
     @staticmethod
     def new(config, device):
+        pretrained_path = config.get('load_pretrained')
+
+        if pretrained_path is not None:
+            pretrained_q_fn = torch.load(pretrained_path, map_location=device)
+            pretrained_q_fn.to(device)
+            return pretrained_q_fn
+
         return QFunction.subtypes[config['type']](config, device)
 
     def name(self):
