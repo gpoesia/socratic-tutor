@@ -219,6 +219,21 @@ def test(environment, scoring_model_path):
         print('Solution:', ' => '.join(map(lambda s: s.facts[-1], model.recover_solutions(history)[0])))
 
 
+def evaluate(environment, model_path, n_problems=30):
+    device = torch.device('cpu')
+    model = torch.load(model_path, map_location=device)
+    model.to(device)
+    successes = 0
+
+    for i in range(n_problems):
+        state = environment.generate_new(seed=i)
+        success, history = model.rollout(environment, state, 30, 1, debug=False)
+        print(f'[{i}/{n_problems}]: solved?', success)
+        successes += int(success)
+
+    print(f'{successes}/{n_problems}')
+
+
 def benchmark(environment):
     before = time.time()
 
@@ -247,6 +262,7 @@ if __name__ == '__main__':
                         help='Use the Racket backend at the provided URL.')
     parser.add_argument('--interact', help='Solve problems interactively', action='store_true')
     parser.add_argument('--test', help='Test a model on a problem.', action='store_true')
+    parser.add_argument('--evaluate', help='Test a model on a problem.', action='store_true')
     parser.add_argument('--q-function', help='Show model-generated scores (pass a path to the model).', type=str)
     parser.add_argument('--generate', help='Prints a list of 20 problems', action='store_true')
     parser.add_argument('--benchmark', help='Run a small benchmark of the environment', action='store_true')
@@ -268,5 +284,7 @@ if __name__ == '__main__':
         interact(env, opt.q_function)
     elif opt.test:
         test(env, opt.q_function)
+    elif opt.evaluate:
+        evaluate(env, opt.q_function)
     elif opt.generate:
         generate(env)
