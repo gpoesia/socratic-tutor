@@ -72,11 +72,12 @@ class NCE(LearningAgent):
     "Agent that uses the InfoNCE contrastive loss to differentiate positive/negative actions"
     def __init__(self, q_function, config):
         self.q_function = q_function
-        self.bootstrapping = True
+        self.bootstrapping = True if not config['q_function'].get('load_pretrained') else False
         replay_buffer_size = config.get('replay_buffer_size', 10**6)
         self.examples = collections.deque(maxlen=replay_buffer_size)
 
         self.training_problems_solved = 0
+        self.training_acc_moving_average = 0.0
 
         self.max_depth = config['max_depth']
         self.depth_step = config['depth_step']
@@ -131,6 +132,8 @@ class NCE(LearningAgent):
                 if self.training_problems_solved % self.optimize_every == 0:
                     logging.info('Running SGD steps.')
                     self.gradient_steps()
+
+            self.training_acc_moving_average = 0.95*self.training_acc_moving_average + 0.05*int(solution is not None)
 
             if (i + 1) % self.step_every == 0:
                 self.current_depth = min(self.max_depth, self.current_depth + self.depth_step)
@@ -222,9 +225,9 @@ class NCE(LearningAgent):
         return solution
 
     def stats(self):
-        return "{} solutions found, {} contrastive examples".format(
+        return "{} solutions found, {:.4f} training acc".format(
             self.training_problems_solved,
-            len(self.examples))
+            self.training_acc_moving_average) 
 
     def gradient_steps(self):
         if not self.examples:
@@ -234,6 +237,7 @@ class NCE(LearningAgent):
             self.reset_optimizer()
 
         celoss = nn.CrossEntropyLoss()
+        losses = []
 
         for i in range(self.n_gradient_steps):
             e = random.choice(self.examples)
@@ -242,9 +246,12 @@ class NCE(LearningAgent):
             self.optimizer.zero_grad()
             f_pred = self.q_function(all_actions)
             loss = celoss(f_pred.unsqueeze(0), torch.zeros(1, dtype=int, device=f_pred.device))
-            wandb.log({'train_loss': loss.item()})
+            # wandb.log({'train_loss': loss.item()})
+            losses.append(loss.item())
             loss.backward()
             self.optimizer.step()
+
+        return losses
 
 
 @register(LearningAgent)
