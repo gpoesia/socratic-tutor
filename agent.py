@@ -72,11 +72,12 @@ class NCE(LearningAgent):
     "Agent that uses the InfoNCE contrastive loss to differentiate positive/negative actions"
     def __init__(self, q_function, config):
         self.q_function = q_function
-        self.bootstrapping = True
+        self.bootstrapping = True if not config['q_function'].get('load_pretrained') else False
         replay_buffer_size = config.get('replay_buffer_size', 10**6)
         self.examples = collections.deque(maxlen=replay_buffer_size)
 
         self.training_problems_solved = 0
+        self.training_acc_moving_average = 0.0
 
         self.max_depth = config['max_depth']
         self.depth_step = config['depth_step']
@@ -86,6 +87,7 @@ class NCE(LearningAgent):
 
         self.optimize_every = config.get('optimize_every', 1)
         self.n_gradient_steps = config.get('n_gradient_steps', 64)
+        self.beam_negatives_frac = config.get('beam_negatives_frac', 1.0)
 
         bootstrap_from = config.get('bootstrap_from', 'Random')
 
@@ -131,6 +133,8 @@ class NCE(LearningAgent):
                 if self.training_problems_solved % self.optimize_every == 0:
                     logging.info('Running SGD steps.')
                     self.gradient_steps()
+
+            self.training_acc_moving_average = 0.95*self.training_acc_moving_average + 0.05*int(solution is not None)
 
             if (i + 1) % self.step_every == 0:
                 self.current_depth = min(self.max_depth, self.current_depth + self.depth_step)
@@ -212,7 +216,10 @@ class NCE(LearningAgent):
 
                 negatives = [s.parent_action
                              for s in states
-                             if s.facts[-1] != positive.facts[-1]]
+                             if s.facts[-1] != positive.facts[-1] and
+                             (s.parent_action.state.facts[-1] ==
+                                 positive.parent_action.state.facts[-1] or
+                                 self.beam_negatives_frac >= random.random())]
                 example = ContrastiveExample(positive=positive.parent_action,
                                              negatives=negatives,
                                              gap=1)
@@ -222,9 +229,9 @@ class NCE(LearningAgent):
         return solution
 
     def stats(self):
-        return "{} solutions found, {} contrastive examples".format(
+        return "{} solutions found, {:.4f} training acc".format(
             self.training_problems_solved,
-            len(self.examples))
+            self.training_acc_moving_average) 
 
     def gradient_steps(self):
         if not self.examples:
@@ -234,6 +241,7 @@ class NCE(LearningAgent):
             self.reset_optimizer()
 
         celoss = nn.CrossEntropyLoss()
+        losses = []
 
         for i in range(self.n_gradient_steps):
             e = random.choice(self.examples)
@@ -242,9 +250,12 @@ class NCE(LearningAgent):
             self.optimizer.zero_grad()
             f_pred = self.q_function(all_actions)
             loss = celoss(f_pred.unsqueeze(0), torch.zeros(1, dtype=int, device=f_pred.device))
-            wandb.log({'train_loss': loss.item()})
+            # wandb.log({'train_loss': loss.item()})
+            losses.append(loss.item())
             loss.backward()
             self.optimizer.step()
+
+        return losses
 
 
 @register(LearningAgent)
@@ -263,6 +274,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.initial_depth = config['initial_depth']
         self.step_every = config['step_every']
         self.beam_size = config['beam_size']
+        self.beam_negatives = config.get('beam_negatives', True)
 
         self.balance_examples = config.get('balance_examples', True)
         self.optimize_on = config.get('optimize_on', 'problem')
@@ -415,10 +427,11 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
         # Add all edges traversed as examples in the experience replay buffer.
         if solution is not None or not self.discard_unsolved_problems:
+            positive_ids = set(id(s) for s in solution)
             # Add negative examples.
             for s, (parent, a) in state_parent_edge.items():
                 r = action_reward.get(id(a), 0.0)
-                if r == 0:
+                if r == 0 and (self.beam_negatives or id(s) in positive_ids):
                     self.replay_buffer_neg.append((states_by_id[s], a, 0))
             # Add positive examples (possibly looking several steps ahead, depending
             # on `self.n_future_states`.
