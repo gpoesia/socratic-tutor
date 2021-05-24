@@ -219,8 +219,8 @@ def test(environment, scoring_model_path):
         print('Solution:', ' => '.join(map(lambda s: s.facts[-1], model.recover_solutions(history)[0])))
 
 
-def evaluate(environment, model_path, n_problems=30):
-    device = torch.device('cpu')
+def evaluate(environment, model_path, n_problems=30, gpu=None):
+    device = torch.device('cpu') if gpu is None else torch.device(gpu)
     model = torch.load(model_path, map_location=device)
     model.to(device)
     successes = 0
@@ -268,6 +268,7 @@ if __name__ == '__main__':
     parser.add_argument('--benchmark', help='Run a small benchmark of the environment', action='store_true')
     parser.add_argument('--domain', type=str,
                         help='What domain to use.', default='equations-ct')
+    parser.add_argument('--gpu', type=int, default=None, help='Which GPU to use.')
 
     opt = parser.parse_args()
 
@@ -285,6 +286,6 @@ if __name__ == '__main__':
     elif opt.test:
         test(env, opt.q_function)
     elif opt.evaluate:
-        evaluate(env, opt.q_function)
+        evaluate(env, opt.q_function, gpu = opt.gpu)
     elif opt.generate:
         generate(env)
