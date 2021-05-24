@@ -222,7 +222,7 @@ def evaluate_policy(config, device):
     env = Environment.from_config(config)
     evaluator = SuccessRatePolicyEvaluator(env, config.get('eval_config', {}))
     result = evaluator.evaluate(q, verbose=True)
-
+    return result
     print('Success rate:', result['success_rate'])
     print('Max solution length:', result['max_solution_length'])
     print('Solved problems:', result['successes'])

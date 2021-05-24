@@ -27,3 +27,5 @@ lightning_logs/
 
 
 *package-lock.json
+
+*.png

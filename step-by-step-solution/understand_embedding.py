@@ -17,7 +17,7 @@ from sklearn.decomposition import PCA
 import random
 
 config_example = {
-    "checkpoint_path":"nce-equations-ct.pt",
+    "checkpoint_path":"cvi-eq.pt",
     "domain": "equations-ct",
     "environment_url": "http://localhost:9876",
     "environment_backend":"Rust"
@@ -72,7 +72,7 @@ def save_solutions_and_embeddings(solutions: list[list[State]], embeddings, file
 def load_solutions_and_embeddings(file_path):
     with open(file_path, 'rb') as file:
         sol_emb = pickle.load(file)
-        if sol_emb["problems"]:
+        if "problems" in sol_emb:
             return sol_emb["solutions"], sol_emb["embeddings"], sol_emb["problems"]
         return sol_emb["solutions"], sol_emb["embeddings"]
 
@@ -89,7 +89,7 @@ def generate_solutions_embeddings(config:dict, device, num_problems = 100, save_
         env = Environment.from_config(config)
         seed = config.get('seed', 0)
         max_steps = config.get('max_steps', 30)
-        beam_size = config.get('beam_size', 5)
+        beam_size = config.get('beam_size', 1)
         debug = config.get('debug', False)
         i = 0
         total_success = 0
@@ -116,6 +116,8 @@ def generate_solutions_embeddings(config:dict, device, num_problems = 100, save_
                 if save_embeddings:
                     'Save on every iteration to avoid lose due to crashes'
                     save_solutions_and_embeddings([solution], [embedding], file_path, backup_path)
+            print("i", i)
+        print(total_success, i)
         return solutions, embeddings
     except FileNotFoundError:
         print('Checkpoint', i, 'does not exist -- stopping.')
@@ -136,15 +138,18 @@ def trim_solutions(solutions: list[list[State]], embeddings, min_separation_dist
     '''Trim step-by-step solutions by grouping nearby states'''
     trimmed_solutions: list[list[State]] = []
     ignored_actions = {}
+
     for solution, embedding in zip(solutions, embeddings):
         trimmed_solution = [solution[0]] #always add the last step
         trimmed_embedding = [embedding[0]]
         solution_actions = [s.parent_action for s in solution]
         solution_actions_str = [action.action.split(' ')[0] if action else "" for action in solution_actions]
-
+        solution_str = [s.facts[-1] for s in solution]
+        print("")
         for i in range(1, len(embedding)-1):
             'calculate the distance between the current state and the last state in the trimmed solution'
             dist = np.linalg.norm(embedding[i] - trimmed_embedding[-1])
+            print("dist", dist, solution_str[i])
             if dist>= min_separation_dist:
                 trimmed_solution.append(solution[i])
                 trimmed_embedding.append(embedding[i])
@@ -212,6 +217,7 @@ def trim_solutions_centriod(solutions: list[list[State]], embeddings, min_separa
 
 def print_step_by_step_solution(solution):
     state_str = [state.facts[-1] for state in solution]
+    state_dist = [state.facts[-1] for state in solution]
     for idx, line in enumerate(state_str):
         print(idx, ":           ", line)
 

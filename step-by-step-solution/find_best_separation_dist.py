@@ -5,7 +5,7 @@ from understand_embedding import *
 
 
 config = {
-    "checkpoint_path":"nce-equations-ct.pt",
+    "checkpoint_path":"cvi-eq.pt",
     "domain": "equations-ct",
     "environment_url": "http://localhost:9876",
     "environment_backend":"Rust"
@@ -78,11 +78,11 @@ def solve_problems(config: dict, device, problems: list[str], file_path: str):
         q.device = device
         env = Environment.from_config(config)
         max_steps = config.get('max_steps', 30)
-        beam_size = config.get('beam_size', 5)
+        beam_size = config.get('beam_size', 1)
         solutions, embeddings, succ_problems = [], [], []
         print("Solving", len(problems), "problems using", " beam_size ", beam_size, " max_steps ", max_steps, "...")
         for problem in problems:
-            state = State([problem], [''], 0)
+            state = State([problem], ['x = ?'], 0)
             success, history = q.rollout(env, state, max_steps, beam_size)
             if success:
                 solution = q.recover_solutions(history)[0]
@@ -111,7 +111,7 @@ def save_machine_and_human_sol_to_json(problems, trimmed_solutions, human_json_f
         p = obj["problem"]
         sol_1 = obj["solutions"][0]
         sol_2 = obj["solutions"][1]
-        human_dict[p] = [{ "id": "human1", "steps": sol_1}, {"id": "human2","steps": sol_2}]
+        human_dict[p] = [{ "id": "human1", "steps": sol_1}, {"id": "human2","steps": sol_2[:-1] + [sol_1[-1]]}]
 
 
     print("Unpack mathstep solutions...")
@@ -150,7 +150,7 @@ if __name__ == '__main__':
     parser.add_argument('--find_dist', help='Find best separation distance tuned for the provided average solution length',
                         action='store_true', default=False)
     parser.add_argument('--opt_sol_len', help='Optimal solution length to aim for', type=float, default=4.2)
-    parser.add_argument('--pkl_file', type=str, help='Pickle file path (Embeddings)', default="nce_embeddings_rust.pkl")
+    parser.add_argument('--pkl_file', type=str, help='Pickle file path (Embeddings)', default="cvi-embeddings.pkl")
     opt = parser.parse_args()
 
     if opt.human_avg:
@@ -160,12 +160,15 @@ if __name__ == '__main__':
     else:
         '''prepare turing test json file using the provided separation distance.'''
         problems = get_problems(opt.human_file)
-        solve = False
-
+        solve = True
         if solve:
-            solutions, embeddings, problems= solve_problems(config, torch.device("cpu"), problems, "machine_solutions.pickle")
+            solutions, embeddings, problems= solve_problems(config, torch.device("cpu"), problems, "machine_solutions(nce).pickle")
         else:
-            solutions, embeddings, problems = load_solutions_and_embeddings("machine_solutions.pickle")
+            solutions, embeddings, problems = load_solutions_and_embeddings("machine_solutions(racket).pickle")
+        trimmed_solutions = trim_solutions(solutions, embeddings, 5.82999999999992)
+        print("num solved",len(trimmed_solutions) )
+        # for solution in trimmed_solutions:
+        #     print("-"*20)
+        #     print_step_by_step_solution(solution)
 
-        trimmed_solutions = trim_solutions(solutions, embeddings, 3.8799999999999613)
-        save_machine_and_human_sol_to_json(problems, trimmed_solutions, opt.human_file, opt.mathstep_file, "turing_test.json")
+        save_machine_and_human_sol_to_json(problems, trimmed_solutions, opt.human_file, opt.mathstep_file, "turing_test(nce).json")
