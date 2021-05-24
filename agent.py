@@ -87,6 +87,7 @@ class NCE(LearningAgent):
 
         self.optimize_every = config.get('optimize_every', 1)
         self.n_gradient_steps = config.get('n_gradient_steps', 64)
+        self.beam_negatives_frac = config.get('beam_negatives_frac', 1.0)
 
         bootstrap_from = config.get('bootstrap_from', 'Random')
 
@@ -215,7 +216,10 @@ class NCE(LearningAgent):
 
                 negatives = [s.parent_action
                              for s in states
-                             if s.facts[-1] != positive.facts[-1]]
+                             if s.facts[-1] != positive.facts[-1] and
+                             (s.parent_action.state.facts[-1] ==
+                                 positive.parent_action.state.facts[-1] or
+                                 self.beam_negatives_frac >= random.random())]
                 example = ContrastiveExample(positive=positive.parent_action,
                                              negatives=negatives,
                                              gap=1)
@@ -270,6 +274,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
         self.initial_depth = config['initial_depth']
         self.step_every = config['step_every']
         self.beam_size = config['beam_size']
+        self.beam_negatives = config.get('beam_negatives', True)
 
         self.balance_examples = config.get('balance_examples', True)
         self.optimize_on = config.get('optimize_on', 'problem')
@@ -422,10 +427,11 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
         # Add all edges traversed as examples in the experience replay buffer.
         if solution is not None or not self.discard_unsolved_problems:
+            positive_ids = set(id(s) for s in solution)
             # Add negative examples.
             for s, (parent, a) in state_parent_edge.items():
                 r = action_reward.get(id(a), 0.0)
-                if r == 0:
+                if r == 0 and (self.beam_negatives or id(s) in positive_ids):
                     self.replay_buffer_neg.append((states_by_id[s], a, 0))
             # Add positive examples (possibly looking several steps ahead, depending
             # on `self.n_future_states`.
