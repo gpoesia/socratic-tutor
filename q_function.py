@@ -39,7 +39,7 @@ class QFunction(nn.Module):
         seen = set([state])
         success = False
         t = self.get_aggregation_transform()
-
+        print("roll out using batch size", batch_size)
         for i in range(max_steps):
             if debug:
                 print(f'Beam #{i}: {beam}')
