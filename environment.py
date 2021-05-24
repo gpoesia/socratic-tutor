@@ -227,7 +227,7 @@ def evaluate(environment, model_path, n_problems=30):
 
     for i in range(n_problems):
         state = environment.generate_new(seed=i)
-        success, history = model.rollout(environment, state, 30, 1, debug=False)
+        success, history = model.rollout(environment, state, 30, 10000, debug=False)
         print(f'[{i}/{n_problems}]: solved?', success)
         successes += int(success)
 
