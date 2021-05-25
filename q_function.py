@@ -140,7 +140,7 @@ class QFunction(nn.Module):
 
             # Add to open
             for node in nodes_c_all:
-                heappush(open_set, (math.exp(node.value), heappush_count, node))
+                heappush(open_set, (-math.exp(node.value), heappush_count, node))
                 heappush_count += 1
 
         return success, None
