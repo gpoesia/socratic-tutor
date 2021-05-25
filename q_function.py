@@ -4,7 +4,6 @@ from environment import Environment, State, Action
 from util import register
 from encoding import CharEncoding
 from heapq import heappush, heappop
-
 import torch
 from torch import nn
 
@@ -141,7 +140,7 @@ class QFunction(nn.Module):
 
             # Add to open
             for node in nodes_c_all:
-                heappush(open_set, (-node.value, heappush_count, node))
+                heappush(open_set, (math.exp(node.value), heappush_count, node))
                 heappush_count += 1
 
         return success, None
