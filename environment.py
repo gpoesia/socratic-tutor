@@ -227,7 +227,7 @@ def evaluate(environment, model_path, n_problems=30, gpu=None):
     for i in range(n_problems):
         state = environment.generate_new(seed=i)
         # success, history = model.rollout(environment, state, 30, 10000, debug=False)
-        success, history = model.rollout_bwas(environment, state, 30, astar_batch = 10000)
+        success, history = model.rollout_bwas(environment, state, 50, astar_batch = 10000)
         print(f'[{i}/{n_problems}]: solved?', success)
         successes += int(success)
     print(f'{successes}/{n_problems}')
