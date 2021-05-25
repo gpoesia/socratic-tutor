@@ -5,7 +5,7 @@ import requests
 import random
 import time
 import torch
-
+import pickle
 try:
     import commoncore
     COMMONCORE_AVAILABLE = True
@@ -224,13 +224,12 @@ def evaluate(environment, model_path, n_problems=30, gpu=None):
     model = torch.load(model_path, map_location=device)
     model.to(device)
     successes = 0
-
     for i in range(n_problems):
         state = environment.generate_new(seed=i)
-        success, history = model.rollout(environment, state, 30, 10000, debug=False)
+        # success, history = model.rollout(environment, state, 30, 10000, debug=False)
+        success, history = model.rollout_bwas(environment, state, 30, astar_batch = 10000)
         print(f'[{i}/{n_problems}]: solved?', success)
         successes += int(success)
-
     print(f'{successes}/{n_problems}')
 
 

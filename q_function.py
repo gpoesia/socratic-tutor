@@ -3,6 +3,7 @@ import math
 from environment import Environment, State, Action
 from util import register
 from encoding import CharEncoding
+from heapq import heappush, heappop
 
 import torch
 from torch import nn
@@ -75,7 +76,6 @@ class QFunction(nn.Module):
 
             ns = list(set([a.next_state for a in actions]) - seen)
             ns.sort(key=lambda s: s.value, reverse=True)
-
             if debug:
                 print(f'Candidates: {[(s, s.value) for s in ns]}')
 
@@ -84,6 +84,68 @@ class QFunction(nn.Module):
             seen.update(ns)
 
         return success, history
+
+    def rollout_bwas(self,
+                environment: Environment,
+                state: State,
+                max_steps: int,
+                debug: bool = False,
+                batch_size: int = 128,
+                astar_batch:int = 10000
+                ) -> tuple[bool, list[list[State]]]:
+        """Runs beam search using the Q value until either
+        max_steps have been made or reached a terminal state."""
+        success = False
+        t = self.get_aggregation_transform()
+        print("roll out using batch weighted A* with bat size", batch_size)
+
+        open_set: List[State] = [(0, 0, state)]
+        heappush_count: int = 0
+        closed_dict= dict()
+        step_num = 0
+        while not success and step_num < max_steps:
+            step_num+=1
+            # Pop from open
+            num_to_pop: int = min(10, len(open_set))
+            popped_nodes = [heappop(open_set)[2] for _ in range(num_to_pop)]
+            # Expand nodes
+            rewards, s_actions = zip(*environment.step(popped_nodes))
+            actions = [a for s_a in s_actions for a in s_a]
+            if max(rewards):
+
+                success = True
+                break
+
+            with torch.no_grad():
+                q_values = []
+                batches = [actions[i:i+batch_size] for i in range(0, len(actions), batch_size)]
+                for batch in batches:
+                    q_values_b = self(batch).tolist()
+                    q_values.extend(q_values_b)
+            for a, v in zip(actions, q_values):
+                a.next_state.value = a.state.value + t(v)
+            nodes_c_all = list(set([a.next_state for a in actions]))
+            # Check if children are in closed
+
+            nodes_not_in_closed: List[State] = []
+
+            for node in nodes_c_all:
+                path_cost_prev: Optional[float] = closed_dict.get(node)
+                if path_cost_prev is None:
+                    nodes_not_in_closed.append(node)
+                    closed_dict[node] = node.value
+                elif path_cost_prev > node.value:
+                    nodes_not_in_closed.append(node)
+                    closed_dict[node] = node.value
+            nodes_c_all = nodes_not_in_closed
+
+            # Add to open
+            for node in nodes_c_all:
+                heappush(open_set, (-node.value, heappush_count, node))
+                heappush_count += 1
+
+        return success, None
+
 
     def recover_solutions(self, rollout_history: list[list[State]]) -> list[list[State]]:
         '''Reconstructs the solutions (lists of states) from the history of a successful rollout.'''
