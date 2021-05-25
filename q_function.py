@@ -96,7 +96,7 @@ class QFunction(nn.Module):
         max_steps have been made or reached a terminal state."""
         success = False
         t = self.get_aggregation_transform()
-        print("roll out using batch weighted A* with bat size", batch_size)
+        print("roll out using batch weighted A* with batch size", astar_batch)
 
         open_set: List[State] = [(0, 0, state)]
         heappush_count: int = 0
@@ -105,7 +105,7 @@ class QFunction(nn.Module):
         while not success and step_num < max_steps:
             step_num+=1
             # Pop from open
-            num_to_pop: int = min(10, len(open_set))
+            num_to_pop: int = min(astar_batch, len(open_set))
             popped_nodes = [heappop(open_set)[2] for _ in range(num_to_pop)]
             # Expand nodes
             rewards, s_actions = zip(*environment.step(popped_nodes))
