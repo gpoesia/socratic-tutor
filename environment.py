@@ -231,7 +231,7 @@ def evaluate(environment, model_path, start_idx, file_path, n_problems=20, gpu=N
     for i in range(start_idx, start_idx + n_problems):
         state = environment.generate_new(seed=i)
         # success, history = model.rollout(environment, state, 30, 1, debug=False)
-        success, history, time, nodes_generated, sol_len = model.rollout_bwas(environment, state, 50, astar_batch = 1)
+        success, history, time, nodes_generated, sol_len = model.rollout_bwas(environment, state, 50, astar_batch = 10000)
         successes += int(success)
         print(f'success: {success} time: {time}, nodes_generated: {nodes_generated}, sol_len: {sol_len}')
         f.write(f'{i} - success: {success} time: {time}, nodes_generated: {nodes_generated}, sol_len: {sol_len} \n')
