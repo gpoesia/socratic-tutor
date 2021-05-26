@@ -6,6 +6,7 @@ from encoding import CharEncoding
 from heapq import heappush, heappop
 import torch
 from torch import nn
+import time
 
 
 class QFunction(nn.Module):
@@ -90,18 +91,20 @@ class QFunction(nn.Module):
                 max_steps: int,
                 debug: bool = False,
                 batch_size: int = 128,
-                astar_batch:int = 10000
+                astar_batch:int = 10000,
+                weight: float = 0.6
                 ) -> tuple[bool, list[list[State]]]:
         """Runs beam search using the Q value until either
         max_steps have been made or reached a terminal state."""
         success = False
         t = self.get_aggregation_transform()
         print("roll out using batch weighted A* with batch size", astar_batch)
-
+        start_time = time.time()
         open_set: List[State] = [(0, 0, state)]
         heappush_count: int = 0
         closed_dict= dict()
         step_num = 0
+        node_count = 0
         while not success and step_num < max_steps:
             step_num+=1
             # Pop from open
@@ -111,7 +114,6 @@ class QFunction(nn.Module):
             rewards, s_actions = zip(*environment.step(popped_nodes))
             actions = [a for s_a in s_actions for a in s_a]
             if max(rewards):
-
                 success = True
                 break
 
@@ -124,6 +126,7 @@ class QFunction(nn.Module):
             for a, v in zip(actions, q_values):
                 a.next_state.value = a.state.value + t(v)
             nodes_c_all = list(set([a.next_state for a in actions]))
+
             # Check if children are in closed
 
             nodes_not_in_closed: List[State] = []
@@ -142,8 +145,9 @@ class QFunction(nn.Module):
             for node in nodes_c_all:
                 heappush(open_set, (-math.exp(node.value), heappush_count, node))
                 heappush_count += 1
-
-        return success, None
+                node_count +=1
+        end_time = time.time() - start_time
+        return success, None, end_time, node_count
 
 
     def recover_solutions(self, rollout_history: list[list[State]]) -> list[list[State]]:

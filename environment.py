@@ -224,13 +224,17 @@ def evaluate(environment, model_path, n_problems=30, gpu=None):
     model = torch.load(model_path, map_location=device)
     model.to(device)
     successes = 0
+    f = open("cube_results.txt", "a")
+    f.write("starting")
     for i in range(n_problems):
         state = environment.generate_new(seed=i)
         # success, history = model.rollout(environment, state, 30, 10000, debug=False)
-        success, history = model.rollout_bwas(environment, state, 50, astar_batch = 10000)
+        success, history, time, nodes_generated = model.rollout_bwas(environment, state, 50, astar_batch = 10000)
         print(f'[{i}/{n_problems}]: solved?', success)
         successes += int(success)
+        f.write("success ", success, " time:", time, " nodes_generated: ", nodes_generated)
     print(f'{successes}/{n_problems}')
+    f.close()
 
 
 def benchmark(environment):
