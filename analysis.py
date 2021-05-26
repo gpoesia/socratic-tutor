@@ -1,3 +1,4 @@
+import copy
 import matplotlib
 from matplotlib import pyplot as plt
 import json
@@ -10,6 +11,7 @@ import argparse
 import pickle
 from agent import State, Action
 import dateutil
+from sklearn.manifold import TSNE
 import altair
 
 
@@ -234,6 +236,23 @@ def make_plot(data: list[dict], plot_id: str):
         plot_spec = json.load(f)
     plot_spec['data'] = {'values': data}
     return altair.Chart.from_dict(plot_spec)
+
+def embed_problems_tsne(model_path: str, problems: list[dict]) -> list[(float, float)]:
+    model = torch.load(model_path)
+    device = torch.device('cpu')
+    model.to(device)
+    embeddings = model.embed_states([State([p['problem']], [], 0.0) for p in problems]).numpy()
+    tsne = TSNE()
+    X = tsne.fit_transform(embeddings)
+
+    problems = copy.deepcopy(problems)
+
+    for i, p in enumerate(problems):
+        p['x'] = X[i, 0]
+        p['y'] = X[i, 1]
+
+    return problems
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Analyze experiments & user study results')
