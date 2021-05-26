@@ -1,0 +1,25 @@
+{
+  "sections": [
+    {
+      "title": "One-step addition & subtraction equations",
+      "problems": [],
+    },
+    {
+      "title": "One-step multiplication & division equations",
+      "problems": [],
+    },
+    {
+      "title": "Two-step equations",
+      "problems": [],
+    },
+    {
+      "title": "eq-both-sides",
+      "problems": ["9e+4=−5e+14+13e"]
+    },
+    {
+      "title": "Equations with parentheses",
+      "problems": [],
+    },
+
+  ]
+}
