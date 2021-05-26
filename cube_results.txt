@@ -1,0 +1,33 @@
+$ python environment.py --evaluate --domain rubiks-cube-20 --q-function /mnt/fs3/poesia/aws-output/output-rubiks/d0372/NCE-fast/rubiks-cube-
+20/run0/checkpoints/67.pt --rust
+
+success: True time: 0.7165710926055908, nodes_generated: 1201
+success: True time: 1244.7527384757996, nodes_generated: 2583692
+success: True time: 293.71755290031433, nodes_generated: 617735
+success: True time: 0.018328189849853516, nodes_generated: 12
+success: True time: 1267.0176599025726, nodes_generated: 2611348
+success: True time: 340.0431008338928, nodes_generated: 715961
+success: True time: 1586.1883442401886, nodes_generated: 3184343
+success: True time: 386.7543466091156, nodes_generated: 819116
+success: True time: 149.80325484275818, nodes_generated: 310102
+success: True time: 54.66691255569458, nodes_generated: 104981
+success: True time: 1858.227288722992, nodes_generated: 3566778
+success: True time: 1535.1742858886719, nodes_generated: 3062956
+success: True time: 0.7022347450256348, nodes_generated: 1202
+success: True time: 51.920578479766846, nodes_generated: 105061
+success: True time: 0.09728479385375977, nodes_generated: 127
+success: True time: 1428.5401048660278, nodes_generated: 2830563
+success: True time: 299.71042585372925, nodes_generated: 620300
+success: True time: 0.017632484436035156, nodes_generated: 12
+success: True time: 1313.689691066742, nodes_generated: 2696631
+success: True time: 108.50225114822388, nodes_generated: 206081
+success: True time: 145.7052824497223, nodes_generated: 309359
+success: True time: 146.3737440109253, nodes_generated: 307859
+success: True time: 192.44716334342957, nodes_generated: 410671
+success: True time: 376.82482624053955, nodes_generated: 804694
+success: True time: 0.09709334373474121, nodes_generated: 127
+success: True time: 1298.72301030159, nodes_generated: 2649471
+success: True time: 199.32887268066406, nodes_generated: 411082
+success: True time: 844.3088953495026, nodes_generated: 1762842
+success: True time: 1444.275101184845, nodes_generated: 2946725
+success: True time: 156.785724401474, nodes_generated: 309661
