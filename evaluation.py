@@ -210,7 +210,7 @@ class EnvironmentWithEvaluationProxy:
                       self.agent.stats()))
 
 
-def evaluate_policy(config, device):
+def evaluate_policy(config, device, verbose):
     if config.get('random_policy'):
         q = RandomQFunction()
     elif config.get('inverse_length'):
@@ -223,12 +223,15 @@ def evaluate_policy(config, device):
 
     env = Environment.from_config(config)
     evaluator = SuccessRatePolicyEvaluator(env, config.get('eval_config', {}))
-    result = evaluator.evaluate(q, verbose=True)
+    result = evaluator.evaluate(q, verbose=verbose)
 
-    print('Success rate:', result['success_rate'])
-    print('Max solution length:', result['max_solution_length'])
-    print('Solved problems:', result['successes'])
-    print('Unsolved problems:', result['failures'])
+    if verbose:
+        print('Success rate:', result['success_rate'])
+        print('Max solution length:', result['max_solution_length'])
+        print('Solved problems:', result['successes'])
+        print('Unsolved problems:', result['failures'])
+
+    return result['success_rate']
 
 
 def evaluate_policy_checkpoints(config, device):
