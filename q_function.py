@@ -101,21 +101,27 @@ class QFunction(nn.Module):
         print("roll out using batch weighted A* with batch size", astar_batch)
         start_time = time.time()
         open_set: List[State] = [(0, 0, state)]
+        path_cost = dict()
         heappush_count: int = 0
         closed_dict= dict()
         step_num = 0
         node_count = 0
+        path_cost[state] = 1
+        sol_len = 0
         while not success and step_num < max_steps:
             step_num+=1
             # Pop from open
             num_to_pop: int = min(astar_batch, len(open_set))
             popped_nodes = [heappop(open_set)[2] for _ in range(num_to_pop)]
+
             # Expand nodes
             rewards, s_actions = zip(*environment.step(popped_nodes))
             actions = [a for s_a in s_actions for a in s_a]
-            if max(rewards):
-                success = True
-                break
+            for r, s in zip(rewards, popped_nodes):
+                    if r:
+                        success = True
+                        sol_len = path_cost[s]
+                        break
 
             with torch.no_grad():
                 q_values = []
@@ -126,6 +132,14 @@ class QFunction(nn.Module):
             for a, v in zip(actions, q_values):
                 a.next_state.value = a.state.value + t(v)
             nodes_c_all = list(set([a.next_state for a in actions]))
+            nodes_c_all = []
+
+            for a in actions:
+                nodes_c_all.append(a.next_state)
+                if a.next_state in path_cost:
+                    path_cost[a.next_state] = min(path_cost[a.state]+1,path_cost[a.next_state])
+                else:
+                    path_cost[a.next_state] = path_cost[a.state]+1
 
             # Check if children are in closed
 
@@ -147,7 +161,7 @@ class QFunction(nn.Module):
                 heappush_count += 1
                 node_count +=1
         end_time = time.time() - start_time
-        return success, None, end_time, node_count
+        return success, None, end_time, node_count, sol_len
 
 
     def recover_solutions(self, rollout_history: list[list[State]]) -> list[list[State]]:

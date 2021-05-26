@@ -147,7 +147,6 @@ class RustEnvironment(Environment):
         except:
             print('Error stepping', states)
             raise
-
         rewards = [int(ns is None) for ns in next_states]
         actions = [[Action(state,
                            formal_desc,
@@ -219,21 +218,34 @@ def test(environment, scoring_model_path):
         print('Solution:', ' => '.join(map(lambda s: s.facts[-1], model.recover_solutions(history)[0])))
 
 
-def evaluate(environment, model_path, n_problems=30, gpu=None):
+def evaluate(environment, model_path, start_idx, file_path, n_problems=20, gpu=None):
     device = torch.device('cpu') if gpu is None else torch.device(gpu)
     model = torch.load(model_path, map_location=device)
     model.to(device)
     successes = 0
-    f = open("cube_results.txt", "a")
-    f.write("starting")
-    for i in range(n_problems):
+    f = open(file_path, "a+")
+    f.write(f'start index {start_idx} end index {start_idx + n_problems -1}\n')
+    aveg_time = 0
+    aveg_nodes = 0
+    aveg_sol_len = 0
+    for i in range(start_idx, start_idx + n_problems):
         state = environment.generate_new(seed=i)
-        # success, history = model.rollout(environment, state, 30, 10000, debug=False)
-        success, history, time, nodes_generated = model.rollout_bwas(environment, state, 50, astar_batch = 10000)
-        print(f'[{i}/{n_problems}]: solved?', success)
+        # success, history = model.rollout(environment, state, 30, 1, debug=False)
+        success, history, time, nodes_generated, sol_len = model.rollout_bwas(environment, state, 50, astar_batch = 1)
         successes += int(success)
-        f.write(f'success: {success} time: {time}, nodes_generated: {nodes_generated}')
-    print(f'{successes}/{n_problems}')
+        print(f'success: {success} time: {time}, nodes_generated: {nodes_generated}, sol_len: {sol_len}')
+        f.write(f'{i} - success: {success} time: {time}, nodes_generated: {nodes_generated}, sol_len: {sol_len} \n')
+        if int(success):
+            aveg_time+= time
+            aveg_nodes+=nodes_generated
+            aveg_sol_len += sol_len
+    aveg_time/=successes
+    aveg_nodes/=successes
+    aveg_sol_len/=successes
+
+    print(f'{successes}/{n_problems} aveg_sol_len:{aveg_sol_len} aveg_nodes:{aveg_nodes} aveg_time:{aveg_time}')
+    f.write(f'{successes}/{n_problems} aveg_sol_len:{aveg_sol_len} aveg_nodes:{aveg_nodes} aveg_time:{aveg_time} \n')
+
     f.close()
 
 
@@ -272,6 +284,8 @@ if __name__ == '__main__':
     parser.add_argument('--domain', type=str,
                         help='What domain to use.', default='equations-ct')
     parser.add_argument('--gpu', type=int, default=None, help='Which GPU to use.')
+    parser.add_argument('--start_idx', type=int, default=None, help='Start from a specified seed.')
+    parser.add_argument('--results_file', type=str, default=None, help='File to store search results.')
 
     opt = parser.parse_args()
 
@@ -289,6 +303,6 @@ if __name__ == '__main__':
     elif opt.test:
         test(env, opt.q_function)
     elif opt.evaluate:
-        evaluate(env, opt.q_function, gpu = opt.gpu)
+        evaluate(env, opt.q_function, opt.start_idx, opt.results_file, gpu = opt.gpu)
     elif opt.generate:
         generate(env)
