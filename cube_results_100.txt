@@ -1,0 +1,100 @@
+"0-20.txt"
+0 - success: True time: 5.8407135009765625, nodes_generated: 12845, sol_len: 4
+1 - success: True time: 1208.3836770057678, nodes_generated: 2400082, sol_len: 32
+2 - success: True time: 316.3254988193512, nodes_generated: 688040, sol_len: 11
+3 - success: True time: 0.06866288185119629, nodes_generated: 126, sol_len: 2
+4 - success: True time: 1221.552747964859, nodes_generated: 2442386, sol_len: 32
+5 - success: True time: 364.36634945869446, nodes_generated: 774258, sol_len: 12
+6 - success: True time: 1630.2468085289001, nodes_generated: 2901760, sol_len: 39
+7 - success: True time: 432.67457246780396, nodes_generated: 877952, sol_len: 13
+8 - success: True time: 195.23184323310852, nodes_generated: 404162, sol_len: 8
+9 - success: True time: 100.21152806282043, nodes_generated: 201682, sol_len: 6
+10 - success: True time: 1817.3309984207153, nodes_generated: 3241631, sol_len: 43
+11 - success: True time: 1549.5382611751556, nodes_generated: 2820915, sol_len: 37
+12 - success: True time: 5.90369439125061, nodes_generated: 13073, sol_len: 4
+13 - success: True time: 110.10420417785645, nodes_generated: 202081, sol_len: 6
+14 - success: True time: 0.633821964263916, nodes_generated: 1338, sol_len: 3
+15 - success: True time: 1412.6484849452972, nodes_generated: 2598432, sol_len: 35
+16 - success: True time: 322.58938121795654, nodes_generated: 697163, sol_len: 11
+17 - success: True time: 0.06979513168334961, nodes_generated: 126, sol_len: 2
+18 - success: True time: 1320.7634394168854, nodes_generated: 2511168, sol_len: 33
+19 - success: True time: 153.22148275375366, nodes_generated: 300526, sol_len: 7
+
+"20-40.txt"
+20 - success: True time: 176.41338729858398, nodes_generated: 401439, sol_len: 8
+21 - success: True time: 185.96014165878296, nodes_generated: 401670, sol_len: 8
+22 - success: True time: 234.68964290618896, nodes_generated: 493129, sol_len: 9
+23 - success: True time: 423.21941781044006, nodes_generated: 840241, sol_len: 13
+24 - success: True time: 0.61252760887146, nodes_generated: 1330, sol_len: 3
+25 - success: True time: 1349.3368334770203, nodes_generated: 2422526, sol_len: 33
+26 - success: True time: 244.65398383140564, nodes_generated: 492331, sol_len: 9
+27 - success: True time: 881.8884139060974, nodes_generated: 1678817, sol_len: 23
+28 - success: True time: 1484.5654232501984, nodes_generated: 2714893, sol_len: 36
+29 - success: True time: 198.39635586738586, nodes_generated: 402215, sol_len: 8
+30 - success: True time: 280.2148015499115, nodes_generated: 592184, sol_len: 10
+31 - success: True time: 1381.9697754383087, nodes_generated: 2534880, sol_len: 34
+32 - success: True time: 235.6371681690216, nodes_generated: 499822, sol_len: 9
+33 - success: True time: 0.6267216205596924, nodes_generated: 1290, sol_len: 3
+34 - success: True time: 52.91587853431702, nodes_generated: 107097, sol_len: 5
+35 - success: True time: 1208.9131717681885, nodes_generated: 2334094, sol_len: 31
+36 - success: True time: 9.298324584960938e-05, nodes_generated: 0, sol_len: 1
+37 - success: False time: 2063.6973774433136, nodes_generated: 3716204, sol_len: 0
+38 - success: True time: 1682.118661403656, nodes_generated: 3216432, sol_len: 42
+39 - success: True time: 1161.08309340477, nodes_generated: 2277687, sol_len: 30
+
+
+"40-60.txt"
+40 - success: True time: 90.7688000202179, nodes_generated: 201834, sol_len: 6
+41 - success: True time: 360.38227343559265, nodes_generated: 783464, sol_len: 12
+42 - success: True time: 97.74333071708679, nodes_generated: 203746, sol_len: 6
+43 - success: True time: 231.5228977203369, nodes_generated: 486824, sol_len: 9
+44 - success: True time: 52.0618679523468, nodes_generated: 107088, sol_len: 5
+45 - success: True time: 364.4972050189972, nodes_generated: 778455, sol_len: 12
+46 - success: True time: 98.27095317840576, nodes_generated: 205768, sol_len: 6
+47 - success: True time: 185.56003284454346, nodes_generated: 393181, sol_len: 8
+48 - success: True time: 410.5884590148926, nodes_generated: 860973, sol_len: 13
+49 - success: True time: 822.4815316200256, nodes_generated: 1671866, sol_len: 22
+50 - success: True time: 145.42831659317017, nodes_generated: 300603, sol_len: 7
+51 - success: True time: 861.1274843215942, nodes_generated: 1710545, sol_len: 23
+52 - success: True time: 145.80244731903076, nodes_generated: 302125, sol_len: 7
+53 - success: True time: 141.27836298942566, nodes_generated: 300052, sol_len: 7
+54 - success: True time: 0.59820556640625, nodes_generated: 1333, sol_len: 3
+55 - success: True time: 1490.1214139461517, nodes_generated: 2741366, sol_len: 37
+56 - success: True time: 845.1574058532715, nodes_generated: 1607384, sol_len: 22
+57 - success: True time: 145.6264214515686, nodes_generated: 298654, sol_len: 7
+58 - success: True time: 0.6207911968231201, nodes_generated: 1343, sol_len: 3
+59 - success: True time: 185.51216220855713, nodes_generated: 400120, sol_len: 8
+
+"60-80.txt"
+60 - success: True time: 1369.101048707962, nodes_generated: 2733446, sol_len: 36
+61 - success: True time: 102.04362607002258, nodes_generated: 201998, sol_len: 6
+62 - success: True time: 304.44120144844055, nodes_generated: 683751, sol_len: 11
+63 - success: True time: 93.05325245857239, nodes_generated: 201302, sol_len: 6
+64 - success: True time: 0.06854128837585449, nodes_generated: 124, sol_len: 2
+65 - success: True time: 219.0283260345459, nodes_generated: 495580, sol_len: 9
+66 - success: True time: 49.585991859436035, nodes_generated: 108109, sol_len: 5
+67 - success: True time: 5.91219162940979, nodes_generated: 12592, sol_len: 4
+68 - success: True time: 5.6536407470703125, nodes_generated: 12900, sol_len: 4
+69 - success: True time: 1067.5459537506104, nodes_generated: 2208815, sol_len: 29
+70 - success: True time: 910.7638103961945, nodes_generated: 1878259, sol_len: 25
+71 - success: True time: 182.57889986038208, nodes_generated: 400750, sol_len: 8
+72 - success: True time: 351.1205208301544, nodes_generated: 766468, sol_len: 12
+73 - success: True time: 395.09529972076416, nodes_generated: 861766, sol_len: 13
+74 - success: True time: 263.8294653892517, nodes_generated: 599719, sol_len: 10
+75 - success: True time: 223.17985796928406, nodes_generated: 499316, sol_len: 9
+76 - success: True time: 264.0284757614136, nodes_generated: 596917, sol_len: 10
+77 - success: True time: 92.92850494384766, nodes_generated: 203113, sol_len: 6
+78 - success: True time: 262.69731426239014, nodes_generated: 592774, sol_len: 10
+79 - success: True time: 93.8313729763031, nodes_generated: 199793, sol_len: 6
+
+20/20 aveg_sol_len:17.0 aveg_nodes:1154487.3 aveg_time:608.3852982759475 //0-20
+19/20 aveg_sol_len:16.58 aveg_nodes:1126951.4 aveg_time:588.5902890782608 //20-40
+20/20 aveg_sol_len:11.05 aveg_nodes:662874.6 aveg_time:312.82436480522153 //40-60
+20/20 aveg_sol_len:11.15 aveg_nodes:667836.2 aveg_time:333.75751814842226 //60-80
+
+
+(80 cubes total)
+average time : 460.889s
+average node generated: 903,037
+average solution length: 13.75
+
