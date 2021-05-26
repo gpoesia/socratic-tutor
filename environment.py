@@ -66,13 +66,24 @@ class Environment:
     def step(self, states: list[State], domain: str = None) -> list[tuple[bool, list[Action]]]:
         raise NotImplementedError()
 
+    def train(self):
+        pass
+
+    def test(self):
+        pass
+
     @staticmethod
     def from_config(config: dict):
         'Returns the appropriate environment given the experiment configuration options.'
         if config.get('environment_backend') == 'Rust':
-            return RustEnvironment(config.get('domain'))
+            env = RustEnvironment(config.get('domain'))
         else:
-            return RacketEnvironment(config['environment_url'], config.get('domain'))
+            env = RacketEnvironment(config['environment_url'], config.get('domain'))
+
+        if config.get('multitask_train_domains'):
+            env = MultiTaskEnvironment(env, config['multitask_train_domains'])
+
+        return env
 
 
 class RacketEnvironment(Environment):
@@ -145,7 +156,7 @@ class RustEnvironment(Environment):
         try:
             next_states = commoncore.step(domain, [s.facts[-1] for s in states])
         except:
-            print('Error stepping', states)
+            print('Error stepping', states, 'in', domain)
             raise
 
         rewards = [int(ns is None) for ns in next_states]
@@ -162,6 +173,45 @@ class RustEnvironment(Environment):
                 a.next_state.parent_action = a
 
         return list(zip(rewards, actions))
+
+
+class MultiTaskEnvironment(Environment):
+    'An environment that mixes domains during training time.'
+    def __init__(self, base_environment, domains):
+        self.domains = domains
+        self.base_environment = base_environment
+        self.default_domain = base_environment.default_domain
+        print('Default domain:', self.default_domain)
+        # In step(), instead of a default domain, this environment uses
+        # the last one used during generation.
+        self.last_domain = None
+        self.train()
+
+    def train(self):
+        self.randomize_domain = True
+
+    def test(self):
+        self.randomize_domain = False
+
+    def generate_new(self, domain=None, seed=None):
+        if self.randomize_domain:
+            if domain is None:
+                domain = random.choice(self.domains)
+                self.last_domain = domain
+        else:
+            domain = self.default_domain
+
+        return self.base_environment.generate_new(domain, seed)
+
+    def step(self, states, domain=None):
+        if self.randomize_domain:
+            if domain is None:
+                domain = self.last_domain
+        else:
+            domain = self.default_domain
+
+        return self.base_environment.step(states, domain or
+                                          (self.randomize_domain and self.last_domain))
 
 
 def interact(environment, scoring_model_path):

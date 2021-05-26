@@ -137,8 +137,10 @@ class EnvironmentWithEvaluationProxy:
         print('Evaluating...')
         name, domain = self.agent_name, self.environment.default_domain
 
+        self.environment.test()
         evaluator = SuccessRatePolicyEvaluator(self.environment, self.eval_config)
         results = evaluator.evaluate(self.agent.get_q_function())
+        self.environment.train()
         results['n_steps'] = self.n_steps
         results['experiment_id'] = self.experiment_id
         results['run_index'] = self.run_index

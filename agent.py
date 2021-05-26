@@ -231,7 +231,7 @@ class NCE(LearningAgent):
     def stats(self):
         return "{} solutions found, {:.4f} training acc".format(
             self.training_problems_solved,
-            self.training_acc_moving_average) 
+            self.training_acc_moving_average)
 
     def gradient_steps(self):
         if not self.examples:
@@ -660,6 +660,7 @@ def run_batch_experiment(config, range_to_run):
                         'domain': domain,
                         'environment_backend': environment_backend,
                         'environment_url': 'http://localhost:{}'.format(port),
+                        'multitask_train_domains': config.get('multitask_train_domains'),
                         'eval_environment': copy.deepcopy(config['eval_environment']),
                         'wandb_project': config.get('wandb_project')
                     }
