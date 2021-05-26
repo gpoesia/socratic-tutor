@@ -219,7 +219,7 @@ def test(environment, scoring_model_path):
 
 
 def evaluate(environment, model_path, start_idx, file_path, n_problems=20, gpu=None):
-    device = torch.device('cpu') if gpu is None else torch.device(gpu)
+    device = torch.device('cpu') if gpu is None else torch.device("cuda:"+str(gpu))
     model = torch.load(model_path, map_location=device)
     model.to(device)
     successes = 0
