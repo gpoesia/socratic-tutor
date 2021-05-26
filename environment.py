@@ -232,7 +232,7 @@ def evaluate(environment, model_path, n_problems=30, gpu=None):
         success, history, time, nodes_generated = model.rollout_bwas(environment, state, 50, astar_batch = 10000)
         print(f'[{i}/{n_problems}]: solved?', success)
         successes += int(success)
-        f.write("success ", success, " time:", time, " nodes_generated: ", nodes_generated)
+        f.write(f'success: {success} time: {time}, nodes_generated: {nodes_generated}')
     print(f'{successes}/{n_problems}')
     f.close()
 
