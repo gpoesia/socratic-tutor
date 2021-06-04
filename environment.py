@@ -215,7 +215,9 @@ def test(environment, scoring_model_path):
 
     print('Success' if success else 'Failed')
     if success:
-        print('Solution:', ' => '.join(map(lambda s: s.facts[-1], model.recover_solutions(history)[0])))
+        print('Solution:',
+              ' =>\n'.join(map(lambda s: f'{s.facts[-1]} | {s.parent_action and s.parent_action.action}',
+                  model.recover_solutions(history)[0])))
 
 
 def evaluate(environment, model_path, start_idx, file_path, n_problems=20, gpu=None):
