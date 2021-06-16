@@ -23,6 +23,7 @@ thread_local!{
         map.insert("equations-ct", Arc::new(Equations {}));
         map.insert("fractions", Arc::new(Fractions::new(4, 4)));
         map.insert("ternary-addition", Arc::new(TernaryAddition::new(15)));
+        map.insert("ternary-addition-small", Arc::new(TernaryAddition::new(8)));
         map.insert("sorting", Arc::new(Sorting::new(12)));
         map.insert("rubiks-cube-20", Arc::new(RubiksCube::new(20)));
         map.insert("rubiks-cube-50", Arc::new(RubiksCube::new(50)));
