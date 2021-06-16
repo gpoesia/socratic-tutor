@@ -20,7 +20,6 @@ from environment import Environment
 def l2_distance(u, v):
     return np.sqrt(np.sum((u - v)**2))
 
-
 def find_all_solutions(env, problems, q_fn, max_steps):
     problems_with_solution = []
 
@@ -70,9 +69,29 @@ def build_curriculum(config, device):
     # Pick smallest problem to be the initial.
     initial = min(range(len(problems)), key=lambda i: len(problems[i].facts[-1]))
     curriculum = [initial]
+    curriculum_len = [initial]
 
     print('Starting from', problems[initial])
 
+    # Make static length-based curriculum.
+    while True:
+        elligible = []
+
+        for i in range(len(X)):
+            if len(problems[i].facts[-1]) > len(problems[curriculum_len[-1]].facts[-1]):
+               elligible.append((i, len(problems[i].facts[-1])))
+
+        if not elligible:
+           break
+
+        elligible.sort(key=lambda p: p[1])
+        curriculum_len.append(elligible[0][0])
+
+    print('Picked static-len curriculum:')
+    for i, s in enumerate(curriculum_len):
+        print(i, problems[s].facts)
+
+    # Make static representation-based curriculum.
     while True:
         elligible = []
 
@@ -92,7 +111,7 @@ def build_curriculum(config, device):
         curriculum.append(elligible[0][0])
         print('Added', problems[elligible[0][0]], '(min_d =', elligible[0][1], ')')
 
-    print('Picked curriculum:')
+    print('Picked static-repr curriculum:')
     for i, s in enumerate(curriculum):
         print(i, problems[s].facts)
 
@@ -102,7 +121,10 @@ def build_curriculum(config, device):
         "problems": problems,
         "solutions": solutions,
         "config": config,
-        "static_curriculum": curriculum,
+        "static_curriculum": {
+            "static-repr": curriculum,
+            "static-len": curriculum_len,
+        },
     }
 
     with open(config['output'], 'wb') as f:
@@ -116,8 +138,8 @@ def random_curriculum_next(data, student_history):
     not_seen = set(range(len(problems))) - seen_problems
     return random.choice(list(not_seen)) if len(not_seen) else None
 
-def static_curriculum_next(data, student_history):
-    curriculum = data['static_curriculum']
+def static_curriculum_next(data, curriculum_algorithm, student_history):
+    curriculum = data['static_curriculum'][curriculum_algorithm]
     return (curriculum[len(student_history)]
             if len(student_history) < min(len(curriculum), data['config']['curriculum_size'])
             else None)
@@ -200,8 +222,8 @@ def serve_curriculum(config):
 
         if curriculum_algorithm == 'random':
             next_problem = random_curriculum_next(data, student_history)
-        elif curriculum_algorithm == 'static':
-            next_problem = static_curriculum_next(data, student_history)
+        elif curriculum_algorithm.startswith('static-'):
+            next_problem = static_curriculum_next(data, curriculum_algorithm, student_history)
         elif curriculum_algorithm == 'dynamic':
             next_problem = dynamic_curriculum_next(data, student_history)
         else:
