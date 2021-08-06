@@ -12,6 +12,7 @@ import json
 import math
 import subprocess
 import logging
+import numpy as np
 
 import torch
 from torch import nn
@@ -585,6 +586,76 @@ class QLearning(LearningAgent):
         self.optimizer.step()
 
 
+@register(LearningAgent)
+class AutodidaticIteration(LearningAgent):
+    def __init__(self, q_function, config):
+        self.q_function = q_function
+
+        self.batch_size = config.get('batch_size', 64)
+        self.n_gradient_steps = config.get('gradient_steps', 64)
+        self.reward_weight = config.get('reward_weight', 0.02)
+
+        self.optimizer = torch.optim.Adam(q_function.parameters(),
+                                          lr=config.get('learning_rate', 1e-4))
+        self.examples = []
+
+    def name(self):
+        return 'AutodidaticIteration'
+
+    def get_q_function(self):
+        return self.q_function
+
+    def learn_from_environment(self, environment):
+        for i in itertools.count():
+            states = [environment.generate_new() for _ in range(self.batch_size)]
+
+            for s in states:
+                r, actions = environment.step([s])[0]
+
+                if r:
+                    # Trivial state; no examples to draw.
+                    continue
+
+                with torch.no_grad():
+                    q_s = self.q_function(actions)
+
+                r_a = []
+
+                for i, a in enumerate(actions):
+                    r_a_i, _ = environment.step([a.next_state])[0]
+                    r_a.append(float(r_a_i) + q_s[i].item())
+
+                value = np.max(r_a) - self.reward_weight
+                self.examples.append((s, value))
+
+            self.gradient_steps()
+
+    def learn_from_experience(self):
+        pass
+
+    def stats(self):
+        return f"n_training_examples={len(self.examples)}"
+
+    def gradient_steps(self):
+        examples = self.examples
+        batch_size = min(self.batch_size, len(examples))
+
+        if batch_size == 0:
+            return
+
+        batch = random.sample(examples, batch_size)
+
+        for _ in range(self.n_gradient_steps):
+            y_p = self.q_function([Action(st, '', st, 0.0, 0.0) for st, _ in batch])
+            y = torch.tensor([y for _, y in batch], dtype=y_p.dtype, device=y_p.device)
+
+            self.optimizer.zero_grad()
+            loss = ((y_p - y)**2).mean()
+            loss.backward()
+            wandb.log({'train_loss': loss.item()})
+            self.optimizer.step()
+
+
 def run_agent_experiment(config, device):
     experiment_id = config['experiment_id']
     domain = config['domain']
@@ -603,8 +674,6 @@ def run_agent_experiment(config, device):
     env = Environment.from_config(config)
     q_fn = QFunction.new(config['agent']['q_function'], device)
     agent = LearningAgent.new(q_fn, config['agent'])
-
-    print('Running', q_fn.name(), agent.name(), 'on', domain)
 
     eval_env = EnvironmentWithEvaluationProxy(experiment_id, run_index, agent_name, domain,
                                               agent, env, config['eval_environment'])

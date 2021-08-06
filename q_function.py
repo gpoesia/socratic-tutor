@@ -184,6 +184,7 @@ class StateRNNValueFn(QFunction):
         self.vocab = CharEncoding({'embedding_dim': char_emb_dim})
         self.encoder = nn.LSTM(char_emb_dim, hidden_dim,
                                self.lstm_layers, bidirectional=True)
+        self.activation = config.get('activation', 'sigmoid')
         self.output = nn.Linear(2*hidden_dim, 1)
         self.to(device)
 
@@ -195,7 +196,9 @@ class StateRNNValueFn(QFunction):
 
     def forward(self, actions):
         state_embedding = self.embed_states([a.next_state for a in actions])
-        q_values = self.output(state_embedding).sigmoid().squeeze(1)
+        q_values = self.output(state_embedding).squeeze(1)
+        if self.activation == 'sigmoid':
+            q_values = q_values.sigmoid()
         return q_values
 
     def embed_states(self, states):
@@ -211,6 +214,11 @@ class StateRNNValueFn(QFunction):
 
     def name(self):
         return 'StateRNNValueFn'
+
+    def get_aggregation_transform(self):
+        if self.activation == 'sigmoid':
+            return math.log
+        return lambda x: x
 
 
 # A simple architecture that combines the current and next state embeddings with
@@ -241,7 +249,6 @@ class Bilinear(QFunction):
         self.device = device
         self.vocab.to(device)
         self.vocab.device = device
-
 
     def forward(self, actions):
         current_state_embedding = self.embed_states([a.state for a in actions])
