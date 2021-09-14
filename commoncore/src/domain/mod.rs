@@ -5,6 +5,7 @@ pub mod ternary;
 pub mod sorting;
 pub mod rubiks_cube;
 pub mod fractions;
+pub mod key_to_door;
 
 use rand_pcg::Pcg64;
 
