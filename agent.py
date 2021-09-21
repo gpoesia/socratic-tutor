@@ -250,6 +250,8 @@ class NCE(LearningAgent):
 
             self.optimizer.zero_grad()
             f_pred = self.q_function(all_actions)
+            # Here, the batch is casted as a N + 1-class classification instance,
+            # and class 0 is the positive example (by how all_actions is constructed).
             loss = celoss(f_pred.unsqueeze(0), torch.zeros(1, dtype=int, device=f_pred.device))
             # wandb.log({'train_loss': loss.item()})
             losses.append(loss.item())
@@ -723,6 +725,71 @@ class DAVI(LearningAgent):
             loss = ((y_p - y)**2).mean()
             loss.backward()
             wandb.log({'train_loss': loss.item()})
+            self.optimizer.step()
+
+@register(LearningAgent)
+class BehavioralCloning(LearningAgent):
+    def __init__(self, q_function, config):
+        self.q_function = q_function
+
+        self.batch_size = config.get('batch_size', 64)
+        self.n_gradient_steps = config.get('gradient_steps', 5000)
+        self.max_depth = config.get('max_depth', 20)
+
+        self.optimizer = torch.optim.Adam(q_function.parameters(),
+                                          lr=config.get('learning_rate', 1e-4))
+        self.examples = []
+
+    def name(self):
+        return 'BehavioralCloning'
+
+    def get_q_function(self):
+        return self.q_function
+
+    def learn_from_environment(self, environment):
+        for i in itertools.count():
+            s = environment.generate_new()
+            r, actions = environment.step([s])[0]
+
+            available_actions = []
+            solution = []
+
+            if r:
+                # Trivial state; no examples to draw.
+                continue
+
+            for i in range(self.max_depth):
+                if r or len(actions) == 0:
+                    break
+                available_actions.append(actions)
+                a = random.randint(0, len(actions) - 1)
+                solution.append(actions[a])
+                r, actions = environment.step([solution[-1].next_state])[0]
+
+            if r:
+                for actions, answer in zip(available_actions, solution):
+                    self.examples.append((actions, answer))
+
+    def stats(self):
+        return f"n_training_examples={len(self.examples)}"
+
+    def learn_from_experience(self):
+        examples = self.examples
+        batch_size = min(self.batch_size, len(examples))
+
+        if batch_size == 0:
+            return
+
+        celoss = nn.CrossEntropyLoss()
+
+        for i in range(self.n_gradient_steps):
+            (all_actions, answer) = random.choice(self.examples)
+            self.optimizer.zero_grad()
+            f_pred = self.q_function(all_actions)
+            loss = celoss(f_pred.unsqueeze(0), answer * torch.ones(1, dtype=int, device=f_pred.device))
+            # wandb.log({'train_loss': loss.item()})
+            losses.append(loss.item())
+            loss.backward()
             self.optimizer.step()
 
 
