@@ -18,11 +18,10 @@ class QFunction(nn.Module):
     def forward(self, state: list[State], actions: list[Action]):
         raise NotImplementedError()
 
-    def get_aggregation_transform(self):
-        '''Returns a function that needs to be applied to the outputs of this QFunction
-        so that its return values can be combined with a simple sum during beam search.'''
-        # The default is for QFunctions to return probabilities, so log works.
-        return math.log
+    def aggregate(self, cumulative_score, next_q_score):
+        '''Returns a function that properly combines the scores of two steps from this q function.'''
+        # The default is for QFunctions to return probabilities, so summing their log is the default.
+        return cumulative_score + math.log(next_q_score)
 
     def rollout(self,
                 environment: Environment,
@@ -36,7 +35,6 @@ class QFunction(nn.Module):
         history = [beam]
         seen = set([state])
         success = False
-        t = self.get_aggregation_transform()
 
         for i in range(max_steps):
             if debug:
@@ -60,7 +58,7 @@ class QFunction(nn.Module):
                 q_values = self(actions).tolist()
 
             for a, v in zip(actions, q_values):
-                a.next_state.value = a.state.value + t(v)
+                a.next_state.value = self.aggregate(a.state.value, v)
 
             ns = list(set([a.next_state for a in actions]) - seen)
             ns.sort(key=lambda s: s.value, reverse=True)
@@ -185,6 +183,7 @@ class StateRNNValueFn(QFunction):
         self.encoder = nn.LSTM(char_emb_dim, hidden_dim,
                                self.lstm_layers, bidirectional=True)
         self.activation = config.get('activation', 'sigmoid')
+        self.is_cost = config.get('is_cost', False)
         self.output = nn.Linear(2*hidden_dim, 1)
         self.to(device)
 
@@ -215,10 +214,8 @@ class StateRNNValueFn(QFunction):
     def name(self):
         return 'StateRNNValueFn'
 
-    def get_aggregation_transform(self):
-        if self.activation == 'sigmoid':
-            return math.log
-        return lambda x: x
+    def aggregate(self, cumulative_score, next_state_score):
+        return next_state_score * (-1 if self.is_cost else 1)
 
 
 # A simple architecture that combines the current and next state embeddings with
@@ -274,8 +271,8 @@ class Bilinear(QFunction):
     def name(self):
         return 'Bilinear'
 
-    def get_aggregation_transform(self):
-        return lambda x: x
+    def aggregate(self, cumulative_score, next_action_score):
+        return cumulative_score + next_action_score
 
 
 class LearnerValueFunctionAdapter(QFunction):

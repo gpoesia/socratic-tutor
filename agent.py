@@ -656,6 +656,76 @@ class AutodidaticIteration(LearningAgent):
             self.optimizer.step()
 
 
+@register(LearningAgent)
+class DAVI(LearningAgent):
+    def __init__(self, q_function, config):
+        self.q_function = q_function
+
+        self.batch_size = config.get('batch_size', 64)
+        self.n_gradient_steps = config.get('gradient_steps', 64)
+        self.g = config.get('step_cost', 0.01)
+
+        self.optimizer = torch.optim.Adam(q_function.parameters(),
+                                          lr=config.get('learning_rate', 1e-4))
+        self.examples = []
+
+    def name(self):
+        return 'DAVI'
+
+    def get_q_function(self):
+        return self.q_function
+
+    def learn_from_environment(self, environment):
+        for i in itertools.count():
+            states = [environment.generate_new() for _ in range(self.batch_size)]
+
+            for s in states:
+                r, actions = environment.step([s])[0]
+
+                if r:
+                    self.examples.append((s, 0))
+                    continue
+
+                with torch.no_grad():
+                    q_s = self.q_function(actions)
+
+                r_a = []
+
+                for i, a in enumerate(actions):
+                    r_a_i, _ = environment.step([a.next_state])[0]
+                    r_a.append(self.g + (0 if r_a_i else q_s[i].item()))
+
+                value = np.min(r_a)
+                self.examples.append((s, value))
+
+            self.gradient_steps()
+
+    def learn_from_experience(self):
+        pass
+
+    def stats(self):
+        return f"n_training_examples={len(self.examples)}"
+
+    def gradient_steps(self):
+        examples = self.examples
+        batch_size = min(self.batch_size, len(examples))
+
+        if batch_size == 0:
+            return
+
+        batch = random.sample(examples, batch_size)
+
+        for _ in range(self.n_gradient_steps):
+            y_p = self.q_function([Action(st, '', st, 0.0, 0.0) for st, _ in batch])
+            y = torch.tensor([y for _, y in batch], dtype=y_p.dtype, device=y_p.device)
+
+            self.optimizer.zero_grad()
+            loss = ((y_p - y)**2).mean()
+            loss.backward()
+            wandb.log({'train_loss': loss.item()})
+            self.optimizer.step()
+
+
 def run_agent_experiment(config, device):
     experiment_id = config['experiment_id']
     domain = config['domain']
