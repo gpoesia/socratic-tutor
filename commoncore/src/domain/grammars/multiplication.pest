@@ -1,0 +1,13 @@
+// Step-by-step multiplication grammar
+
+term = _{ SOI ~ expr ~ EOI }
+
+expr = _{ neg_number | number | bin_op }
+
+bin_op = { "(" ~ expr ~ op ~ expr ~ ")" }
+op = @{ "+" | "*" | "-" }
+
+neg_number     = @{ ('0'..'9')+ ~ "e" ~ ('0'..'9') }
+number     = @{ "-" ~ ('0'..'9')+ ~ "e" ~ ('0'..'9') }
+
+WHITESPACE = _{ " " }
