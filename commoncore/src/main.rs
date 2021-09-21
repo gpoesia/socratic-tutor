@@ -16,7 +16,7 @@ fn bfs(d: &Arc<dyn domain::Domain>, s: &domain::State, max_edges: u32) -> bool {
         if let Some(actions) = d.step(next) {
             edges_traversed += actions.len();
             for action in actions.iter() {
-                if !seen.insert(action.next_state.clone()) {
+                if seen.insert(action.next_state.clone()) {
                     queue.push_back(action.next_state.clone());
                 }
             }
@@ -30,7 +30,7 @@ fn bfs(d: &Arc<dyn domain::Domain>, s: &domain::State, max_edges: u32) -> bool {
 
 fn main() {
     DOMAINS.with(|domains| {
-        const MAX_EDGES: u32 = 10000000;
+        const MAX_EDGES: u32 = 1000000;
         const N_PROBLEMS: u32 = 100;
 
         println!("Found {} environments.", domains.len());
