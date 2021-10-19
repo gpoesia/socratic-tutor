@@ -7,6 +7,9 @@ import numpy as np
 import argparse
 import json
 import subprocess
+from environment import RustEnvironment
+from tqdm import tqdm
+
 
 def extract_problem(p, canonicalize_problems=False):
     equality = re.sub('(\\.[0-9]+)', '', p)
@@ -99,6 +102,36 @@ class CognitiveTutorDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         return index, self.response[index], self.problem_id[index], self.response_mask[index]
 
+
+def generate_solutions_dataset(agent, domain, output, device):
+    env = RustEnvironment(domain)
+    device = torch.device(device)
+    q_fn = torch.load(agent, map_location=device)
+    q_fn.to(device)
+
+    dataset = []
+
+    SIZE = 10000
+
+    for i in tqdm(range(SIZE)):
+        p = env.generate_new()
+        try:
+            success, history = q_fn.rollout(env, p, 30, 1)
+        except:
+            continue
+        if success:
+            dataset.append({
+                'problem': p.facts[-1],
+                'solution': [{'state': s.facts[-1],
+                              'action': 'assumption' if s.parent_action is None else s.parent_action.action}
+                             for s in q_fn.recover_solutions(history)[0]]
+                })
+
+    with open(output, 'w') as f:
+        json.dump(dataset, f)
+        print('Wrote', output)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Dataset utils')
     parser.add_argument('--path', help='Path to the Cognitive Tutor log')
@@ -106,13 +139,17 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('--reformat', help='Reformat the problems using our parser.',
                         action='store_true')
+    parser.add_argument('--generate', help='Generate a dataset of solutions using a pre-trained agent.',
+                        action='store_true')
+    parser.add_argument('--agent', help='Path to the pre-trained agent.', required=False)
+    parser.add_argument('--domain', help='What domain to generate problems in.', required=False)
     parser.add_argument('--output', help='Path to the output.')
+    parser.add_argument('--device', help='Torch device to use.', default='cpu')
 
     opt = parser.parse_args()
 
-    ds = parse_cognitive_tutor_log(opt.path, opt.canonicalize)
-
     if opt.reformat:
+        ds = parse_cognitive_tutor_log(opt.path, opt.canonicalize)
         # Call Racket util to reformat problems as we do.
         problems = set()
         for entry in ds:
@@ -127,6 +164,8 @@ if __name__ == '__main__':
         print('Done. example:', repr(problems[0]), '==>', repr(canonical_terms[problems[0]]))
         for entry in ds:
             entry['problem'] = canonical_terms[entry['problem']]
-    with open(opt.output, 'w') as f:
-        json.dump(ds, f)
-    print('Wrote', opt.output)
+        with open(opt.output, 'w') as f:
+            json.dump(ds, f)
+        print('Wrote', opt.output)
+    elif opt.generate:
+        generate_solutions_dataset(opt.agent, opt.domain, opt.output, opt.device)
