@@ -57,11 +57,11 @@ This is roughly what you need to implement a new domain:
 Several learning algorithms are implemented to learn the domains.
 They are all in `agent.py`, which is a file that also implements evaluation.
 
-The environment that the agent interacts with is implemented in the backend of a localhost server. Run
+The environment that the agent interacts with is implemented in the backend of a localhost server. To start the server, run
 ```
 racket environment.rkt
 ```
-to start the server. Wait until the message `Running environment server on 127.0.0.1:9898` to appear.
+Wait until the message `Running environment server on 127.0.0.1:9898` to appear.
 
 Now, we can perform training and evaluation, which is done by `agent.py`. Run the following command:
 ```
