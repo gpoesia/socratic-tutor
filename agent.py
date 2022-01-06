@@ -898,7 +898,7 @@ def run_batch_experiment(config, range_to_run):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Train RL agents to solve symbolic domains")
-    parser.add_argument('--config', help='Path to config file, or inline JSON.')
+    parser.add_argument('--config', help='Path to config file, or inline JSON.', required=True)
     parser.add_argument('--learn', help='Put an agent to learn from the environment', action='store_true')
     parser.add_argument('--experiment', help='Run a batch of experiments with multiple agents and environments',
                         action='store_true')
