@@ -57,6 +57,8 @@ This is roughly what you need to implement a new domain:
 Several learning algorithms are implemented to learn the domains.
 They are all in `agent.py`, which is a file that also implements evaluation.
 
+NOTE: If you don't have WandB, you should comment out all lines of code that use wandb in `agent.py` and `evaluation.py`.
+
 The environment that the agent interacts with is implemented in the backend of a localhost server. To start the server, run
 ```
 racket environment.rkt
