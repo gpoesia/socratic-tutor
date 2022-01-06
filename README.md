@@ -56,7 +56,25 @@ This is roughly what you need to implement a new domain:
 
 Several learning algorithms are implemented to learn the domains.
 They are all in `agent.py`, which is a file that also implements evaluation.
-More on this soon!
+
+The environment that the agent interacts with is implemented in the backend of a localhost server. Run
+```
+racket environment.rkt
+```
+to start the server. Wait until the message `Running environment server on 127.0.0.1:9898` to appear.
+
+Now, we can perform training and evaluation, which is done by `agent.py`. Run the following command:
+```
+python agent.py [-h] --config CONFIG [--learn] [--experiment] [--eval] [--eval-checkpoints] [--debug] [--range RANGE] [--gpu GPU]
+```
+- `--config`: Path to configuration file, or inline JSON. A template configuration file for the `--learn` mode is given in `template_config.txt`. (Note: The template currently does not comprehensively list all possible configurations.)
+- `--learn`: Put an agent to learn from the environment.
+- `--experiment`: Run a batch of experiments with multiple agents and environments.
+- `--eval`: Evaluate a learned policy.
+- `eval-checkpoints`: Show the evolution of a learned policy during interaction.
+- `debug`: Enable debug messages.
+- `range RANGE`: Range of experiments to run. Format: 2-5 means range [2, 5).Used to split experiments across multiple machines. Default: all.
+- `gpu GPU`: Which GPU to use (e.g. `"cuda:0"`); defaults to CPU if none is specified.
 
 ## Rust environments
 
