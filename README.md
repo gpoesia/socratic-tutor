@@ -71,10 +71,10 @@ python agent.py [-h] --config CONFIG [--learn] [--experiment] [--eval] [--eval-c
 - `--learn`: Put an agent to learn from the environment.
 - `--experiment`: Run a batch of experiments with multiple agents and environments.
 - `--eval`: Evaluate a learned policy.
-- `eval-checkpoints`: Show the evolution of a learned policy during interaction.
-- `debug`: Enable debug messages.
-- `range RANGE`: Range of experiments to run. Format: 2-5 means range [2, 5).Used to split experiments across multiple machines. Default: all.
-- `gpu GPU`: Which GPU to use (e.g. `"cuda:0"`); defaults to CPU if none is specified.
+- `--eval-checkpoints`: Show the evolution of a learned policy during interaction.
+- `--debug`: Enable debug messages.
+- `--range RANGE`: Range of experiments to run. Format: 2-5 means range [2, 5).Used to split experiments across multiple machines. Default: all.
+- `--gpu GPU`: Which GPU to use (e.g. `"cuda:0"`); defaults to CPU if none is specified.
 
 ## Rust environments
 
