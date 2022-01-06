@@ -67,7 +67,7 @@ Now, we can perform training and evaluation, which is done by `agent.py`. Run th
 ```
 python agent.py [-h] --config CONFIG [--learn] [--experiment] [--eval] [--eval-checkpoints] [--debug] [--range RANGE] [--gpu GPU]
 ```
-- `--config`: Path to configuration file, or inline JSON. A template configuration file for the `--learn` mode is given in `template_config.txt`. (Note: The template currently does not comprehensively list all possible configurations.)
+- `--config`: Path to configuration file, or inline JSON. A template configuration file for the `--learn` mode is given in [`template_config.txt`](template_config.txt). (Note: The template currently does not comprehensively list all possible configurations.)
 - `--learn`: Put an agent to learn from the environment.
 - `--experiment`: Run a batch of experiments with multiple agents and environments.
 - `--eval`: Evaluate a learned policy.
