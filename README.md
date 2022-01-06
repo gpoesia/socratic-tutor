@@ -61,7 +61,7 @@ The environment that the agent interacts with is implemented in the backend of a
 ```
 racket environment.rkt
 ```
-Wait until the message `Running environment server on 127.0.0.1:9898` to appear.
+Wait until the message `Running environment server on 127.0.0.1:9898` appears.
 
 Now, we can perform training and evaluation, which is done by `agent.py`. Run the following command:
 ```
