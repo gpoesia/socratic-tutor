@@ -1,0 +1,36 @@
+{
+    "experiment_id": <str> or <int> (e.g. 1),
+    "domain": <str> (one of: "equations", "equations/test", "equations-ct", "equations-ct/test", "ternary-addition", "ternary-addition/test", "sorting", "sorting/test", "fraction"),
+    "agent": {
+        "name": <str> (e.g. "ConPoLe"),
+        "type": <str> (one of: "NCE" (for ConPoLe), "BeamSearchIterativeDeepening" (for CVI), "QLearning" (for DRRN)),
+        "max_depth": <int> (e.g. 30; maximum search depth for beam search),
+        "depth_step": <int> (e.g. 1; amount by which search depth is incremented),
+        "initial_depth": <int> (e.g. 1; initial search depth for beam search),
+        "step_every": <int> (e.g. 2000; # problems seen between consecutive increments of the search depth),
+        "beam_size": <int> (e.g. 1000),
+        "optimize_every": <int> (default: 1),
+        "n_gradient_steps": <int> (default: 64),
+        "beam_negatives_frac": <float> (default: 1.0; minimum fraction of (pos, neg) pairs to be included as negative examples; use 0.0 for ConPoLe-local),
+        "q_function": {
+            "load_pretrained": <str> (e.g. "results\\1\\ConPoLe\\equations\\run0\\checkpoints\\8.pt"; path to file containing checkpoint information for a pretrained agent),
+            "type": <str> (one of: "Bilinear" (for ConPoLe), "StateRNNValueFn" (for CVI), "DRRN" (for DRRN))
+        },
+        "replay_buffer_size": <int> (default: 1000000),
+        "lr": <float> (default: 1e-4; learning rate)
+    },
+    "environment_url": "http://127.0.0.1:9898",
+    "eval_environment": {
+        "evaluate_every": <int> (e.g. 10000; # environment steps between consecutive evaluations of the model),
+        "eval_config": {
+            "seed": <int> (default: 0; seed for random number generator),
+            "n_problems": <int> (default: 100; how many problems to use during evaluation),
+            "max_steps": <int> (default: 30; maximum steps during solution finding),
+            "beam_size": <int> (default: 1; beam size during beam search),
+            "debug": <bool> (default: false; whether to print all steps during evaluation)
+        },
+        "max_steps": <int> (e.g. 10000000; maximum number of environment steps during training),
+        "print_every": <int> (default: 100; interval between consecutive prints of training progress),
+        "output_root": <str> (e.g. "results"; folder where all the results are saved)
+    }
+}

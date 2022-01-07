@@ -156,8 +156,6 @@ class NCE(LearningAgent):
         seen = {state}
         visited_states = [[state]]  # List of states visited in each iteration (used to retrieve negatives).
 
-        t = q.get_aggregation_transform()
-
         logging.info(f'Trying {state}')
 
         for i in range(self.current_depth):
@@ -187,7 +185,7 @@ class NCE(LearningAgent):
             for s, state_actions in zip(beam, actions):
                 for a in state_actions:
                     ns = a.next_state
-                    ns.value = s.value + t(a.value)
+                    ns.value = q.aggregate(s.value, a.value)
                     next_states.append(ns)
 
             next_states.sort(key=lambda s: s.value, reverse=True)
@@ -409,7 +407,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
             for s, state_actions in zip(beam, actions):
                 for a in state_actions:
                     ns = a.next_state
-                    ns.value = s.value + math.log(a.value)
+                    ns.value = s.value + np.log(a.value)
                     next_states.append(ns)
 
             next_states.sort(key=lambda s: s.value, reverse=True)
@@ -430,7 +428,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
 
         # Add all edges traversed as examples in the experience replay buffer.
         if solution is not None or not self.discard_unsolved_problems:
-            positive_ids = set(id(s) for s in solution)
+            positive_ids = set(id(s) for s in solution) if solution is not None else set()
             # Add negative examples.
             for s, (parent, a) in state_parent_edge.items():
                 r = action_reward.get(id(a), 0.0)
@@ -781,6 +779,7 @@ class BehavioralCloning(LearningAgent):
             return
 
         celoss = nn.CrossEntropyLoss()
+        losses = []
 
         for i in range(self.n_gradient_steps):
             (all_actions, answer) = random.choice(self.examples)
@@ -899,7 +898,7 @@ def run_batch_experiment(config, range_to_run):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Train RL agents to solve symbolic domains")
-    parser.add_argument('--config', help='Path to config file, or inline JSON.')
+    parser.add_argument('--config', help='Path to config file, or inline JSON.', required=True)
     parser.add_argument('--learn', help='Put an agent to learn from the environment', action='store_true')
     parser.add_argument('--experiment', help='Run a batch of experiments with multiple agents and environments',
                         action='store_true')
