@@ -12,7 +12,7 @@ from environment import Environment
 from q_function import InverseLength, RandomQFunction
 
 import torch
-import wandb
+# import wandb
 from tqdm import tqdm
 
 
@@ -149,12 +149,12 @@ class EnvironmentWithEvaluationProxy:
         results['problems_seen'] = self.n_new_problems
         results['cumulative_reward'] = self.cumulative_reward
 
-        wandb.log({'success_rate': results['success_rate'],
-                   'problems_seen': results['problems_seen'],
-                   'n_environment_steps': results['n_steps'],
-                   'cumulative_reward': results['cumulative_reward'],
-                   'max_solution_length': results['max_solution_length'],
-                   })
+        # wandb.log({'success_rate': results['success_rate'],
+        #            'problems_seen': results['problems_seen'],
+        #            'n_environment_steps': results['n_steps'],
+        #            'cumulative_reward': results['cumulative_reward'],
+        #            'max_solution_length': results['max_solution_length'],
+        #            })
 
         print(util.now(), f'Success rate ({name}-{domain}-run{self.run_index}):',
               results['success_rate'], '\tMax length:', results['max_solution_length'])

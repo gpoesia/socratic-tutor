@@ -18,7 +18,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.distributions.categorical import Categorical
-import wandb
+# import wandb
 
 import util
 from util import register
@@ -482,7 +482,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
             loss = F.binary_cross_entropy(r_pred, torch.tensor(batch_r,
                                                                dtype=r_pred.dtype,
                                                                device=r_pred.device))
-            wandb.log({'train_loss': loss.item()})
+            # wandb.log({'train_loss': loss.item()})
             loss.backward()
             optimizer.step()
 
@@ -581,7 +581,7 @@ class QLearning(LearningAgent):
 
         y = torch.tensor(ys, dtype=q_estimates.dtype, device=q_estimates.device)
         loss = ((y - q_estimates)**2).mean()
-        wandb.log({'train_loss': loss.item()})
+        # wandb.log({'train_loss': loss.item()})
         loss.backward()
         self.optimizer.step()
 
@@ -652,7 +652,7 @@ class AutodidaticIteration(LearningAgent):
             self.optimizer.zero_grad()
             loss = ((y_p - y)**2).mean()
             loss.backward()
-            wandb.log({'train_loss': loss.item()})
+            # wandb.log({'train_loss': loss.item()})
             self.optimizer.step()
 
 
@@ -722,7 +722,7 @@ class DAVI(LearningAgent):
             self.optimizer.zero_grad()
             loss = ((y_p - y)**2).mean()
             loss.backward()
-            wandb.log({'train_loss': loss.item()})
+            # wandb.log({'train_loss': loss.item()})
             self.optimizer.step()
 
 @register(LearningAgent)
@@ -800,12 +800,12 @@ def run_agent_experiment(config, device):
 
     run_id = "{}-{}-{}{}".format(experiment_id, agent_name, domain, run_index)
 
-    wandb.init(id=run_id,
-               name=run_id,
-               config=config,
-               entity='socratic',
-               project=config.get('wandb_project', 'test'),
-               reinit=True)
+    # wandb.init(id=run_id,
+    #            name=run_id,
+    #            config=config,
+    #            entity='socratic',
+    #            project=config.get('wandb_project', 'test'),
+    #            reinit=True)
 
     env = Environment.from_config(config)
     q_fn = QFunction.new(config['agent']['q_function'], device)
