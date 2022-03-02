@@ -154,12 +154,15 @@ class RustEnvironment(Environment):
         domain = domain or self.default_domain
 
         try:
+            # list of [(next_state (as str), formal_desc, human_desc) for each possible next state] for each current state
             next_states = commoncore.step(domain, [s.facts[-1] for s in states])
         except:
             print('Error stepping', states, 'in', domain)
             raise
 
+        # reward is 1 if there's no next state
         rewards = [int(ns is None) for ns in next_states]
+        # list of [Action object for each possible action] for each current state
         actions = [[Action(state,
                            formal_desc,
                            State(state.facts + (next_state,), state.goals, 0.0),
@@ -167,12 +170,13 @@ class RustEnvironment(Environment):
                     for (next_state, formal_desc, human_desc) in (actions or [])]
                    for state, actions in zip(states, next_states)]
 
+        # update s.value for each state based on reward; also update parent action for next states
         for i, (s, sa) in enumerate(zip(states, actions)):
             s.value = rewards[i]
             for a in sa:
                 a.next_state.parent_action = a
 
-        return list(zip(rewards, actions))
+        return list(zip(rewards, actions)) # actions[i][1] will be [] (i.e. no possible next actions) if states[i] is goal state
 
 
 class MultiTaskEnvironment(Environment):

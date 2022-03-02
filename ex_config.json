@@ -1,6 +1,6 @@
 {
     "experiment_id": "test",
-    "domain": "sorting",
+    "domain": "fractions",
     "environment_backend": "Rust",
     "agent": {
         "name": "ConPoLe",
