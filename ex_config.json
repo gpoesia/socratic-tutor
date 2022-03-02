@@ -1,0 +1,27 @@
+{
+    "experiment_id": "test",
+    "domain": "sorting",
+    "environment_backend": "Rust",
+    "agent": {
+        "name": "ConPoLe",
+        "type": "NCE",
+        "max_depth": 30,
+        "depth_step": 1,
+        "initial_depth": 8,
+        "step_every": 10000,
+        "beam_size": 10,
+        "optimize_every": 16,
+        "n_gradient_steps": 128,
+        "q_function": {
+            "type": "Bilinear"
+        }
+    },
+    "eval_environment": {
+        "evaluate_every": 10000,
+        "eval_config": {
+            "max_steps": 30
+        },
+        "output_root": "output",
+        "max_steps": 10000000
+    }
+}
