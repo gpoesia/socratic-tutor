@@ -2,9 +2,12 @@
 
 import argparse
 import requests
+import json
 import random
 import time
 import torch
+
+import abs_util
 
 try:
     import commoncore
@@ -76,7 +79,12 @@ class Environment:
     def from_config(config: dict):
         'Returns the appropriate environment given the experiment configuration options.'
         if config.get('environment_backend') == 'Rust':
-            env = RustEnvironment(config.get('domain'))
+            if config.get('abstractions') is not None:
+                with open(config['abstractions']) as f:
+                    abstractions = json.load(f)['axioms']
+                env = RustEnvironment(config.get('domain'), abstractions)
+            else:
+                env = RustEnvironment(config.get('domain'))
         else:
             env = RacketEnvironment(config['environment_url'], config.get('domain'))
 
@@ -136,11 +144,12 @@ class RacketEnvironment(Environment):
 
 class RustEnvironment(Environment):
     'Faster environment that calls into the compiled library.'
-    def __init__(self, default_domain=None):
+    def __init__(self, default_domain=None, abstractions=None):
         if not COMMONCORE_AVAILABLE:
             raise RuntimeError('Could not load commoncore.so')
         self.default_domain = default_domain
         self.next_seed = random_initial_seed()
+        self.abstractions = list(map(abs_util.make_tuple, abstractions))
 
     def generate_new(self, domain=None, seed=None):
         domain = domain or self.default_domain
@@ -150,12 +159,55 @@ class RustEnvironment(Environment):
         problem = commoncore.generate(domain, seed)
         return State([problem], [''], 0.0)
 
+
+    def ax_seq_apply(self, ax_seq, state, domain=None, param_so_far=()):
+        """
+        Return all possible ways (list of (final_state, (param1, param2, ...))) to apply a sequence 'ax_seq'
+        of axioms to 'state'
+        """
+        domain = domain or self.default_domain
+
+        if not ax_seq:
+            return [(state, param_so_far)]
+        else:
+            ways = []
+            cur_ax, remain_ax = ax_seq[0], ax_seq[1:]
+            # CONSIDER CASE WHERE STEPPING GIVES NONE (I.E. PROBLEM SOLVED; SHOULD KEEP TRACK OF REWARD)
+            for next_state, formal_desc, _ in commoncore.step(domain, [state])[0]:
+                ax_name = abs_util.get_ax_name(formal_desc)
+                if cur_ax == ax_name:
+                    ax_param = abs_util.get_ax_param(formal_desc)
+                    ways += self.ax_seq_apply(remain_ax, next_state, domain, param_so_far+(ax_param,))
+            return ways
+
+
+    def iter_step_abs(self, state, domain=None):
+        """
+        Return all possible next states (list of (final_state, formal_desc, human_desc)) after 'state',
+        where we're allowed to use the abstractions
+        """
+        domain = domain or self.default_domain
+
+        next_states = [] # list of (final_state, formal_desc, human_desc)
+        for ax_seq in self.abstractions:
+            ax_seq_str = abs_util.make_abs_str(ax_seq)
+            ax_seq_params = self.ax_seq_apply(ax_seq, state, domain) # list of (final_state, (param1, param2, ...))
+
+            for final_state, params in ax_seq_params:
+                formal_desc = ax_seq_str + ' ' + abs_util.make_param_str(params)
+                next_states.append((final_state, formal_desc, 'Abstraction'))
+        
+        return next_states or None
+
     def step(self, states, domain=None):
         domain = domain or self.default_domain
 
         try:
             # list of [(next_state (as str), formal_desc, human_desc) for each possible next state] for each current state
-            next_states = commoncore.step(domain, [s.facts[-1] for s in states])
+            if self.abstractions is None:
+                next_states = commoncore.step(domain, [s.facts[-1] for s in states])
+            else:
+                next_states = [self.iter_step_abs(s.facts[-1], domain) for s in states]
         except:
             print('Error stepping', states, 'in', domain)
             raise

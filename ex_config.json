@@ -1,7 +1,8 @@
 {
     "experiment_id": "test",
-    "domain": "fractions",
+    "domain": "equations-ct",
     "environment_backend": "Rust",
+    "abstractions": "mathematical-abstractions/abstractions/IterAbsPair-8k.json",
     "agent": {
         "name": "ConPoLe",
         "type": "NCE",
@@ -22,6 +23,7 @@
             "max_steps": 30
         },
         "output_root": "output",
-        "max_steps": 10000000
+        "max_steps": 10000000,
+        "print_every": 500
     }
 }
