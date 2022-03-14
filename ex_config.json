@@ -4,17 +4,25 @@
     "environment_backend": "Rust",
     "abstractions": "mathematical-abstractions/abstractions/IterAbsPair-8k.json",
     "agent": {
-        "name": "ConPoLe",
         "type": "NCE",
+        "name": "ConPoLe",
+        "n_future_states": 1,
+        "replay_buffer_size": 100000,
         "max_depth": 30,
-        "depth_step": 1,
-        "initial_depth": 8,
-        "step_every": 10000,
         "beam_size": 10,
+        "initial_depth": 8,
+        "depth_step": 1,
         "optimize_every": 16,
         "n_gradient_steps": 128,
+        "keep_optimizer": true,
+        "step_every": 10000,
+        "n_bootstrap_problems": 100,
         "q_function": {
-            "type": "Bilinear"
+            "type": "Bilinear",
+            "char_emb_dim": 64,
+            "hidden_dim": 256,
+            "mlp": true,
+            "lstm_layers": 2
         }
     },
     "eval_environment": {
@@ -24,6 +32,6 @@
         },
         "output_root": "output",
         "max_steps": 10000000,
-        "print_every": 500
+        "print_every": 10
     }
 }
