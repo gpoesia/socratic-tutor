@@ -172,12 +172,13 @@ class RustEnvironment(Environment):
         else:
             ways = []
             cur_ax, remain_ax = ax_seq[0], ax_seq[1:]
-            # CONSIDER CASE WHERE STEPPING GIVES NONE (I.E. PROBLEM SOLVED; SHOULD KEEP TRACK OF REWARD)
-            for next_state, formal_desc, _ in commoncore.step(domain, [state])[0]:
-                ax_name = abs_util.get_ax_name(formal_desc)
-                if cur_ax == ax_name:
-                    ax_param = abs_util.get_ax_param(formal_desc)
-                    ways += self.ax_seq_apply(remain_ax, next_state, domain, param_so_far+(ax_param,))
+            actions = commoncore.step(domain, [state])[0]
+            if actions is not None:
+                for next_state, formal_desc, _ in actions:
+                    ax_name = abs_util.get_ax_name(formal_desc)
+                    if cur_ax == ax_name:
+                        ax_param = abs_util.get_ax_param(formal_desc)
+                        ways += self.ax_seq_apply(remain_ax, next_state, domain, param_so_far+(ax_param,))
             return ways
 
 
@@ -187,12 +188,16 @@ class RustEnvironment(Environment):
         where we're allowed to use the abstractions
         """
         domain = domain or self.default_domain
-
+        # reached goal
+        if commoncore.step(domain, [state])[0] is None:
+            return None
+        
+        # did not reach goal
         next_states = [] # list of (final_state, formal_desc, human_desc)
-        for ax_seq in self.abstractions:
+        for ax_seq in self.abstractions: # inefficient: checks every allowed action separately
             ax_seq_str = abs_util.make_abs_str(ax_seq)
-            ax_seq_params = self.ax_seq_apply(ax_seq, state, domain) # list of (final_state, (param1, param2, ...))
-
+            # list of (final_state, (param1, param2, ...)) for all possible ways of applying abstraction
+            ax_seq_params = self.ax_seq_apply(ax_seq, state, domain)
             for final_state, params in ax_seq_params:
                 formal_desc = ax_seq_str + ' ' + abs_util.make_param_str(params)
                 next_states.append((final_state, formal_desc, 'Abstraction'))
