@@ -149,7 +149,7 @@ class RustEnvironment(Environment):
             raise RuntimeError('Could not load commoncore.so')
         self.default_domain = default_domain
         self.next_seed = random_initial_seed()
-        self.abstractions = list(map(abs_util.make_tuple, abstractions))
+        self.abstractions = list(map(abs_util.make_tuple, abstractions)) if abstractions is not None else None
 
     def generate_new(self, domain=None, seed=None):
         domain = domain or self.default_domain
@@ -376,6 +376,7 @@ if __name__ == '__main__':
     parser.add_argument('--interact', help='Solve problems interactively', action='store_true')
     parser.add_argument('--test', help='Test a model on a problem.', action='store_true')
     parser.add_argument('--evaluate', help='Test a model on a problem.', action='store_true')
+    parser.add_argument('--abstract', help='Include abstractions.', type=str)
     parser.add_argument('--q-function', help='Show model-generated scores (pass a path to the model).', type=str)
     parser.add_argument('--generate', help='Prints a list of 20 problems', action='store_true')
     parser.add_argument('--benchmark', help='Run a small benchmark of the environment', action='store_true')
@@ -384,12 +385,18 @@ if __name__ == '__main__':
 
     opt = parser.parse_args()
 
+    if opt.abstract is not None:
+        with open(opt.abstract) as f:
+            abstractions = json.load(f)['axioms']
+    else:
+        abstractions = None
+
     if opt.rust:
         assert COMMONCORE_AVAILABLE, "Could not find commoncore.so"
-        env: Environment = RustEnvironment(opt.domain)
+        env: Environment = RustEnvironment(opt.domain, abstractions)
     else:
         assert opt.racket_url, 'Need a URL to use the Racket environment: either pass --racket-url or --rust'
-        env = RacketEnvironment(opt.racket_url, opt.domain)
+        env = RacketEnvironment(opt.racket_url, opt.domain, abstractions)
 
     if opt.benchmark:
         benchmark(env)

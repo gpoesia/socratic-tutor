@@ -37,8 +37,8 @@ class QFunction(nn.Module):
         success = False
 
         for i in range(max_steps):
-            if debug:
-                print(f'Beam #{i}: {beam}')
+            # if debug:
+            #     print(f'Beam #{i}: {beam}')
 
             if not beam:
                 break
@@ -63,8 +63,8 @@ class QFunction(nn.Module):
             ns = list(set([a.next_state for a in actions]) - seen)
             ns.sort(key=lambda s: s.value, reverse=True)
 
-            if debug:
-                print(f'Candidates: {[(s, s.value) for s in ns]}')
+            # if debug:
+                # print(f'Candidates: {[(s, s.value) for s in ns]}')
 
             beam = ns[:beam_size]
             history.append(ns)
