@@ -33,7 +33,7 @@ def remove_brackets(str_):
 
 def make_tuple(abs_str):
     """
-    Given abs_str (e.g. '[[comm-assoc]-[eval-mul1]]'), retrun tuple of the involved axioms ('comm', 'assoc', 'eval', 'mul1')
+    Given abs_str (e.g. '[[comm-assoc]-[eval-mul1]]'), return tuple of the involved axioms ('comm', 'assoc', 'eval', 'mul1')
     """
     return tuple(map(remove_brackets, abs_str.split('-')))
 
