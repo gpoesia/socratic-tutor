@@ -29,7 +29,7 @@
         "evaluate_every": 10000,
         "eval_config": {
             "max_steps": 30,
-            "debug": true
+            "n_problems": 10
         },
         "output_root": "output",
         "max_steps": 10000000,

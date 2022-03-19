@@ -43,10 +43,13 @@ class QFunction(nn.Module):
             if not beam:
                 break
 
-            rewards, s_actions = zip(*environment.step(beam))
+            rewards, s_actions = zip(*environment.step(beam, debug=debug))
             actions = [a for s_a in s_actions for a in s_a]
 
             if max(rewards):
+                if debug:
+                    print("REWARDS:", rewards)
+                    print("NEXT ACTIONS:", s_actions)
                 success = True
                 break
 

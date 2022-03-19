@@ -202,9 +202,9 @@ class RustEnvironment(Environment):
                 formal_desc = ax_seq_str + ' ' + abs_util.make_param_str(params)
                 next_states.append((final_state, formal_desc, 'Abstraction'))
         
-        return next_states or None
+        return next_states
 
-    def step(self, states, domain=None):
+    def step(self, states, domain=None, debug=False):
         domain = domain or self.default_domain
 
         try:
@@ -219,6 +219,7 @@ class RustEnvironment(Environment):
 
         # reward is 1 if there's no next state
         rewards = [int(ns is None) for ns in next_states]
+        if debug: print("LENGTH:", len(rewards))
         # list of [Action object for each possible action] for each current state
         actions = [[Action(state,
                            formal_desc,
