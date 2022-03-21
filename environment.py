@@ -150,6 +150,7 @@ class RustEnvironment(Environment):
         self.default_domain = default_domain
         self.next_seed = random_initial_seed()
         self.abstractions = list(map(abs_util.make_tuple, abstractions)) if abstractions is not None else None
+        self.abstract_trie = abs_util.make_abs_trie(self.abstractions)
 
     def generate_new(self, domain=None, seed=None):
         domain = domain or self.default_domain
@@ -160,49 +161,33 @@ class RustEnvironment(Environment):
         return State([problem], [''], 0.0)
 
 
-    def ax_seq_apply(self, ax_seq, state, domain=None, param_so_far=()):
+    def ax_seq_apply(self, ax_seq, state, cur_ind=0, domain=None, param_so_far=()):
         """
         Return all possible ways (list of (final_state, (param1, param2, ...))) to apply a sequence 'ax_seq'
         of axioms to 'state'
         """
         domain = domain or self.default_domain
 
-        if not ax_seq:
+        if cur_ind == len(ax_seq):
             return [(state, param_so_far)]
         else:
             ways = []
-            cur_ax, remain_ax = ax_seq[0], ax_seq[1:]
             actions = commoncore.step(domain, [state])[0]
             if actions is not None:
+                # INEFFICIENT (many of the proposed next steps aren't the axiom we're looking at)
                 for next_state, formal_desc, _ in actions:
                     ax_name = abs_util.get_ax_name(formal_desc)
-                    if cur_ax == ax_name:
+                    if ax_seq[cur_ind] == ax_name:
                         ax_param = abs_util.get_ax_param(formal_desc)
-                        ways += self.ax_seq_apply(remain_ax, next_state, domain, param_so_far+(ax_param,))
+                        ways += self.ax_seq_apply(ax_seq, next_state, cur_ind+1, domain, param_so_far+(ax_param,))
             return ways
 
 
-    def iter_step_abs(self, state, domain=None):
+    def iter_step_abs(self, state, ax_remain=self.abstract_trie):
         """
-        Return all possible next states (list of (final_state, formal_desc, human_desc)) after 'state',
-        where we're allowed to use the abstractions
+        Generator generating all ways to apply axioms/abstractions to state
         """
-        domain = domain or self.default_domain
-        # reached goal
-        if commoncore.step(domain, [state])[0] is None:
-            return None
-        
-        # did not reach goal
-        next_states = [] # list of (final_state, formal_desc, human_desc)
-        for ax_seq in self.abstractions: # inefficient: checks every allowed action separately
-            ax_seq_str = abs_util.make_abs_str(ax_seq)
-            # list of (final_state, (param1, param2, ...)) for all possible ways of applying abstraction
-            ax_seq_params = self.ax_seq_apply(ax_seq, state, domain)
-            for final_state, params in ax_seq_params:
-                formal_desc = ax_seq_str + ' ' + abs_util.make_param_str(params)
-                next_states.append((final_state, formal_desc, 'Abstraction'))
-        
-        return next_states
+
 
     def step(self, states, domain=None, debug=False):
         domain = domain or self.default_domain

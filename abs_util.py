@@ -68,3 +68,84 @@ def prefix_get(pre, list_whole):
     Return list of elements in 'list_whole' such that 'pre' is a prefix of them
     """
     return [elt for elt in list_whole if is_prefix(pre, elt)]
+
+
+class Trie:
+    def __init__(self, key=None):
+        self.key = key
+        self.is_term = False
+        self.children = {}
+
+    def find(self, keys):
+        node = self
+        for key in keys:
+            node = node.children.get(key)
+            if node is None:
+                return None
+        return node if node.is_term else None
+
+    def add(self, keys):
+        # find deepest
+        node = self
+        path_exists = True
+        for i, key in enumerate(keys):
+            if node.children.get(key) is None:
+                path_exists = False
+                break
+            node = node.children[key]
+        print("hi", node.key, node.children)
+        if path_exists:
+            node.is_term = True
+        else: # create remaining path
+            print(node.key, node.children)
+            old_child = Trie(keys[-1])
+            old_child.is_term = True
+            for j in range(len(keys)-2, i-1, -1):
+                new_child = Trie(keys[j])
+                new_child.children[old_child.key] = old_child
+                old_child = new_child
+            node.children[old_child.key] = old_child
+
+
+def make_abs_trie(abstractions):
+    """
+    Convert abstractions into trie
+    """
+    if not isinstance(abstractions[0], tuple):
+        abstractions = list(map(make_tuple, abstractions))
+    # abstractions is now list of tuples
+
+    trie = Trie()
+    for abs in abstractions:
+        trie.add(abs)
+    return trie
+
+
+if __name__ == "__main__":
+    # trie = Trie()
+    # trie.add(("my", "name", "is", "dumb"))
+    # trie.add(("your", "name", "is"))
+    # trie.add(("my", "age", "is", 13))
+    # trie.add(("my", "name", "bruh"))
+    # trie.add(("my", "name", "is"))
+    # trie.add(("my", "name", "is", "very", "dumb"))
+
+    # my = trie.children['my']
+    # myname = my.children['name']
+    # mynameis = myname.children['is']
+    # myage = my.children['age']
+    # your = trie.children['your']
+    # yourname = your.children['name']
+
+    # trie = Trie()
+    # trie.add((1, 2))
+    # trie.add((1, 3))
+ 
+    # one = trie.children[1]
+
+    import json
+
+    with open("mathematical-abstractions/abstractions/IterAbsPair-8k.json") as f:
+        abs = json.load(f)['axioms']
+    trie = make_abs_trie(abs)
+
