@@ -12,7 +12,7 @@ env = Environment.from_config(config)
 # new_prob = env.generate_new(seed=20) # -6x = ((2 - 8x) + (-1))
 new_prob = env.generate_new(seed=3) # 9x = 3
 # print(new_prob.goals)
-new_prob = State(["(((5 + ((-3x - -3x) - (-5))) - -3x) - (-3)) = ((((x * (-1)) - (x * (-3))) - -3x) - (-3))"], [""], 0.0)
+# new_prob = State(["(((5 + ((-3x - -3x) - (-5))) - -3x) - (-3)) = ((((x * (-1)) - (x * (-3))) - -3x) - (-3))"], [""], 0.0)
 # print(env.ax_seq_apply(('comm','assoc','comm','assoc'), new_prob.facts[-1]))
 # print(env.iter_step_abs(new_prob.facts[-1]))
 

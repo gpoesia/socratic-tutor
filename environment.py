@@ -150,7 +150,7 @@ class RustEnvironment(Environment):
         self.default_domain = default_domain
         self.next_seed = random_initial_seed()
         self.abstractions = list(map(abs_util.make_tuple, abstractions)) if abstractions is not None else None
-        self.abstract_trie = abs_util.make_abs_trie(self.abstractions)
+        self.abstract_trie = abs_util.make_abs_trie(self.abstractions) if abstractions is not None else None
 
     def generate_new(self, domain=None, seed=None):
         domain = domain or self.default_domain
@@ -161,32 +161,38 @@ class RustEnvironment(Environment):
         return State([problem], [''], 0.0)
 
 
-    def ax_seq_apply(self, ax_seq, state, cur_ind=0, domain=None, param_so_far=()):
-        """
-        Return all possible ways (list of (final_state, (param1, param2, ...))) to apply a sequence 'ax_seq'
-        of axioms to 'state'
-        """
-        domain = domain or self.default_domain
-
-        if cur_ind == len(ax_seq):
-            return [(state, param_so_far)]
-        else:
-            ways = []
-            actions = commoncore.step(domain, [state])[0]
-            if actions is not None:
-                # INEFFICIENT (many of the proposed next steps aren't the axiom we're looking at)
-                for next_state, formal_desc, _ in actions:
-                    ax_name = abs_util.get_ax_name(formal_desc)
-                    if ax_seq[cur_ind] == ax_name:
-                        ax_param = abs_util.get_ax_param(formal_desc)
-                        ways += self.ax_seq_apply(ax_seq, next_state, cur_ind+1, domain, param_so_far+(ax_param,))
-            return ways
-
-
-    def iter_step_abs(self, state, ax_remain=self.abstract_trie):
+    def apply_abs_helper(self, state, domain, prev_ax=None, ax_str=None, param_str=None):
         """
         Generator generating all ways to apply axioms/abstractions to state
         """
+        if prev_ax is None:
+            prev_ax = self.abstract_trie
+
+        # abstraction completed
+        if prev_ax.is_term:
+            yield (state, ax_str + (" " if param_str else "") + param_str, "ABSTRACTION")
+
+        # continuing abstractions
+        next_ax = prev_ax.children
+        if next_ax:
+            actions = commoncore.step(domain, [state])[0]
+            if actions is not None:
+                for next_state, formal_desc, _ in actions:
+                    ax_name = abs_util.get_ax_name(formal_desc)
+                    if ax_name in next_ax:
+                        param = abs_util.get_ax_param(formal_desc)
+                        new_ax_str = ax_name if ax_str is None else ax_str + "-" + ax_name
+                        new_param_str = param if param_str is None else param_str + "; " + param 
+                        yield from self.apply_abs_helper(next_state, domain, next_ax[ax_name], new_ax_str, new_param_str)
+
+
+    def apply_abs(self, state, domain):
+        """
+        List of possible next states and actions starting at state, where abstractions are allowed
+        """
+        # not goal state
+        if commoncore.step(domain, [state])[0] is not None:
+            return list(self.apply_abs_helper(state, domain))
 
 
     def step(self, states, domain=None, debug=False):
@@ -197,7 +203,7 @@ class RustEnvironment(Environment):
             if self.abstractions is None:
                 next_states = commoncore.step(domain, [s.facts[-1] for s in states])
             else:
-                next_states = [self.iter_step_abs(s.facts[-1], domain) for s in states]
+                next_states = [self.apply_abs(s.facts[-1], domain) for s in states]
         except:
             print('Error stepping', states, 'in', domain)
             raise

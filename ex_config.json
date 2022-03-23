@@ -2,7 +2,6 @@
     "experiment_id": "test",
     "domain": "equations-ct",
     "environment_backend": "Rust",
-    "abstractions": "mathematical-abstractions/abstractions/IterAbsPair-8k.json",
     "agent": {
         "type": "NCE",
         "name": "ConPoLe",

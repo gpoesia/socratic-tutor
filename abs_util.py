@@ -93,11 +93,10 @@ class Trie:
                 path_exists = False
                 break
             node = node.children[key]
-        print("hi", node.key, node.children)
+
         if path_exists:
             node.is_term = True
         else: # create remaining path
-            print(node.key, node.children)
             old_child = Trie(keys[-1])
             old_child.is_term = True
             for j in range(len(keys)-2, i-1, -1):
