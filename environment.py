@@ -388,7 +388,7 @@ if __name__ == '__main__':
         env: Environment = RustEnvironment(opt.domain, abstractions)
     else:
         assert opt.racket_url, 'Need a URL to use the Racket environment: either pass --racket-url or --rust'
-        env = RacketEnvironment(opt.racket_url, opt.domain, abstractions)
+        env = RacketEnvironment(opt.racket_url, opt.domain)
 
     if opt.benchmark:
         benchmark(env)

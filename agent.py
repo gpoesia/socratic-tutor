@@ -133,6 +133,7 @@ class NCE(LearningAgent):
 
                 if self.training_problems_solved % self.optimize_every == 0:
                     logging.info('Running SGD steps.')
+                    print('Running SGD steps.')
                     self.gradient_steps()
 
             self.training_acc_moving_average = 0.95*self.training_acc_moving_average + 0.05*int(solution is not None)
@@ -140,6 +141,7 @@ class NCE(LearningAgent):
             if (i + 1) % self.step_every == 0:
                 self.current_depth = min(self.max_depth, self.current_depth + self.depth_step)
                 logging.info(f'Beam search depth increased to {self.current_depth}.')
+                print(f'Beam search depth increased to {self.current_depth}.')
 
     def get_q_function(self):
         if self.bootstrapping:
