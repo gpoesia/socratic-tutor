@@ -111,8 +111,8 @@ use Term::{Equality, BinaryOperation, UnaryMinus, Variable, AnyNumber, Number};
 
 #[derive(Clone, PartialEq)]
 pub struct SizedTerm {
-    t: Rc<Term>,
-    size: usize
+    pub t: Rc<Term>,
+    pub size: usize
 }
 
 impl SizedTerm {
