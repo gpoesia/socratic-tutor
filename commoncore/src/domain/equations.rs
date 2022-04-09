@@ -14,7 +14,7 @@ use pest::iterators::Pair;
 use pest::error::{Error as PestError};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-enum Operator {
+pub enum Operator {
     Add, Sub, Times, Div
 }
 
@@ -98,7 +98,7 @@ impl FromStr for Operator {
 struct EquationsParser;
 
 #[derive(Clone, PartialEq)]
-enum Term {
+pub enum Term {
     Equality(Rc<SizedTerm>, Rc<SizedTerm>),
     BinaryOperation(Operator, Rc<SizedTerm>, Rc<SizedTerm>),
     UnaryMinus(Rc<SizedTerm>),
@@ -110,7 +110,7 @@ enum Term {
 use Term::{Equality, BinaryOperation, UnaryMinus, Variable, AnyNumber, Number};
 
 #[derive(Clone, PartialEq)]
-struct SizedTerm {
+pub struct SizedTerm {
     t: Rc<Term>,
     size: usize
 }
@@ -335,17 +335,23 @@ pub struct Equations {}
 const MAX_SIZE: usize = 30;
 const MAX_LEN: usize = 80;
 
+impl Equations {
+    pub fn generate_eq_term(&self, seed: u64) -> SizedTerm {
+        let mut rng = super::new_rng(seed);
+        let i = rng.gen_range(0..COGNITIVE_TUTOR_TEMPLATES.len());
+        let template = COGNITIVE_TUTOR_TEMPLATES[i];
+        let term = SizedTerm::from_str(template).unwrap();
+        term.randomize_numbers(&mut rng)
+    }
+}
+
 impl super::Domain for Equations {
     fn name(&self) -> String {
         return "equations".to_string();
     }
 
     fn generate(&self, seed: u64) -> State {
-        let mut rng = super::new_rng(seed);
-        let i = rng.gen_range(0..COGNITIVE_TUTOR_TEMPLATES.len());
-        let template = COGNITIVE_TUTOR_TEMPLATES[i];
-        let term = SizedTerm::from_str(template).unwrap();
-        term.randomize_numbers(&mut rng).to_string()
+        self.generate_eq_term(seed).to_string()
     }
 
     fn step(&self, state: State) -> Option<Vec<Action>> {
