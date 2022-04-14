@@ -127,6 +127,7 @@ fn reverse(v: &Vec<usize>) -> Vec<usize> {
     v2
 }
 
+#[cfg(test)]
 mod test {
     use std::str::FromStr;
     use crate::domain::Domain;
@@ -149,6 +150,6 @@ mod test {
 
         let sorted = super::SortingState::from_str("[=|==|===|====]").unwrap();
         let actions2 = d.step(sorted.to_string());
-        assert!(actions2.is_none(), true);
+        assert!(actions2.is_none());
     }
 }

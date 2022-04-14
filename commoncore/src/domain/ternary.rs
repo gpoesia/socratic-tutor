@@ -171,6 +171,7 @@ impl super::Domain for TernaryAddition {
     }
 }
 
+#[cfg(test)]
 mod test {
     use std::str::FromStr;
 
