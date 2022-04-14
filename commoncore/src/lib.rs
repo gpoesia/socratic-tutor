@@ -22,7 +22,7 @@ extern crate pest_derive;
 thread_local!{
     pub static DOMAINS: HashMap<&'static str, Arc<dyn Domain>> = {
         let mut map : HashMap<&'static str, Arc<dyn Domain>>  = HashMap::new();
-        map.insert("equations-ct", Arc::new(Equations {}));
+        map.insert("equations-ct", Arc::new(Equations::new_from_cognitive_tutor()));
         map.insert("fractions", Arc::new(Fractions::new(4, 4)));
         map.insert("ternary-addition", Arc::new(TernaryAddition::new(15)));
         map.insert("ternary-addition-small", Arc::new(TernaryAddition::new(8)));
