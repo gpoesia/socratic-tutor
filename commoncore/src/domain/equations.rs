@@ -345,7 +345,13 @@ impl Equations {
     pub fn generate_eq_term(&self, seed: u64) -> SizedTerm {
         let mut rng = super::new_rng(seed);
         let i = rng.gen_range(0..self.templates.len());
-        let term = SizedTerm::from_str(&self.templates[i]).unwrap();
+        // Templates starting with a ! are meant to be taken literally.
+        let template = &self.templates[i];
+        if template.starts_with("!") {
+            return SizedTerm::from_str(&template[1..]).unwrap();
+        }
+        // In all others, we randomize the constants.
+        let term = SizedTerm::from_str(template).unwrap();
         term.randomize_numbers(&mut rng)
     }
 }
