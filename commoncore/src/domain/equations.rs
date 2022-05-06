@@ -116,13 +116,22 @@ pub struct SizedTerm {
 }
 
 impl SizedTerm {
-    fn collect_children(&self, v: &mut Vec<SizedTerm>) {
+    fn collect_children(&self, v: &mut Vec<SizedTerm>, index: &String, child_indices: &mut Vec<String>) {
         v.push(self.clone());
+        child_indices.push(index.clone());
 
         match self.t.borrow() {
-            Equality(t1, t2) => { t1.collect_children(v); t2.collect_children(v); }
-            BinaryOperation(_, t1, t2) => { t1.collect_children(v); t2.collect_children(v); }
-            UnaryMinus(t) => { t.collect_children(v); }
+            Equality(t1, t2) => {
+                t1.collect_children(v, &String::from("0.0"), child_indices);
+                t2.collect_children(v, &String::from("0.1"), child_indices);
+            },
+            BinaryOperation(_, t1, t2) => {
+                t1.collect_children(v, &(index.clone() + ".0"), child_indices);
+                t2.collect_children(v, &(index.clone() + ".1"), child_indices);
+            },
+            UnaryMinus(t) => {
+                t.collect_children(v, &(index.clone() + ".0"), child_indices);
+            },
             _ => (),
         }
     }
@@ -382,8 +391,9 @@ impl super::Domain for Equations {
         }
 
         let mut children = Vec::new();
+        let mut indexes = Vec::new();
         let rct = Rc::new(t);
-        rct.collect_children(&mut children);
+        rct.collect_children(&mut children, &String::new(), &mut indexes);
 
         for local_rewrite_tactic in &[a_commutativity,
                                       a_associativity,
@@ -392,7 +402,7 @@ impl super::Domain for Equations {
                                       a_cancel_ops,
                                       a_identity_ops] {
             for (i, st) in children.iter().enumerate() {
-                if let Some((nt, fd, hd)) = local_rewrite_tactic(st, i) {
+                if let Some((nt, fd, hd)) = local_rewrite_tactic(st, &indexes[i]) {
                     let next_state = rct.replace_at_index(i, &nt);
                     actions.push((next_state, fd, hd));
                 }
@@ -459,7 +469,7 @@ fn a_op_both_sides(rct: Rc<SizedTerm>, op: Operator, st: &SizedTerm) -> (SizedTe
     unreachable!()
 }
 
-fn a_commutativity(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String)> {
+fn a_commutativity(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, String)> {
     if let BinaryOperation(op, t1, t2) = t.t.borrow() {
         if op.is_commutative() {
             return Some((SizedTerm::new(BinaryOperation(*op, Rc::clone(t2), Rc::clone(t1)), t.size),
@@ -496,7 +506,7 @@ fn a_commutativity(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String
     None
 }
 
-fn a_associativity(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String)> {
+fn a_associativity(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, String)> {
     if let BinaryOperation(op1, t1, t2) = t.t.borrow() {
         // t1 op1 (t3 op2 t4) => (t1 op1 t3) op2 t4
         if let BinaryOperation(op2, t3, t4) = t2.t.borrow() {
@@ -528,7 +538,7 @@ fn a_associativity(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String
     None
 }
 
-fn a_distributivity(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String)> {
+fn a_distributivity(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, String)> {
     if let BinaryOperation(op1, t1, t2) = t.t.borrow() {
         if let BinaryOperation(op2, t3, t4) = t2.t.borrow() {
             // Forward direction: 5*(x + 2) => 5x + 5*2
@@ -586,7 +596,7 @@ fn a_distributivity(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, Strin
     None
 }
 
-fn a_eval(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String)> {
+fn a_eval(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, String)> {
     if let BinaryOperation(op, t1, t2) = t.t.borrow() {
         if let (Number(n1), Number(n2)) = (t1.t.borrow(), t2.t.borrow()) {
             if *op != Div || !n2.is_integer() || n2.to_integer() != 0 {
@@ -599,7 +609,7 @@ fn a_eval(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String)> {
     None
 }
 
-fn a_identity_ops(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String)> {
+fn a_identity_ops(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, String)> {
     if let BinaryOperation(Add, t1, t2) = t.t.borrow() {
         if let Number(n2) = t2.t.borrow() {
             if *n2.numer() == 0 {
@@ -655,7 +665,7 @@ fn a_identity_ops(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String)
 }
 
 
-fn a_cancel_ops(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String)> {
+fn a_cancel_ops(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, String)> {
     if let BinaryOperation(Div, t1, t2) = t.t.borrow() {
         if t1 == t2 {
             return Some((SizedTerm::new(Number(Rational32::from_integer(1)), 1),
