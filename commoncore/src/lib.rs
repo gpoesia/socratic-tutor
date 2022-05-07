@@ -3,6 +3,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::wrap_pyfunction;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::cell::RefCell;
 
 pub mod domain;
 use crate::domain::Domain;
@@ -20,19 +21,19 @@ extern crate pest;
 extern crate pest_derive;
 
 thread_local!{
-    pub static DOMAINS: HashMap<&'static str, Arc<dyn Domain>> = {
-        let mut map : HashMap<&'static str, Arc<dyn Domain>>  = HashMap::new();
-        map.insert("equations-ct", Arc::new(Equations {}));
-        map.insert("fractions", Arc::new(Fractions::new(4, 4)));
-        map.insert("ternary-addition", Arc::new(TernaryAddition::new(15)));
-        map.insert("ternary-addition-small", Arc::new(TernaryAddition::new(8)));
-        map.insert("multiplication", Arc::new(Multiplication {}));
-        map.insert("sorting", Arc::new(Sorting::new(12)));
+    pub static DOMAINS: RefCell<HashMap<String, Arc<dyn Domain>>> = {
+        let mut map : HashMap<String, Arc<dyn Domain>>  = HashMap::new();
+        map.insert(String::from("equations-ct"), Arc::new(Equations::new_from_cognitive_tutor()));
+        map.insert(String::from("fractions"), Arc::new(Fractions::new(4, 4)));
+        map.insert(String::from("ternary-addition"), Arc::new(TernaryAddition::new(15)));
+        map.insert(String::from("ternary-addition-small"), Arc::new(TernaryAddition::new(8)));
+        map.insert(String::from("multiplication"), Arc::new(Multiplication {}));
+        map.insert(String::from("sorting"), Arc::new(Sorting::new(12)));
 
-        map.insert("key-to-door", Arc::new(KeyToDoor::new(5, 0.1)));
-        map.insert("rubiks-cube-20", Arc::new(RubiksCube::new(20)));
-        map.insert("rubiks-cube-50", Arc::new(RubiksCube::new(50)));
-        map
+        map.insert(String::from("key-to-door"), Arc::new(KeyToDoor::new(5, 0.1)));
+        map.insert(String::from("rubiks-cube-20"), Arc::new(RubiksCube::new(20)));
+        map.insert(String::from("rubiks-cube-50"), Arc::new(RubiksCube::new(50)));
+        RefCell::new(map)
     };
 }
 
@@ -40,7 +41,7 @@ thread_local!{
 #[pyfunction]
 fn generate(domain: String, seed: u64) -> PyResult<String> {
     DOMAINS.with(|domains| {
-        if let Some(d) = domains.get(domain.as_str()) {
+        if let Some(d) = domains.borrow().get(domain.as_str()) {
             let s = d.generate(seed);
             Ok(s)
         } else {
@@ -53,7 +54,7 @@ fn generate(domain: String, seed: u64) -> PyResult<String> {
 #[pyfunction]
 fn step(domain: String, states: Vec<String>) -> PyResult<Vec<Option<Vec<(String, String, String)>>>> {
     DOMAINS.with(|domains| {
-        if let Some(d) = domains.get(domain.as_str()) {
+        if let Some(d) = domains.borrow().get(domain.as_str()) {
             let mut result = Vec::with_capacity(states.len());
             for s in states.iter() {
                 result.push(d.step(s.clone()).map(|v| v.iter().map(|a| (a.next_state.clone(),
@@ -67,11 +68,20 @@ fn step(domain: String, states: Vec<String>) -> PyResult<Vec<Option<Vec<(String,
     })
 }
 
+#[pyfunction]
+fn new_equations_domain_from_templates(domain: String, templates: String) -> PyResult<bool> {
+    DOMAINS.with(|domains| {
+        Ok(domains.borrow_mut().insert(domain,
+                                       Arc::new(Equations::new(&templates))).is_none())
+    })
+}
+
 /// A Python module implemented in Rust.
 #[pymodule]
 fn commoncore(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generate, m)?)?;
     m.add_function(wrap_pyfunction!(step, m)?)?;
+    m.add_function(wrap_pyfunction!(new_equations_domain_from_templates, m)?)?;
 
     Ok(())
 }

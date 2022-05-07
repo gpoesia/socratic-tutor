@@ -28,6 +28,7 @@ impl ToString for Operator {
 }
 
 impl Operator {
+    #[allow(dead_code)]
     fn to_name(&self) -> String {
         (match self {
             Operator::Add => "add",
@@ -36,6 +37,7 @@ impl Operator {
         }).to_string()
     }
 
+    #[allow(dead_code)]
     fn evaluate(&self, lhs: &i64, rhs: &i64) -> i64 {
         match self {
             Add => lhs + rhs,
@@ -353,6 +355,7 @@ fn a_trivial(t: &SizedTerm, i: usize) -> Option<(SizedTerm, String, String)> {
     None
 }
 
+#[cfg(test)]
 mod tests {
     use std::str::FromStr;
     use crate::domain::Domain;

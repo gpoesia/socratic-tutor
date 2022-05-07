@@ -6,6 +6,7 @@ import json
 import random
 import time
 import torch
+import numpy as np
 
 import abs_util
 
@@ -283,6 +284,10 @@ def interact(environment, scoring_model_path):
     else:
         state = State([problem], ['x = ?'], 0)
 
+    def softmax(s):
+      s = s.detach().numpy()
+      return np.exp(s) / np.exp(s).sum()
+
     while True:
         print('State:', state)
         reward, actions = environment.step([state])[0]
@@ -292,10 +297,14 @@ def interact(environment, scoring_model_path):
             break
 
         if model is not None:
-            q = model(actions)
+            q = softmax(model(actions))
 
         for i, s in enumerate(actions):
-            print(f'{i}.\t{s.next_state.facts[-1]}\t| {s.action} {q[i] if model else ""}')
+            if model:
+              print(f'{i}.\t{s.next_state.facts[-1]}\t| {s.action} {q[i]:.3f}')
+            else:
+              print(f'{i}.\t{s.next_state.facts[-1]}\t| {s.action}')
+
 
         choice = input('Choose next state: ')
         state = actions[int(choice)].next_state

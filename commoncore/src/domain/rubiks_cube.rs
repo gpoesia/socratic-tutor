@@ -179,6 +179,7 @@ impl super::Domain for RubiksCube {
     }
 }
 
+#[cfg(test)]
 mod test {
     use std::str::FromStr;
     use crate::domain::Domain;
