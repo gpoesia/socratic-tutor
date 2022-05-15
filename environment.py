@@ -6,8 +6,11 @@ import json
 import random
 import time
 import torch
+import numpy as np
 
 import abs_util
+from steps import *
+from abstractions import *
 
 try:
     import commoncore
@@ -79,12 +82,7 @@ class Environment:
     def from_config(config: dict):
         'Returns the appropriate environment given the experiment configuration options.'
         if config.get('environment_backend') == 'Rust':
-            if config.get('abstractions') is not None:
-                with open(config['abstractions']) as f:
-                    abstractions = json.load(f)['axioms']
-                env = RustEnvironment(config.get('domain'), abstractions)
-            else:
-                env = RustEnvironment(config.get('domain'))
+            env = RustEnvironment(config.get('domain'), config.get('abstractions'))
         else:
             env = RacketEnvironment(config['environment_url'], config.get('domain'))
 
@@ -144,13 +142,18 @@ class RacketEnvironment(Environment):
 
 class RustEnvironment(Environment):
     'Faster environment that calls into the compiled library.'
-    def __init__(self, default_domain=None, abstractions=None):
+    def __init__(self, default_domain=None, abs_config=None):
         if not COMMONCORE_AVAILABLE:
             raise RuntimeError('Could not load commoncore.so')
         self.default_domain = default_domain
         self.next_seed = random_initial_seed()
-        self.abstractions = list(map(abs_util.make_tuple, abstractions)) if abstractions is not None else None
-        self.abstract_trie = abs_util.make_abs_trie(self.abstractions) if abstractions is not None else None
+        self.abstractions = None
+        if abs_config is not None and abs_config.get("path") is not None:
+            with open(abs_config['path']) as f:
+                abstractions = json.load(f)['axioms']
+            self.abstractions = [Abstraction.new(abs_config, abs_str) for abs_str in abstractions]
+            self.abstract_trie = abs_util.make_abs_trie(self.abstractions)
+            self.abs_class = self.abstractions[0].__class__
 
     def generate_new(self, domain=None, seed=None):
         domain = domain or self.default_domain
@@ -161,29 +164,40 @@ class RustEnvironment(Environment):
         return State([problem], [''], 0.0)
 
 
-    def apply_abs_helper(self, state, domain, prev_ax=None, ax_str=None, param_str=None):
+    def apply_abs_helper(self, state, domain, prev_ax=None, cur_steps=None):
         """
         Generator generating all ways to apply axioms/abstractions to state
         """
         if prev_ax is None:
             prev_ax = self.abstract_trie
+        if cur_steps is None:
+            cur_steps = Solution([state], [])
 
         # abstraction completed
         if prev_ax.is_term:
-            yield (state, ax_str + (" " if param_str else "") + param_str, "ABSTRACTION")
+            yield (state, cur_steps.display_compressed(), "ABSTRACTION")
 
         # continuing abstractions
         next_ax = prev_ax.children
         if next_ax:
             actions = commoncore.step(domain, [state])[0]
             if actions is not None:
+                next_steps = []
                 for next_state, formal_desc, _ in actions:
-                    ax_name = abs_util.get_ax_name(formal_desc)
-                    if ax_name in next_ax:
-                        param = abs_util.get_ax_param(formal_desc)
-                        new_ax_str = ax_name if ax_str is None else ax_str + "-" + ax_name
-                        new_param_str = param if param_str is None else param_str + "; " + param 
-                        yield from self.apply_abs_helper(next_state, domain, next_ax[ax_name], new_ax_str, new_param_str)
+                    next_step = Step(formal_desc)
+                    abs_elt = self.abs_class.get_abs_elt(next_step, cur_steps)
+                    if abs_elt in next_ax:
+                        next_steps.append((next_state, next_step, abs_elt))
+                if next_steps:
+                    for i in range(len(next_steps) - 1 + prev_ax.is_term):
+                        next_state, next_step, abs_elt = next_steps[i]
+                        new_steps = Solution(cur_steps.states + [next_state], cur_steps.actions + [next_step])
+                        yield from self.apply_abs_helper(next_state, domain, next_ax[abs_elt], new_steps)
+                    if not prev_ax.is_term:
+                        next_state, next_step, abs_elt = next_steps[-1]
+                        cur_steps.states.append(next_state)
+                        cur_steps.actions.append(next_step)
+                        yield from self.apply_abs_helper(next_state, domain, next_ax[abs_elt], cur_steps)
 
 
     def apply_abs(self, state, domain):
@@ -283,6 +297,10 @@ def interact(environment, scoring_model_path):
     else:
         state = State([problem], ['x = ?'], 0)
 
+    def softmax(s):
+      s = s.detach().numpy()
+      return np.exp(s) / np.exp(s).sum()
+
     while True:
         print('State:', state)
         reward, actions = environment.step([state])[0]
@@ -292,10 +310,14 @@ def interact(environment, scoring_model_path):
             break
 
         if model is not None:
-            q = model(actions)
+            q = softmax(model(actions))
 
         for i, s in enumerate(actions):
-            print(f'{i}.\t{s.next_state.facts[-1]}\t| {s.action} {q[i] if model else ""}')
+            if model:
+              print(f'{i}.\t{s.next_state.facts[-1]}\t| {s.action} {q[i]:.3f}')
+            else:
+              print(f'{i}.\t{s.next_state.facts[-1]}\t| {s.action}')
+
 
         choice = input('Choose next state: ')
         state = actions[int(choice)].next_state
@@ -377,15 +399,9 @@ if __name__ == '__main__':
 
     opt = parser.parse_args()
 
-    if opt.abstract is not None:
-        with open(opt.abstract) as f:
-            abstractions = json.load(f)['axioms']
-    else:
-        abstractions = None
-
     if opt.rust:
         assert COMMONCORE_AVAILABLE, "Could not find commoncore.so"
-        env: Environment = RustEnvironment(opt.domain, abstractions)
+        env: Environment = RustEnvironment(opt.domain, {"path": opt.abstract, "consider_pos": True, "tree_idx": True})
     else:
         assert opt.racket_url, 'Need a URL to use the Racket environment: either pass --racket-url or --rust'
         env = RacketEnvironment(opt.racket_url, opt.domain)

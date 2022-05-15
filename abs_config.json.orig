@@ -1,5 +1,9 @@
 {
+<<<<<<< HEAD
+    "experiment_id": "test",
+=======
     "experiment_id": "abs_new_idx",
+>>>>>>> 6d765996a7e408c437a76f5e883af50f5ffd0bfa
     "run_index": 0,
     "domain": "equations-ct",
     "environment_backend": "Rust",

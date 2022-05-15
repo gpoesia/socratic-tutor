@@ -1,3 +1,5 @@
+from steps import *
+
 def get_ax_name(ax_full):
     """
     Get name of axiom from a string 'ax_full' specifying both axiom and what it's applied to
@@ -110,13 +112,9 @@ def make_abs_trie(abstractions):
     """
     Convert abstractions into trie
     """
-    if not isinstance(abstractions[0], tuple):
-        abstractions = list(map(make_tuple, abstractions))
-    # abstractions is now list of tuples
-
     trie = Trie()
-    for abs in abstractions:
-        trie.add(abs)
+    for ab in abstractions:
+        trie.add(tuple(key for key in ab))
     return trie
 
 

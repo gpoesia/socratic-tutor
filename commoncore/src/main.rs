@@ -33,9 +33,9 @@ fn main() {
         const MAX_EDGES: u32 = 1000000;
         const N_PROBLEMS: u32 = 100;
 
-        println!("Found {} environments.", domains.len());
+        println!("Found {} environments.", domains.borrow().len());
 
-        for (name, domain) in domains.iter() {
+        for (name, domain) in domains.borrow().iter() {
             println!("Benchmarking {}...", name);
             let mut n_successes: u32 = 0;
             let mut branching_factor: f32 = 0.0;
