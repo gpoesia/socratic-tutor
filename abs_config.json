@@ -1,6 +1,6 @@
 {
     "experiment_id": "test",
-    "run_index": 2,
+    "run_index": 0,
     "domain": "equations-ct",
     "environment_backend": "Rust",
     "abstractions": "mathematical-abstractions/abstractions/IAP-8k-8len2.json",
@@ -27,13 +27,13 @@
         }
     },
     "eval_environment": {
-        "evaluate_every": 10000,
+        "evaluate_every": 50000,
         "eval_config": {
             "max_steps": 30,
             "n_problems": 100
         },
         "output_root": "output",
         "max_steps": 10000000,
-        "print_every": 1000
+        "print_every": 5000
     }
 }
