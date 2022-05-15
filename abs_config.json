@@ -1,9 +1,13 @@
 {
-    "experiment_id": "test",
-    "run_index": 2,
+    "experiment_id": "abs_new_idx",
+    "run_index": 0,
     "domain": "equations-ct",
     "environment_backend": "Rust",
-    "abstractions": "mathematical-abstractions/abstractions/IAP-8k-8len2.json",
+    "abstractions": {
+        "path": "mathematical-abstractions/abstractions/IAP-8k-8len2.json",
+        "consider_pos": true,
+        "tree_idx": true
+    },
     "agent": {
         "type": "NCE",
         "name": "ConPoLe",
