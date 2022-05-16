@@ -1,10 +1,8 @@
 // Key-to-door domain.
 
 use core::str::FromStr;
-use std::iter::{repeat};
 
 use rand::Rng;
-use rand::seq::SliceRandom;
 
 use super::{State, Action};
 

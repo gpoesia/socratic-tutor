@@ -2,9 +2,13 @@
 
 import argparse
 import requests
+import json
 import random
 import time
 import torch
+import numpy as np
+
+import abs_util
 
 try:
     import commoncore
@@ -76,7 +80,12 @@ class Environment:
     def from_config(config: dict):
         'Returns the appropriate environment given the experiment configuration options.'
         if config.get('environment_backend') == 'Rust':
-            env = RustEnvironment(config.get('domain'))
+            if config.get('abstractions') is not None:
+                with open(config['abstractions']) as f:
+                    abstractions = json.load(f)['axioms']
+                env = RustEnvironment(config.get('domain'), abstractions)
+            else:
+                env = RustEnvironment(config.get('domain'))
         else:
             env = RacketEnvironment(config['environment_url'], config.get('domain'))
 
@@ -136,11 +145,12 @@ class RacketEnvironment(Environment):
 
 class RustEnvironment(Environment):
     'Faster environment that calls into the compiled library.'
-    def __init__(self, default_domain=None):
+    def __init__(self, default_domain=None, abstractions=None):
         if not COMMONCORE_AVAILABLE:
             raise RuntimeError('Could not load commoncore.so')
         self.default_domain = default_domain
         self.next_seed = random_initial_seed()
+        self.abstractions = list(map(abs_util.make_tuple, abstractions)) if abstractions is not None else None
 
     def generate_new(self, domain=None, seed=None):
         domain = domain or self.default_domain
@@ -150,16 +160,68 @@ class RustEnvironment(Environment):
         problem = commoncore.generate(domain, seed)
         return State([problem], [''], 0.0)
 
-    def step(self, states, domain=None):
+
+    def ax_seq_apply(self, ax_seq, state, domain=None, param_so_far=()):
+        """
+        Return all possible ways (list of (final_state, (param1, param2, ...))) to apply a sequence 'ax_seq'
+        of axioms to 'state'
+        """
+        domain = domain or self.default_domain
+
+        if not ax_seq:
+            return [(state, param_so_far)]
+        else:
+            ways = []
+            cur_ax, remain_ax = ax_seq[0], ax_seq[1:]
+            actions = commoncore.step(domain, [state])[0]
+            if actions is not None:
+                for next_state, formal_desc, _ in actions:
+                    ax_name = abs_util.get_ax_name(formal_desc)
+                    if cur_ax == ax_name:
+                        ax_param = abs_util.get_ax_param(formal_desc)
+                        ways += self.ax_seq_apply(remain_ax, next_state, domain, param_so_far+(ax_param,))
+            return ways
+
+
+    def iter_step_abs(self, state, domain=None):
+        """
+        Return all possible next states (list of (final_state, formal_desc, human_desc)) after 'state',
+        where we're allowed to use the abstractions
+        """
+        domain = domain or self.default_domain
+        # reached goal
+        if commoncore.step(domain, [state])[0] is None:
+            return None
+        
+        # did not reach goal
+        next_states = [] # list of (final_state, formal_desc, human_desc)
+        for ax_seq in self.abstractions: # inefficient: checks every allowed action separately
+            ax_seq_str = abs_util.make_abs_str(ax_seq)
+            # list of (final_state, (param1, param2, ...)) for all possible ways of applying abstraction
+            ax_seq_params = self.ax_seq_apply(ax_seq, state, domain)
+            for final_state, params in ax_seq_params:
+                formal_desc = ax_seq_str + ' ' + abs_util.make_param_str(params)
+                next_states.append((final_state, formal_desc, 'Abstraction'))
+        
+        return next_states
+
+    def step(self, states, domain=None, debug=False):
         domain = domain or self.default_domain
 
         try:
-            next_states = commoncore.step(domain, [s.facts[-1] for s in states])
+            # list of [(next_state (as str), formal_desc, human_desc) for each possible next state] for each current state
+            if self.abstractions is None:
+                next_states = commoncore.step(domain, [s.facts[-1] for s in states])
+            else:
+                next_states = [self.iter_step_abs(s.facts[-1], domain) for s in states]
         except:
             print('Error stepping', states, 'in', domain)
             raise
 
+        # reward is 1 if there's no next state
         rewards = [int(ns is None) for ns in next_states]
+        if debug: print("LENGTH:", len(rewards))
+        # list of [Action object for each possible action] for each current state
         actions = [[Action(state,
                            formal_desc,
                            State(state.facts + (next_state,), state.goals, 0.0),
@@ -167,12 +229,13 @@ class RustEnvironment(Environment):
                     for (next_state, formal_desc, human_desc) in (actions or [])]
                    for state, actions in zip(states, next_states)]
 
+        # update s.value for each state based on reward; also update parent action for next states
         for i, (s, sa) in enumerate(zip(states, actions)):
             s.value = rewards[i]
             for a in sa:
                 a.next_state.parent_action = a
 
-        return list(zip(rewards, actions))
+        return list(zip(rewards, actions)) # actions[i][1] will be [] (i.e. no possible next actions) if states[i] is goal state
 
 
 class MultiTaskEnvironment(Environment):
@@ -230,6 +293,10 @@ def interact(environment, scoring_model_path):
     else:
         state = State([problem], ['x = ?'], 0)
 
+    def softmax(s):
+      s = s.detach().numpy()
+      return np.exp(s) / np.exp(s).sum()
+
     while True:
         print('State:', state)
         reward, actions = environment.step([state])[0]
@@ -239,10 +306,14 @@ def interact(environment, scoring_model_path):
             break
 
         if model is not None:
-            q = model(actions)
+            q = softmax(model(actions))
 
         for i, s in enumerate(actions):
-            print(f'{i}.\t{s.next_state.facts[-1]}\t| {s.action} {q[i] if model else ""}')
+            if model:
+              print(f'{i}.\t{s.next_state.facts[-1]}\t| {s.action} {q[i]:.3f}')
+            else:
+              print(f'{i}.\t{s.next_state.facts[-1]}\t| {s.action}')
+
 
         choice = input('Choose next state: ')
         state = actions[int(choice)].next_state
@@ -315,6 +386,7 @@ if __name__ == '__main__':
     parser.add_argument('--interact', help='Solve problems interactively', action='store_true')
     parser.add_argument('--test', help='Test a model on a problem.', action='store_true')
     parser.add_argument('--evaluate', help='Test a model on a problem.', action='store_true')
+    parser.add_argument('--abstract', help='Include abstractions.', type=str)
     parser.add_argument('--q-function', help='Show model-generated scores (pass a path to the model).', type=str)
     parser.add_argument('--generate', help='Prints a list of 20 problems', action='store_true')
     parser.add_argument('--benchmark', help='Run a small benchmark of the environment', action='store_true')
@@ -323,12 +395,18 @@ if __name__ == '__main__':
 
     opt = parser.parse_args()
 
+    if opt.abstract is not None:
+        with open(opt.abstract) as f:
+            abstractions = json.load(f)['axioms']
+    else:
+        abstractions = None
+
     if opt.rust:
         assert COMMONCORE_AVAILABLE, "Could not find commoncore.so"
-        env: Environment = RustEnvironment(opt.domain)
+        env: Environment = RustEnvironment(opt.domain, abstractions)
     else:
         assert opt.racket_url, 'Need a URL to use the Racket environment: either pass --racket-url or --rust'
-        env = RacketEnvironment(opt.racket_url, opt.domain)
+        env = RacketEnvironment(opt.racket_url, opt.domain, abstractions)
 
     if opt.benchmark:
         benchmark(env)

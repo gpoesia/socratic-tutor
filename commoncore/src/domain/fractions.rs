@@ -28,7 +28,8 @@ impl ToString for Operator {
 }
 
 impl Operator {
-    fn to_name(&self) -> String {
+    #[allow(dead_code)]
+    pub fn to_name(&self) -> String {
         (match self {
             Operator::Add => "add",
             Operator::Sub => "sub",

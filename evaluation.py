@@ -37,7 +37,9 @@ class SuccessRatePolicyEvaluator:
                                          self.max_steps, self.beam_size, self.debug)
             if success:
                 successes.append((i, problem))
+                print("SUCCESS:", q.recover_solutions(history))
             else:
+                print("FAILURE")
                 failures.append((i, problem))
             solution_lengths.append(len(history) - 1 if success else -1)
             if verbose:
