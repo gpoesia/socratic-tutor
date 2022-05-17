@@ -25,14 +25,18 @@ def make_plot(data: list[dict], plot_id: str):
     plot_spec['data'] = {'values': data}
     return altair.Chart.from_dict(plot_spec)
 """
-def make_plot(data_points):
+def make_plot(data_points, save):
     for key, val in data_points.items():
         plt.plot(*val)
-        plt.savefig('-'.join(key)+'.svg')
-        plt.savefig('-'.join(key)+'.png')
+        if save:
+            plt.savefig('-'.join(key)+'.svg')
+            plt.savefig('-'.join(key)+'.png')
+        else:
+            plt.show()
         plt.clf()
 
 if __name__ == "__main__":
     path = sys.argv[1]
+    save = sys.argv[2]
     data_points = load_data(path)
-    make_plot(data_points)
+    make_plot(data_points, save)
