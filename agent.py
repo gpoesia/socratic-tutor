@@ -9,6 +9,7 @@ import time
 import itertools
 import random
 import json
+import pickle
 import math
 import subprocess
 import logging
@@ -25,6 +26,9 @@ from util import register
 from environment import Environment, State, Action
 from evaluation import EnvironmentWithEvaluationProxy, evaluate_policy, evaluate_policy_checkpoints
 from q_function import QFunction, InverseLength, RandomQFunction, RubiksGreedyHeuristic
+
+import steps
+import abstractions
 
 
 SUCCESS_STATE = State(['success'], [], 1.0)
@@ -77,6 +81,13 @@ class NCE(LearningAgent):
         replay_buffer_size = config.get('replay_buffer_size', 10**6)
         self.examples = collections.deque(maxlen=replay_buffer_size)
 
+        ex_sol_path = config.get('example_solutions')
+        if ex_sol_path is not None:
+            with open(ex_sol_path, 'rb') as f:
+                self.example_solutions = pickle.load(f)  # tuple of Solution objects
+        else:
+            self.example_solutions = None
+
         self.training_problems_solved = 0
         self.training_acc_moving_average = 0.0
 
@@ -85,6 +96,7 @@ class NCE(LearningAgent):
         self.initial_depth = config['initial_depth']
         self.step_every = config['step_every']
         self.beam_size = config['beam_size']
+        self.epsilon = config.get('epsilon', 0.0)
 
         self.optimize_every = config.get('optimize_every', 1)
         self.n_gradient_steps = config.get('n_gradient_steps', 64)
@@ -121,9 +133,18 @@ class NCE(LearningAgent):
         return 'NCE'
 
     def learn_from_environment(self, environment):
+        ex_sol_left = True if self.example_solutions else False
         for i in itertools.count():
-            problem = environment.generate_new()
-            solution = self.beam_search(problem, environment)
+            if ex_sol_left:
+                if i == len(self.example_solutions):
+                    ex_sol_left = False
+                else:
+                    ex_solution = self.example_solutions[i]
+                    first_state = State([ex_solution.states[0]], [''], 0.0)
+                    solution = self.beam_search(first_state, environment, ex_solution)
+            else:
+                problem = environment.generate_new()
+                solution = self.beam_search(problem, environment)
 
             if solution is not None:
                 self.training_problems_solved += 1
@@ -148,9 +169,11 @@ class NCE(LearningAgent):
             return self.bootstrap_policy
         return self.q_function
 
-    def beam_search(self, state, environment):
+    def beam_search(self, state, environment, ex_solution=None):
         '''Performs beam search in a train problem while recording particular examples
-        in the replay buffer (according to the various knobs in the algorithm, see config)'''
+        in the replay buffer (according to the various knobs in the algorithm, see config)
+        `state`: starting state
+        `ex_solution`: an example solution to carry out and to get contrastive examples from'''
 
         beam = [state]
         solution = None  # The state that we found that solves the problem.
@@ -160,7 +183,7 @@ class NCE(LearningAgent):
 
         logging.info(f'Trying {state}')
 
-        for i in range(self.current_depth):
+        for i in range((ex_solution and (len(ex_solution.states) - 1)) or self.current_depth):
             rewards, actions = zip(*environment.step(beam))
 
             for s, r, state_actions in zip(beam, rewards, actions):
@@ -196,7 +219,27 @@ class NCE(LearningAgent):
             next_states = [s for s in dict.fromkeys(next_states) if s not in seen]
             visited_states.append(next_states)
             seen.update(next_states)
-            beam = next_states[:self.beam_size]
+            
+            if ex_solution is not None:
+                n_state = ex_solution.states[i+1]
+                found = False
+                for s in next_states:
+                    if s.facts[-1] == n_state:
+                        beam = [s]
+                        found = True
+                        break
+                if not found:
+                    raise Exception("Example solution cannot be carried out")
+            else:
+                if len(next_states) <= self.beam_size:
+                    beam = next_states
+                else:
+                    if self.epsilon:
+                        num_rand = int(self.beam_size * self.epsilon)
+                        num_top = self.beam_size - num_rand
+                        beam = next_states[:num_top] + random.sample(next_states[num_top:], num_rand)
+                    else:
+                        beam = next_states[:self.beam_size]
             logging.info(f'Beam #{i}: {beam}:')
 
             if not beam:
