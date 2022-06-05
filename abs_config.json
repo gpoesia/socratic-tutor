@@ -1,10 +1,10 @@
 {
     "experiment_id": "abs_new_idx",
-    "run_index": 0,
+    "run_index": 1,
     "domain": "equations-ct",
     "environment_backend": "Rust",
     "abstractions": {
-        "path": "mathematical-abstractions/abstractions/IAP-8k-8len2.json",
+        "path": "mathematical-abstractions/abstractions/IAP-80k-20len2-tree.json",
         "consider_pos": true,
         "tree_idx": true
     },

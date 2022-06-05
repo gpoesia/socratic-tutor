@@ -102,16 +102,18 @@ class NCE(LearningAgent):
         self.n_gradient_steps = config.get('n_gradient_steps', 64)
         self.beam_negatives_frac = config.get('beam_negatives_frac', 1.0)
 
-        bootstrap_from = config.get('bootstrap_from', 'Random')
+        self.bootstrapping = self.example_solutions is not None
+        if self.bootstrapping:
+            bootstrap_from = config.get('bootstrap_from', 'Random')
 
-        if bootstrap_from == 'InverseLength':
-            self.bootstrap_policy = InverseLength(self.q_function.device)
-        elif bootstrap_from == 'RubiksGreedyHeuristic':
-            self.bootstrap_policy = RubiksGreedyHeuristic(self.q_function.device)
-        else:
-            self.bootstrap_policy = RandomQFunction(self.q_function.device)
+            if bootstrap_from == 'InverseLength':
+                self.bootstrap_policy = InverseLength(self.q_function.device)
+            elif bootstrap_from == 'RubiksGreedyHeuristic':
+                self.bootstrap_policy = RubiksGreedyHeuristic(self.q_function.device)
+            else:
+                self.bootstrap_policy = RandomQFunction(self.q_function.device)
 
-        self.n_bootstrap_problems = config.get('n_bootstrap_problems', 100)
+            self.n_bootstrap_problems = config.get('n_bootstrap_problems', 100)
 
         # Knob: whether to add an artificial 'success' state in the end
         # of the solution in training examples. The idea is that this would align
@@ -124,7 +126,6 @@ class NCE(LearningAgent):
         self.reset_optimizer()
 
         self.current_depth = self.initial_depth
-        self.bootstrapping = True
 
     def reset_optimizer(self):
         self.optimizer = torch.optim.Adam(self.q_function.parameters(), lr=self.learning_rate)
@@ -142,6 +143,7 @@ class NCE(LearningAgent):
                     ex_solution = self.example_solutions[i]
                     first_state = State([ex_solution.states[0]], [''], 0.0)
                     solution = self.beam_search(first_state, environment, ex_solution)
+                    print(i, solution.facts)
             else:
                 problem = environment.generate_new()
                 solution = self.beam_search(problem, environment)
@@ -149,7 +151,7 @@ class NCE(LearningAgent):
             if solution is not None:
                 self.training_problems_solved += 1
 
-                if self.training_problems_solved >= self.n_bootstrap_problems:
+                if self.bootstrapping and self.training_problems_solved >= self.n_bootstrap_problems:
                     self.bootstrapping = False
 
                 if self.training_problems_solved % self.optimize_every == 0:
@@ -220,6 +222,7 @@ class NCE(LearningAgent):
             visited_states.append(next_states)
             seen.update(next_states)
             
+            # Get next state if given example solution
             if ex_solution is not None:
                 n_state = ex_solution.states[i+1]
                 found = False
@@ -230,6 +233,7 @@ class NCE(LearningAgent):
                         break
                 if not found:
                     raise Exception("Example solution cannot be carried out")
+            # Get top next states for next beam (if no example solution given)
             else:
                 if len(next_states) <= self.beam_size:
                     beam = next_states
