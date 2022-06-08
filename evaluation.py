@@ -12,7 +12,7 @@ from environment import Environment
 from q_function import InverseLength, RandomQFunction
 
 import torch
-# import wandb
+import wandb
 from tqdm import tqdm
 
 
@@ -73,7 +73,7 @@ class EnvironmentWithEvaluationProxy:
         self.evaluate_every = config['evaluate_every']
         self.eval_config = config['eval_config']
         self.agent = agent
-        self.max_steps = config['max_steps']
+        self.max_steps = config.get('max_steps')
         self.print_every = config.get('print_every', 100)
 
         self.results: list = []
@@ -122,7 +122,7 @@ class EnvironmentWithEvaluationProxy:
         if (n_steps_before % self.evaluate_every) + len(states) >= self.evaluate_every:
             self.evaluate()
 
-        if self.n_steps >= self.max_steps:
+        if self.max_steps is not None and self.n_steps >= self.max_steps:
             # Budget ended.
             raise EndOfLearning()
 
@@ -141,7 +141,7 @@ class EnvironmentWithEvaluationProxy:
 
         self.environment.test()
         evaluator = SuccessRatePolicyEvaluator(self.environment, self.eval_config)
-        results = evaluator.evaluate(self.agent.get_q_function())
+        results = evaluator.evaluate(self.agent.get_q_function(), show_progress=True)
         self.environment.train()
         results['n_steps'] = self.n_steps
         results['experiment_id'] = self.experiment_id
@@ -151,12 +151,12 @@ class EnvironmentWithEvaluationProxy:
         results['problems_seen'] = self.n_new_problems
         results['cumulative_reward'] = self.cumulative_reward
 
-        # wandb.log({'success_rate': results['success_rate'],
-        #            'problems_seen': results['problems_seen'],
-        #            'n_environment_steps': results['n_steps'],
-        #            'cumulative_reward': results['cumulative_reward'],
-        #            'max_solution_length': results['max_solution_length'],
-        #            })
+        wandb.log({'success_rate': results['success_rate'],
+                   'problems_seen': results['problems_seen'],
+                   'n_environment_steps': results['n_steps'],
+                   'cumulative_reward': results['cumulative_reward'],
+                   'max_solution_length': results['max_solution_length'],
+                   })
 
         print(util.now(), f'Success rate ({name}-{domain}-run{self.run_index}):',
               results['success_rate'], '\tMax length:', results['max_solution_length'])
@@ -203,10 +203,11 @@ class EnvironmentWithEvaluationProxy:
     def print_progress(self):
         print(util.now(), '{} steps ({:.3}%, ETA: {}), {} total reward, explored {} problems. {}'
               .format(self.n_steps,
-                      100 * (self.n_steps / self.max_steps),
+                      100 * (self.n_steps / self.max_steps) if self.max_steps is not None
+                          else 100 * (self.agent.training_problems_solved / len(self.agent.example_solutions)),
                       util.format_eta(datetime.datetime.now() - self.begin_time,
-                                      self.n_steps,
-                                      self.max_steps),
+                                      self.n_steps if self.max_steps is not None else self.agent.training_problems_solved,
+                                      self.max_steps if self.max_steps is not None else len(self.agent.example_solutions)),
                       self.cumulative_reward,
                       self.n_new_problems,
                       self.agent.stats()))

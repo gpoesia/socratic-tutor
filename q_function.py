@@ -7,6 +7,7 @@ from encoding import CharEncoding
 import torch
 from torch import nn
 
+# import time
 
 class QFunction(nn.Module):
     """A Q-Function estimates the total expected reward of taking a certain
@@ -15,7 +16,7 @@ class QFunction(nn.Module):
 
     subtypes: dict = {}
 
-    def forward(self, state: list[State], actions: list[Action]):
+    def forward(self, actions: list[Action]):
         raise NotImplementedError()
 
     def aggregate(self, cumulative_score, next_q_score):
@@ -43,7 +44,9 @@ class QFunction(nn.Module):
             if not beam:
                 break
 
+            # cur = time.time()
             rewards, s_actions = zip(*environment.step(beam, debug=debug))
+            # print("STEPPING TOOK", time.time() - cur)
             actions = [a for s_a in s_actions for a in s_a]
 
             if max(rewards):
@@ -57,8 +60,10 @@ class QFunction(nn.Module):
                 success = False
                 break
 
+            # cur = time.time()
             with torch.no_grad():
                 q_values = self(actions).tolist()
+            # print("COMPUTING Q VALUES TOOK", time.time() - cur)
 
             for a, v in zip(actions, q_values):
                 a.next_state.value = self.aggregate(a.state.value, v)
@@ -300,6 +305,9 @@ class LearnerValueFunctionAdapter(QFunction):
     def embed_actions(self, actions):
         return self.model.embed_action([a.action for a in actions])
 
+    def name(self):
+        return "LearnerValueFunctionAdapter"
+
 
 class RandomQFunction(QFunction):
     def __init__(self, device=None):
@@ -309,6 +317,9 @@ class RandomQFunction(QFunction):
     def forward(self, actions):
         return torch.rand(len(actions)).to(device=self.device)
 
+    def name(self):
+        return "RandomQFunction"
+
 
 class InverseLength(QFunction):
     def __init__(self, device=None):
@@ -317,6 +328,9 @@ class InverseLength(QFunction):
 
     def forward(self, actions):
         return torch.tensor([1 / len(a.next_state.facts[-1]) for a in actions]).to(device=self.device)
+
+    def name(self):
+        return "InverseLength"
 
 
 class RubiksGreedyHeuristic(QFunction):
@@ -334,3 +348,6 @@ class RubiksGreedyHeuristic(QFunction):
             q.append((digits == self.target).float().mean().item())
 
         return torch.tensor(q, device=self.device)
+
+    def name(self):
+        return "RubiksGreedyHeuristic"

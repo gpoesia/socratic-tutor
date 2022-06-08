@@ -19,17 +19,18 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.distributions.categorical import Categorical
-# import wandb
+import wandb
 
 import util
 from util import register
 from environment import Environment, State, Action
-from evaluation import EnvironmentWithEvaluationProxy, evaluate_policy, evaluate_policy_checkpoints
+from evaluation import EnvironmentWithEvaluationProxy, evaluate_policy, evaluate_policy_checkpoints, EndOfLearning
 from q_function import QFunction, InverseLength, RandomQFunction, RubiksGreedyHeuristic
 
 import steps
-import abstractions
 
+# from tqdm import tqdm
+# import time
 
 SUCCESS_STATE = State(['success'], [], 1.0)
 
@@ -77,16 +78,14 @@ class NCE(LearningAgent):
     "Agent that uses the InfoNCE contrastive loss to differentiate positive/negative actions"
     def __init__(self, q_function, config):
         self.q_function = q_function
-        self.bootstrapping = True if not config['q_function'].get('load_pretrained') else False
         replay_buffer_size = config.get('replay_buffer_size', 10**6)
         self.examples = collections.deque(maxlen=replay_buffer_size)
 
         ex_sol_path = config.get('example_solutions')
+        self.example_solutions = None
         if ex_sol_path is not None:
             with open(ex_sol_path, 'rb') as f:
                 self.example_solutions = pickle.load(f)  # tuple of Solution objects
-        else:
-            self.example_solutions = None
 
         self.training_problems_solved = 0
         self.training_acc_moving_average = 0.0
@@ -102,7 +101,7 @@ class NCE(LearningAgent):
         self.n_gradient_steps = config.get('n_gradient_steps', 64)
         self.beam_negatives_frac = config.get('beam_negatives_frac', 1.0)
 
-        self.bootstrapping = self.example_solutions is not None
+        self.bootstrapping = config['q_function'].get('load_pretrained') is None and self.example_solutions is None
         if self.bootstrapping:
             bootstrap_from = config.get('bootstrap_from', 'Random')
 
@@ -137,18 +136,19 @@ class NCE(LearningAgent):
         ex_sol_left = True if self.example_solutions else False
         for i in itertools.count():
             if ex_sol_left:
-                if i == len(self.example_solutions):
+                ex_solution = self.example_solutions[i]
+                first_state = State([ex_solution.states[0]], [''], 0.0)
+                solution = self.beam_search(first_state, environment, ex_solution)
+                if i == len(self.example_solutions) - 1:
                     ex_sol_left = False
-                else:
-                    ex_solution = self.example_solutions[i]
-                    first_state = State([ex_solution.states[0]], [''], 0.0)
-                    solution = self.beam_search(first_state, environment, ex_solution)
-                    print(i, solution.facts)
+                    if environment.max_steps is None:
+                        raise EndOfLearning()
             else:
                 problem = environment.generate_new()
                 solution = self.beam_search(problem, environment)
 
             if solution is not None:
+                # print(i, self.get_q_function().name(), solution.facts)
                 self.training_problems_solved += 1
 
                 if self.bootstrapping and self.training_problems_solved >= self.n_bootstrap_problems:
@@ -185,46 +185,26 @@ class NCE(LearningAgent):
 
         logging.info(f'Trying {state}')
 
-        for i in range((ex_solution and (len(ex_solution.states) - 1)) or self.current_depth):
+        for i in range((ex_solution and (len(ex_solution.states))) or self.current_depth):
+            # cur = time.time()
             rewards, actions = zip(*environment.step(beam))
+            # print("STEPPING TOOK", time.time() - cur)
 
-            for s, r, state_actions in zip(beam, rewards, actions):
+            for s, r in zip(beam, rewards):
                 # Record solution, if found.
                 if r:
                     solution = s
 
             if solution is not None:
                 break
-
-            all_actions = [a for state_actions in actions for a in state_actions]
-
-            if not len(all_actions):
-                break
-
-            # Query model, sort next states by value, then update beam.
-            with torch.no_grad():
-                q_values = q(all_actions).tolist()
-
-            for a, v in zip(all_actions, q_values):
-                a.value = v
-
-            next_states = []
-            for s, state_actions in zip(beam, actions):
-                for a in state_actions:
-                    ns = a.next_state
-                    ns.value = q.aggregate(s.value, a.value)
-                    next_states.append(ns)
-
-            next_states.sort(key=lambda s: s.value, reverse=True)
-            # Remove duplicates while keeping the order (i.e. if a state appears multiple times,
-            # keep the one with the largest value). Works because dict is ordered in Python 3.6+.
-            next_states = [s for s in dict.fromkeys(next_states) if s not in seen]
-            visited_states.append(next_states)
-            seen.update(next_states)
             
             # Get next state if given example solution
             if ex_solution is not None:
                 n_state = ex_solution.states[i+1]
+                next_states = [a.next_state for a in actions[0]]
+                visited_states.append(next_states)
+                seen.update(next_states)
+
                 found = False
                 for s in next_states:
                     if s.facts[-1] == n_state:
@@ -233,17 +213,49 @@ class NCE(LearningAgent):
                         break
                 if not found:
                     raise Exception("Example solution cannot be carried out")
+
             # Get top next states for next beam (if no example solution given)
             else:
+                all_actions = [a for state_actions in actions for a in state_actions]
+
+                if not len(all_actions):
+                    break
+
+                # Query model, sort next states by value, then update beam.
+                # cur = time.time()
+                with torch.no_grad():
+                    q_values = q(all_actions).tolist()
+                # print("Q-VALUE COMPUTATION TOOK", time.time() - cur)
+
+                for a, v in zip(all_actions, q_values):
+                    a.value = v
+
+                next_states = []
+                for s, state_actions in zip(beam, actions):
+                    for a in state_actions:
+                        ns = a.next_state
+                        ns.value = q.aggregate(s.value, a.value)
+                        next_states.append(ns)
+
+                next_states.sort(key=lambda s: s.value, reverse=True)
+                # Remove duplicates while keeping the order (i.e. if a state appears multiple times,
+                # keep the one with the largest value). Works because dict is ordered in Python 3.6+.
+                next_states = [s for s in dict.fromkeys(next_states) if s not in seen]
+                visited_states.append(next_states)
+                seen.update(next_states)
+            
                 if len(next_states) <= self.beam_size:
                     beam = next_states
                 else:
                     if self.epsilon:
-                        num_rand = int(self.beam_size * self.epsilon)
+                        num_rand = round(self.beam_size * self.epsilon)
                         num_top = self.beam_size - num_rand
                         beam = next_states[:num_top] + random.sample(next_states[num_top:], num_rand)
                     else:
                         beam = next_states[:self.beam_size]
+                # print(self.get_q_function().name())
+                # print(next_states[:20])
+                # print(beam)
             logging.info(f'Beam #{i}: {beam}:')
 
             if not beam:
@@ -300,7 +312,7 @@ class NCE(LearningAgent):
             # Here, the batch is casted as a N + 1-class classification instance,
             # and class 0 is the positive example (by how all_actions is constructed).
             loss = celoss(f_pred.unsqueeze(0), torch.zeros(1, dtype=int, device=f_pred.device))
-            # wandb.log({'train_loss': loss.item()})
+            wandb.log({'train_loss': loss.item()})
             losses.append(loss.item())
             loss.backward()
             self.optimizer.step()
@@ -531,7 +543,7 @@ class BeamSearchIterativeDeepening(LearningAgent):
             loss = F.binary_cross_entropy(r_pred, torch.tensor(batch_r,
                                                                dtype=r_pred.dtype,
                                                                device=r_pred.device))
-            # wandb.log({'train_loss': loss.item()})
+            wandb.log({'train_loss': loss.item()})
             loss.backward()
             optimizer.step()
 
@@ -630,7 +642,7 @@ class QLearning(LearningAgent):
 
         y = torch.tensor(ys, dtype=q_estimates.dtype, device=q_estimates.device)
         loss = ((y - q_estimates)**2).mean()
-        # wandb.log({'train_loss': loss.item()})
+        wandb.log({'train_loss': loss.item()})
         loss.backward()
         self.optimizer.step()
 
@@ -701,7 +713,7 @@ class AutodidaticIteration(LearningAgent):
             self.optimizer.zero_grad()
             loss = ((y_p - y)**2).mean()
             loss.backward()
-            # wandb.log({'train_loss': loss.item()})
+            wandb.log({'train_loss': loss.item()})
             self.optimizer.step()
 
 
@@ -771,7 +783,7 @@ class DAVI(LearningAgent):
             self.optimizer.zero_grad()
             loss = ((y_p - y)**2).mean()
             loss.backward()
-            # wandb.log({'train_loss': loss.item()})
+            wandb.log({'train_loss': loss.item()})
             self.optimizer.step()
 
 @register(LearningAgent)
@@ -835,7 +847,7 @@ class BehavioralCloning(LearningAgent):
             self.optimizer.zero_grad()
             f_pred = self.q_function(all_actions)
             loss = celoss(f_pred.unsqueeze(0), answer * torch.ones(1, dtype=int, device=f_pred.device))
-            # wandb.log({'train_loss': loss.item()})
+            wandb.log({'train_loss': loss.item()})
             losses.append(loss.item())
             loss.backward()
             self.optimizer.step()
@@ -849,14 +861,15 @@ def run_agent_experiment(config, device):
 
     run_id = "{}-{}-{}{}".format(experiment_id, agent_name, domain, run_index)
 
-    # wandb.init(id=run_id,
-    #            name=run_id,
-    #            config=config,
-    #            entity='socratic',
-    #            project=config.get('wandb_project', 'test'),
-    #            reinit=True)
+    wandb.init(id=run_id,
+               name=run_id,
+               config=config,
+               entity='zli11010',
+               project=config.get('wandb_project', 'test'),
+               reinit=True)
 
     env = Environment.from_config(config)
+    print(env.abstractions)
     q_fn = QFunction.new(config['agent']['q_function'], device)
     agent = LearningAgent.new(q_fn, config['agent'])
 

@@ -1,11 +1,10 @@
 {
-    "experiment_id": "abs_new_idx",
-    "run_index": 1,
+    "experiment_id": "fine_tune",
     "domain": "equations-ct",
     "environment_backend": "Rust",
+    "wandb_project": "abs_fine_tune",
     "abstractions": {
-        "path": "mathematical-abstractions/abstractions/IAP-80k-20len2-tree.json",
-        "consider_pos": true,
+        "path": "mathematical-abstractions/abstractions/IAP-8k-8len2-tree.json",
         "tree_idx": true
     },
     "agent": {
@@ -17,12 +16,16 @@
         "beam_size": 10,
         "initial_depth": 8,
         "depth_step": 1,
-        "optimize_every": 16,
+        "optimize_every": 20,
         "n_gradient_steps": 128,
         "keep_optimizer": true,
         "step_every": 10000,
-        "n_bootstrap_problems": 100,
+	"epsilon": 0.2,
+	"bootstrap_from": "InverseLength",
+	"n_bootstrap_problems": 100,
+	"example_solutions": "mathematical-abstractions/abs_sols/IAP-8k-8len2-tree-1ksol.pkl",
         "q_function": {
+	    "load_pretrained": "pretrained/conpole-equations-ct-good.pt",
             "type": "Bilinear",
             "char_emb_dim": 64,
             "hidden_dim": 256,
@@ -31,13 +34,12 @@
         }
     },
     "eval_environment": {
-        "evaluate_every": 50000,
+        "evaluate_every": 1000,
         "eval_config": {
             "max_steps": 30,
             "n_problems": 100
         },
         "output_root": "output",
-        "max_steps": 10000000,
-        "print_every": 5000
+        "print_every": 200
     }
 }

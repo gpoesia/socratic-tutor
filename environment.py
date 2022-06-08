@@ -151,6 +151,7 @@ class RustEnvironment(Environment):
         if abs_config is not None and abs_config.get("path") is not None:
             with open(abs_config['path']) as f:
                 abstractions = json.load(f)['axioms']
+            # self.abstractions = [(abs_str,) if '~' not in abs_str else Abstraction.new(abs_config, abs_str) for abs_str in abstractions]
             self.abstractions = [Abstraction.new(abs_config, abs_str) for abs_str in abstractions]
             self.abstract_trie = abs_util.make_abs_trie(self.abstractions)
             self.abs_class = self.abstractions[0].__class__
@@ -401,7 +402,7 @@ if __name__ == '__main__':
 
     if opt.rust:
         assert COMMONCORE_AVAILABLE, "Could not find commoncore.so"
-        env: Environment = RustEnvironment(opt.domain, {"path": opt.abstract, "consider_pos": True, "tree_idx": True})
+        env: Environment = RustEnvironment(opt.domain, {"path": opt.abstract, "tree_idx": True})
     else:
         assert opt.racket_url, 'Need a URL to use the Racket environment: either pass --racket-url or --rust'
         env = RacketEnvironment(opt.racket_url, opt.domain)
