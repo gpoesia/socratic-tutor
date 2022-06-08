@@ -3,5 +3,5 @@
 	url = git@github.com:mhw32/variational-item-response-theory-public.git
 [submodule "mathematical-abstractions"]
 	path = mathematical-abstractions
-	url = https://github.com/gpoesia/mathematical-abstractions
+	url = git@github.com:gpoesia/mathematical-abstractions.git
 	branch = main
