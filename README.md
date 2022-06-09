@@ -17,7 +17,7 @@ git submodule update mathematical-abstractions/
 ## Educational domains (Rust environments)
 
 The environments have a fast Rust implementation in the `commoncore` directory,
-which can be easily called from the Python learning agents thanks to [https://github.com/PyO3/pyo3](PyO3).
+which can be easily called from the Python learning agents thanks to [https://github.com/PyO3/pyo3](https://github.com/PyO3/pyo3).
 To set them up, follow the steps below:
 
 * First, install a recent Rust compiler (1.50+). The easiest way to do it is with rustup. Simply
@@ -52,9 +52,15 @@ we'll automatically pick up the latest version from Python.
 
 Incorporating abstractions into the ConPoLe environment allows the agent to take a sequence of steps specified by an abstraction as a single action. As such, we hope to reduce the search depth, generate more human-readable solutions, and allow the agent to solve more complex equations.
 
-Example files containing abstractions have been placed under `mathemematical-abstractions/abstractions`. Currently, only those files ending in `-tree.json` are guaranteed to work with the ConPoLe environment. Called `tree_rel_pos` abstractions, these are abstractions that specify a sequence of axioms and additionally incorporate information about axioms' relative position of application within the expression tree. There are two other kinds of abstractions: `dfs_idx_rel_pos` abstractions that incorporate relative position information using the old ConPoLe DFS indexing (file ending in `-pos.json`), and `ax_seq` abstractions that only specify a sequence of axioms. These two kinds of abstractions used to work with the ConPoLe environment, but their interfaces haven't been updated since the environment was updated, so they no longer work.
+Currently, there are three kinds of abstractions that have been implemented:
+* `ax_seq`: abstractions that only specify a sequence of axioms. 
+* `dfs_idx_rel_pos`: Abstractions that incorporate relative position information using the old ConPoLe DFS indexing (file ending in `-pos.json`). 
+* `tree_rel_pos`: Abstractions that specify a sequence of axioms and additionally incorporate information about axioms' relative position of application within the expression tree. 
+The first two kinds can no longer be incorporated into the ConPoLe environment since their interfaces are outdated.
 
-To incorporate abstractions into the ConPoLe environment, specify
+Example files containing abstractions have been placed under `mathemematical-abstractions/abstractions`. Currently, only those files ending in `-tree.json` (`tree_rel_pos` abstractions) are guaranteed to work with the ConPoLe environment.
+
+To incorporate `tree_rel_pos` abstractions into the ConPoLe environment, specify
 ```
 "abstractions": {
   "path": "path/to/file/with/abstractions",
@@ -82,7 +88,9 @@ python agent.py [-h] --config CONFIG [--learn] [--experiment] [--eval] [--eval-c
 - `--range RANGE`: Range of experiments to run. Format: 2-5 means range [2, 5).Used to split experiments across multiple machines. Default: all.
 - `--gpu GPU`: Which GPU to use (e.g. `"cuda:0"`); defaults to CPU if none is specified.
 
-`--learn` is used to run a single experiment (one agent on one domain), whereas `--experiment` is used to run a batch of experiments (e.g., multiple agents on multiple domains with multiple runs in each configuration). You almost surely want to use `--experiment` since it is more general, even if to perform a single run. In this abstraction project, we will always be focusing on the `equations-ct` domain and the `NCE` (ConPoLe) learning agent. Here is an example complete config file to run `--experiment` (single run) without abstractions (i.e., original ConPoLe):
+`--learn` is used to run a single experiment (one agent on one domain), whereas `--experiment` is used to run a batch of experiments (e.g., multiple agents on multiple domains with multiple runs in each configuration). You almost surely want to use `--experiment` since it is more general, even if to perform a single run.
+
+In this abstraction project, we will always be focusing on the `equations-ct` domain and the `NCE` (ConPoLe) learning agent. Here is an example complete config file to run `--experiment` (single run) without abstractions (i.e., original ConPoLe):
 
 ```json
 {
@@ -127,12 +135,15 @@ python agent.py [-h] --config CONFIG [--learn] [--experiment] [--eval] [--eval-c
     "print_every": 10000
   }
 }
+```
+
 Here are some additional useful options that can be specified:
 * `"epsilon"` in agent config (i.e., dictionary in the "`agents`" list): The value of epsilon in epsilon greedy in exploring solutions. Default is 0.
 * `"bootstrap_from"` in agent config: The initial bootstrapping strategy for finding solutions at the beginning of training. Default is `RandomQFunction` (i.e., randomly chose next states during search). An alternative is `InverseLength`. Note that boostrapping is disabled if `"load_pretrained"` (load a pretrained model) is specified in `"q_function"` (see below) or "example_solutions" (learn from example solutions) is specified in agent config.
 * `"example_solutions" in agent config: Path to file containing solutions (as list of `Solution` objects of `steps.py`). When specified, the agent will learn from these solutions at the beginning of training. In addition, if `"max_steps"` is not specified in `"eval_environment"`, these are the only examples that the agent will learn from, hence providing the functionality of fine-tuning. An example solution file containing solutions abstracted with `tree_rel_pos` abstractions is located at `mathematical-abstractions/abs_sols/IAP-8k-8len2-tree-1ksol.pkl`.
 
 Here's an example config file that fine-tunes a pretrained model with 1000 abstracted solutions:
+
 ```
 {
     "experiment_id": "fine_tune",
