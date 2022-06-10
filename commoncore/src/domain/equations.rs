@@ -774,4 +774,10 @@ mod tests {
         let s = "(((-1) + -2x) - -3x) = (((-4) + -5x) - -6x)";
         println!("Size: {}", super::SizedTerm::from_str(s).unwrap().size);
     }
+
+    #[test]
+    fn test_varcoeff_parsing() {
+        let s = "(15 * (3 - x)) = 0";
+        assert_eq!(super::SizedTerm::from_str(s).unwrap().to_string(), *s);
+    }
 }
