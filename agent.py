@@ -864,7 +864,7 @@ def run_agent_experiment(config, device):
     wandb.init(id=run_id,
                name=run_id,
                config=config,
-               entity='zli11010',
+               entity='conpole2',
                project=config.get('wandb_project', 'test'),
                reinit=True)
 
