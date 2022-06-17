@@ -1,0 +1,35 @@
+{
+    "experiment_id": "test_finetune_end",
+    "run_index": 1,
+    "domain": "equations-ct",
+    "environment_backend": "Rust",
+    "wandb_project": "test_abs_finetune_end",
+    "abstractions": {
+        "path": "mathematical-abstractions/abstractions/IAP-8k-8len2-tree.json",
+        "tree_idx": true
+    },
+    "agent": {
+        "type": "NCE",
+        "name": "ConPoLe",
+        "max_depth": 30,
+        "n_gradient_steps": 3,
+    	"gd_evaluate_every": 2,
+        "keep_optimizer": true,
+	"example_solutions": "mathematical-abstractions/abs_sols/IAP-8k-8len2-tree-5sol.pkl",
+        "q_function": {
+	    "load_pretrained": "models/conpole-equations-ct-good.pt",
+            "type": "Bilinear",
+            "char_emb_dim": 64,
+            "hidden_dim": 256,
+            "mlp": true,
+            "lstm_layers": 2
+        }
+    },
+    "eval_environment": {
+        "eval_config": {
+            "max_steps": 30,
+            "n_problems": 2
+        },
+        "output_root": "output"
+    }
+}

@@ -1,0 +1,9 @@
+{
+  "model_path": "models/conpole-equations-ct-good.pt",
+  "domain": "equations-ct",
+  "environment_backend": "Rust",
+  "eval_config": {
+    "max_steps": 30,
+    "n_problems": 100
+  }
+}

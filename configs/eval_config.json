@@ -1,0 +1,13 @@
+{
+  "model_path": "output/fine_tune/ConPoLe/equations-ct/run0/checkpoints/13.pt",
+  "domain": "equations-ct",
+  "environment_backend": "Rust",
+  "abstractions": {
+      "path": "mathematical-abstractions/abstractions/IAP-8k-8len2-tree.json",
+      "tree_idx": true
+  },
+  "eval_config": {
+    "max_steps": 30,
+    "n_problems": 100
+  }
+}
