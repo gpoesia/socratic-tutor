@@ -37,7 +37,9 @@ class SuccessRatePolicyEvaluator:
                                          self.max_steps, self.beam_size, self.debug)
             if success:
                 successes.append((i, problem))
-                # print("SUCCESS:", q.recover_solutions(history))
+                # print("SUCCESS:")
+                # for sol_state in q.recover_solutions(history)[0]:
+                #     print(sol_state)
             else:
                 # print("FAILURE")
                 failures.append((i, problem))
@@ -70,7 +72,7 @@ class EnvironmentWithEvaluationProxy:
         self.environment = environment
         self.n_steps = 0
 
-        self.evaluate_every = config['evaluate_every']
+        self.evaluate_every = config.get('evaluate_every')
         self.eval_config = config['eval_config']
         self.agent = agent
         self.max_steps = config.get('max_steps')
@@ -119,7 +121,7 @@ class EnvironmentWithEvaluationProxy:
         # If the number of steps crossed the boundary of '0 mod evaluate_every', run evaluation.
         # If the agent took one step at a time, then we would only need to test if
         # n_steps % evaluate_every == 0. However the agent might take multiple steps at once.
-        if (n_steps_before % self.evaluate_every) + len(states) >= self.evaluate_every:
+        if self.agent.optimize_every is not None and (n_steps_before % self.evaluate_every) + len(states) >= self.evaluate_every:
             self.evaluate()
 
         if self.max_steps is not None and self.n_steps >= self.max_steps:
@@ -130,7 +132,7 @@ class EnvironmentWithEvaluationProxy:
         self.cumulative_reward += sum(rw for rw, _ in reward_and_actions)
 
         # Same logic as with evaluate_every.
-        if (n_steps_before % self.print_every) + len(states) >= self.print_every:
+        if self.agent.optimize_every is not None and (n_steps_before % self.print_every) + len(states) >= self.print_every:
             self.print_progress()
 
         return reward_and_actions
@@ -192,7 +194,7 @@ class EnvironmentWithEvaluationProxy:
                 self.agent.learn_from_environment(self)
             except EndOfLearning:
                 print('Learning budget ended. Doing last learning round (if agent wants to)')
-                self.agent.learn_from_experience()
+                self.agent.learn_from_experience(self)
                 print('Running final evaluation...')
                 self.evaluate()
                 break

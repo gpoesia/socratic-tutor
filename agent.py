@@ -29,7 +29,7 @@ from q_function import QFunction, InverseLength, RandomQFunction, RubiksGreedyHe
 
 import steps
 
-# from tqdm import tqdm
+import tqdm
 # import time
 
 SUCCESS_STATE = State(['success'], [], 1.0)
@@ -79,7 +79,7 @@ class NCE(LearningAgent):
     def __init__(self, q_function, config):
         self.q_function = q_function
         replay_buffer_size = config.get('replay_buffer_size', 10**6)
-        self.examples = collections.deque(maxlen=replay_buffer_size)
+        self.examples = collections.deque(maxlen=replay_buffer_size) if 'optimize_every' in config else collections.deque()
 
         ex_sol_path = config.get('example_solutions')
         self.example_solutions = None
@@ -91,13 +91,14 @@ class NCE(LearningAgent):
         self.training_acc_moving_average = 0.0
 
         self.max_depth = config['max_depth']
-        self.depth_step = config['depth_step']
-        self.initial_depth = config['initial_depth']
-        self.step_every = config['step_every']
-        self.beam_size = config['beam_size']
+        self.depth_step = config.get('depth_step')
+        self.initial_depth = config.get('initial_depth')
+        self.step_every = config.get('step_every')
+        self.beam_size = config.get('beam_size')
         self.epsilon = config.get('epsilon', 0.0)
 
-        self.optimize_every = config.get('optimize_every', 1)
+        self.optimize_every = config.get('optimize_every')
+        self.gd_evaluate_every = config['gd_evaluate_every'] if self.optimize_every is None else None
         self.n_gradient_steps = config.get('n_gradient_steps', 64)
         self.beam_negatives_frac = config.get('beam_negatives_frac', 1.0)
 
@@ -126,6 +127,8 @@ class NCE(LearningAgent):
 
         self.current_depth = self.initial_depth
 
+        self.wrapper = tqdm.tqdm if self.optimize_every is None else lambda x: x
+
     def reset_optimizer(self):
         self.optimizer = torch.optim.Adam(self.q_function.parameters(), lr=self.learning_rate)
 
@@ -134,7 +137,7 @@ class NCE(LearningAgent):
 
     def learn_from_environment(self, environment):
         ex_sol_left = True if self.example_solutions else False
-        for i in itertools.count():
+        for i in self.wrapper(range(len(self.example_solutions)) if self.example_solutions and environment.max_steps is None else itertools.count()):
             if ex_sol_left:
                 ex_solution = self.example_solutions[i]
                 first_state = State([ex_solution.states[0]], [''], 0.0)
@@ -154,17 +157,21 @@ class NCE(LearningAgent):
                 if self.bootstrapping and self.training_problems_solved >= self.n_bootstrap_problems:
                     self.bootstrapping = False
 
-                if self.training_problems_solved % self.optimize_every == 0:
+                if self.optimize_every is not None and self.training_problems_solved % self.optimize_every == 0:
                     logging.info('Running SGD steps.')
                     print('Running SGD steps.')
                     self.gradient_steps()
 
             self.training_acc_moving_average = 0.95*self.training_acc_moving_average + 0.05*int(solution is not None)
 
-            if (i + 1) % self.step_every == 0:
+            if self.step_every is not None and (i + 1) % self.step_every == 0:
                 self.current_depth = min(self.max_depth, self.current_depth + self.depth_step)
                 logging.info(f'Beam search depth increased to {self.current_depth}.')
                 print(f'Beam search depth increased to {self.current_depth}.')
+
+    def learn_from_experience(self, env):
+        if self.optimize_every is None:
+            self.gradient_steps(env)
 
     def get_q_function(self):
         if self.bootstrapping:
@@ -293,7 +300,7 @@ class NCE(LearningAgent):
             self.training_problems_solved,
             self.training_acc_moving_average)
 
-    def gradient_steps(self):
+    def gradient_steps(self, env=None):
         if not self.examples:
             return
 
@@ -303,7 +310,10 @@ class NCE(LearningAgent):
         celoss = nn.CrossEntropyLoss()
         losses = []
 
-        for i in range(self.n_gradient_steps):
+        for i in self.wrapper(range(self.n_gradient_steps)):
+            if env is not None and i > 0 and i % self.gd_evaluate_every == 0:
+                env.evaluate()
+
             e = random.choice(self.examples)
             all_actions = [e.positive] + e.negatives
 
@@ -869,7 +879,7 @@ def run_agent_experiment(config, device):
                reinit=True)
 
     env = Environment.from_config(config)
-    print(env.abstractions)
+    print("AXIOMS AND ABSTRACTIONS:", env.abstractions)
     q_fn = QFunction.new(config['agent']['q_function'], device)
     agent = LearningAgent.new(q_fn, config['agent'])
 
@@ -1001,7 +1011,7 @@ if __name__ == '__main__':
     if opt.learn:
         run_agent_experiment(config, device)
     elif opt.eval:
-        evaluate_policy(config, device)
+        evaluate_policy(config, device, config.get('verbose', False))
     elif opt.eval_checkpoints:
         evaluate_policy_checkpoints(config, device)
     elif opt.experiment:

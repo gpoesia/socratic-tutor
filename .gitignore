@@ -16,6 +16,7 @@ output/
 output_ec2/
 *.txt
 *.json
+!configs/
 *.org
 *.pkl
 wandb/
