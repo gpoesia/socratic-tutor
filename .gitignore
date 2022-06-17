@@ -10,13 +10,13 @@
 *.pt
 TAGS
 checkpoints/
-configs/
+# configs/
 models/
 output/
 output_ec2/
 *.txt
 *.json
-!configs/
+!configs/*
 *.org
 *.pkl
 wandb/
