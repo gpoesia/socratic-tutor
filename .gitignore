@@ -5,6 +5,8 @@
 .DS_Store
 *.so
 *~
+.*.un~
+.*.swp
 *#
 *.lock
 *.pt
