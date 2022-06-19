@@ -14,6 +14,7 @@ checkpoints/
 models/
 output/
 output_ec2/
+eval_output/
 *.txt
 *.json
 !configs/*

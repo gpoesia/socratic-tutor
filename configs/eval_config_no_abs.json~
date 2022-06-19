@@ -5,6 +5,6 @@
   "eval_config": {
     "max_steps": 30,
     "n_problems": 100,
-    "save_sols": "eval_output/good-100.pkl"
+    "save_sols": "eval_output/good-1.pkl"
   }
 }

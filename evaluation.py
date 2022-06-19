@@ -14,6 +14,7 @@ from q_function import InverseLength, RandomQFunction
 import torch
 import wandb
 from tqdm import tqdm
+import numpy as np
 
 
 class SuccessRatePolicyEvaluator:
@@ -26,34 +27,44 @@ class SuccessRatePolicyEvaluator:
         self.max_steps = config.get('max_steps', 30)  # Maximum length of an episode.
         self.beam_size = config.get('beam_size', 1)  # Size of the beam in beam search.
         self.debug = config.get('debug', False)  # Whether to print all steps during evaluation.
+        self.save_sols = config.get('save_sols')  # Whether to save solutions
 
     def evaluate(self, q, verbose=False, show_progress=False):
         successes, failures, solution_lengths = [], [], []
         wrapper = tqdm if show_progress else lambda x: x
 
+        if self.save_sols:
+            saved_sols = []
         for i in wrapper(range(self.n_problems)):
             problem = self.environment.generate_new(seed=(self.seed + i))
             success, history = q.rollout(self.environment, problem,
                                          self.max_steps, self.beam_size, self.debug)
             if success:
                 successes.append((i, problem))
-                # print("SUCCESS:")
-                # for sol_state in q.recover_solutions(history)[0]:
-                #     print(sol_state)
+                if self.save_sols:
+                    saved_sols.append(q.recover_solutions(history)[0])
             else:
-                # print("FAILURE")
                 failures.append((i, problem))
+                if self.save_sols:
+                    saved_sols.append(False)
             solution_lengths.append(len(history) - 1 if success else -1)
             if verbose:
                 print(i, problem, '-- success?', success)
 
-        return {
+        np_sol_lens = np.array(solution_lengths)
+        results = {
             'success_rate': len(successes) / self.n_problems,
             'solution_lengths': solution_lengths,
             'max_solution_length': max(solution_lengths),
-            'successes': successes,
-            'failures': failures,
+            'mean_solution_length': np.mean(np_sol_lens[np_sol_lens >= 0]).item()
         }
+        if self.save_sols:
+            saved_res = {'solutions': saved_sols}
+            saved_res |= results
+            with open(self.save_sols, "wb") as f:
+                pickle.dump(saved_res, f)
+        results |= {'successes': successes, 'failures': failures}
+        return results
 
 
 class EndOfLearning(Exception):
@@ -158,10 +169,11 @@ class EnvironmentWithEvaluationProxy:
                    'n_environment_steps': results['n_steps'],
                    'cumulative_reward': results['cumulative_reward'],
                    'max_solution_length': results['max_solution_length'],
+                   'mean_solution_length': results['mean_solution_length']
                    })
 
         print(util.now(), f'Success rate ({name}-{domain}-run{self.run_index}):',
-              results['success_rate'], '\tMax length:', results['max_solution_length'])
+                results['success_rate'], '\tMax length:', results['max_solution_length'], '\tMean length:', results['mean_solution_length'])
 
         try:
             with open(self.results_path, 'rb') as f:
@@ -228,7 +240,7 @@ def evaluate_policy(config, device, verbose):
 
     env = Environment.from_config(config)
     evaluator = SuccessRatePolicyEvaluator(env, config.get('eval_config', {}))
-    result = evaluator.evaluate(q, verbose=verbose)
+    result = evaluator.evaluate(q, verbose=verbose, show_progress=True)
 
     if verbose:
         print('Success rate:', result['success_rate'])

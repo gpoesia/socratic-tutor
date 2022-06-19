@@ -8,6 +8,7 @@
   },
   "eval_config": {
     "max_steps": 30,
-    "n_problems": 100
+    "n_problems": 1,
+    "save_sols": "eval_output/good-tree-100.pkl"
   }
 }
