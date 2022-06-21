@@ -20,6 +20,9 @@ eval_output/
 *.txt
 *.json
 !configs/*
+configs/*~
+configs/.*.un~
+configs/.*.swp
 *.org
 *.pkl
 wandb/

@@ -127,8 +127,6 @@ class NCE(LearningAgent):
 
         self.current_depth = self.initial_depth
 
-        self.wrapper = tqdm.tqdm if self.optimize_every is None else lambda x: x
-
     def reset_optimizer(self):
         self.optimizer = torch.optim.Adam(self.q_function.parameters(), lr=self.learning_rate)
 
@@ -137,7 +135,9 @@ class NCE(LearningAgent):
 
     def learn_from_environment(self, environment):
         ex_sol_left = True if self.example_solutions else False
-        for i in self.wrapper(range(len(self.example_solutions)) if self.example_solutions and environment.max_steps is None else itertools.count()):
+
+        wrapper = tqdm.tqdm if self.optimize_every is None else lambda x: x
+        for i in wrapper(range(len(self.example_solutions)) if self.example_solutions and environment.max_steps is None else itertools.count()):
             if ex_sol_left:
                 ex_solution = self.example_solutions[i]
                 first_state = State([ex_solution.states[0]], [''], 0.0)
@@ -310,7 +310,8 @@ class NCE(LearningAgent):
         celoss = nn.CrossEntropyLoss()
         losses = []
 
-        for i in self.wrapper(range(self.n_gradient_steps)):
+        wrapper = tqdm.tqdm if self.optimize_every is None else lambda x: x
+        for i in wrapper(range(self.n_gradient_steps)):
             if env is not None and i > 0 and i % self.gd_evaluate_every == 0:
                 env.evaluate()
 

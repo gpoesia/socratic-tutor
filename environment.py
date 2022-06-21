@@ -3,6 +3,7 @@
 import argparse
 import requests
 import json
+import pickle
 import random
 import time
 import torch
@@ -149,10 +150,17 @@ class RustEnvironment(Environment):
         self.next_seed = random_initial_seed()
         self.abstractions = None
         if abs_config is not None and abs_config.get("path") is not None:
-            with open(abs_config['path']) as f:
-                abstractions = json.load(f)['axioms']
-            # self.abstractions = [(abs_str,) if '~' not in abs_str else Abstraction.new(abs_config, abs_str) for abs_str in abstractions]
-            self.abstractions = [Abstraction.new(abs_config, abs_str) for abs_str in abstractions]
+            if abs_config['path'][-4:] == '.pkl':
+                with open(abs_config['path'], 'rb') as f:
+                    self.abstractions = pickle.load(f)
+                for i in range(len(self.abstractions)):
+                    if isinstance(self.abstractions[i], str):
+                        self.abstractions[i] = Abstraction.new(abs_config, self.abstractions[i])
+            elif abs_config['path'][-5:] == '.json':
+                with open(abs_config['path'], 'r') as f:
+                    abstractions = json.load(f)['axioms']
+                # self.abstractions = [(abs_str,) if '~' not in abs_str else Abstraction.new(abs_config, abs_str) for abs_str in abstractions]
+                self.abstractions = [Abstraction.new(abs_config, abs_str) for abs_str in abstractions]
             self.abstract_trie = abs_util.make_abs_trie(self.abstractions)
             self.abs_class = self.abstractions[0].__class__
 

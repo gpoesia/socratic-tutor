@@ -30,23 +30,19 @@ class SuccessRatePolicyEvaluator:
         self.save_sols = config.get('save_sols')  # Whether to save solutions
 
     def evaluate(self, q, verbose=False, show_progress=False):
-        successes, failures, solution_lengths = [], [], []
+        saved_sols, successes, failures, solution_lengths = [], [], [], []
         wrapper = tqdm if show_progress else lambda x: x
 
-        if self.save_sols:
-            saved_sols = []
         for i in wrapper(range(self.n_problems)):
             problem = self.environment.generate_new(seed=(self.seed + i))
             success, history = q.rollout(self.environment, problem,
                                          self.max_steps, self.beam_size, self.debug)
             if success:
                 successes.append((i, problem))
-                if self.save_sols:
-                    saved_sols.append(q.recover_solutions(history)[0])
+                saved_sols.append(q.recover_solutions(history)[0])
             else:
                 failures.append((i, problem))
-                if self.save_sols:
-                    saved_sols.append(False)
+                saved_sols.append(False)
             solution_lengths.append(len(history) - 1 if success else -1)
             if verbose:
                 print(i, problem, '-- success?', success)
@@ -56,14 +52,14 @@ class SuccessRatePolicyEvaluator:
             'success_rate': len(successes) / self.n_problems,
             'solution_lengths': solution_lengths,
             'max_solution_length': max(solution_lengths),
-            'mean_solution_length': np.mean(np_sol_lens[np_sol_lens >= 0]).item()
+            'mean_solution_length': np.mean(np_sol_lens[np_sol_lens >= 0]).item(),
+            'solutions': saved_sols,
+            'successes': successes,
+            'failures': failures
         }
         if self.save_sols:
-            saved_res = {'solutions': saved_sols}
-            saved_res |= results
-            with open(self.save_sols, "wb") as f:
-                pickle.dump(saved_res, f)
-        results |= {'successes': successes, 'failures': failures}
+            with open(self.save_sols, 'wb') as f:
+                pickle.dump(results, f)
         return results
 
 
