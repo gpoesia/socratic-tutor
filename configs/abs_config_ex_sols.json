@@ -1,9 +1,9 @@
 {
-    "experiment_id": "from_scratch",
+    "experiment_id": "abs_ex_sols",
     "run_index": 2,
     "domain": "equations-ct",
     "environment_backend": "Rust",
-    "wandb_project": "abs_from_scratch",
+    "wandb_project": "abs_ex_sols",
     "abstractions": {
         "path": "mathematical-abstractions/abstractions/IAP-8k-8len2-tree.json",
         "tree_idx": true
@@ -22,8 +22,7 @@
         "keep_optimizer": true,
         "step_every": 10000,
 	"epsilon": 0.2,
-	"bootstrap_from": "InverseLength",
-	"n_bootstrap_problems": 100,
+	"example_solutions": "mathematical-abstractions/abs_sols/IAP-8k-8len2-tree-1ksol.pkl",
         "q_function": {
             "type": "Bilinear",
             "char_emb_dim": 64,

@@ -1,0 +1,14 @@
+{
+  "model_path": "output/finetune_end_more/ConPoLe/equations-ct/run4/checkpoints/31.pt",
+  "domain": "equations-ct",
+  "environment_backend": "Rust",
+  "abstractions": {
+      "path": "mathematical-abstractions/abstractions/IAP-80k-6it3-hol.pkl",
+      "tree_idx": true
+  },
+  "eval_config": {
+    "max_steps": 30,
+    "n_problems": 500,
+    "save_sols": "eval_output/good-mid-more-500.pkl"
+  }
+}
