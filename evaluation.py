@@ -4,6 +4,7 @@ import traceback
 import hashlib
 import os
 import json
+import collections
 import subprocess
 import copy
 
@@ -29,8 +30,10 @@ class SuccessRatePolicyEvaluator:
         self.debug = config.get('debug', False)  # Whether to print all steps during evaluation.
         self.save_sols = config.get('save_sols')  # Whether to save solutions
 
-    def evaluate(self, q, verbose=False, show_progress=False):
-        saved_sols, successes, failures, solution_lengths = [], [], [], []
+    def evaluate(self, q, stored_solutions=None, verbose=False, show_progress=False):
+        successes, failures, solution_lengths = [], [], []
+        if self.save_sols:
+            saved_sols = []
         wrapper = tqdm if show_progress else lambda x: x
 
         for i in wrapper(range(self.n_problems)):
@@ -39,10 +42,15 @@ class SuccessRatePolicyEvaluator:
                                          self.max_steps, self.beam_size, self.debug)
             if success:
                 successes.append((i, problem))
-                saved_sols.append(q.recover_solutions(history)[0])
+                success_sol = history[-1][0]  # State object (backtrack along parent actions/states to get solution)
+                if stored_solutions is not None:
+                    stored_solutions.append(success_sol)
+                if self.save_sols:
+                    saved_sols.append(success_sol)
             else:
                 failures.append((i, problem))
-                saved_sols.append(False)
+                if self.save_sols:
+                    saved_sols.append(False)
             solution_lengths.append(len(history) - 1 if success else -1)
             if verbose:
                 print(i, problem, '-- success?', success)
@@ -53,13 +61,14 @@ class SuccessRatePolicyEvaluator:
             'solution_lengths': solution_lengths,
             'max_solution_length': max(solution_lengths),
             'mean_solution_length': np.mean(np_sol_lens[np_sol_lens >= 0]).item(),
-            'solutions': saved_sols,
             'successes': successes,
             'failures': failures
         }
         if self.save_sols:
-            with open(self.save_sols, 'wb') as f:
-                pickle.dump(results, f)
+            results['solutions'] = saved_sols
+            if isinstance(self.save_sols, str):
+                with open(self.save_sols, 'wb') as f:
+                    pickle.dump(results, f)
         return results
 
 
@@ -70,10 +79,11 @@ class EndOfLearning(Exception):
 class EnvironmentWithEvaluationProxy:
     '''Wrapper around the environment that triggers an evaluation every K calls'''
     def __init__(self, experiment_id: str, run_index: int, agent_name: str, domain: str,
-                 agent, environment: Environment, config: dict = {}):
+                 agent, environment: Environment, config: dict = {}, subrun_index=None):
 
         self.experiment_id = experiment_id
         self.run_index = run_index
+        self.subrun_index = subrun_index  # for looping learning + abstracting
         self.agent_name = agent_name
         self.domain = domain
         self.environment = environment
@@ -100,9 +110,12 @@ class EnvironmentWithEvaluationProxy:
         self.results_path = os.path.join(output_root, 'results.pkl')
         self.checkpoint_dir = checkpoint_dir
 
-        self.load_checkpoint()
+        num_store_sol = config.get('num_store_sol')
+        self.stored_solutions = None if num_store_sol is None else collections.deque(maxlen=num_store_sol)
 
-    def load_checkpoint(self):
+        self.load_checkpoint(config.get('restart_count', False))
+
+    def load_checkpoint(self, restart_count=False):
         'Loads an existing training checkpoint, if available.'
         checkpoint_path = os.path.join(self.checkpoint_dir, 'training-state.pt')
 
@@ -112,10 +125,13 @@ class EnvironmentWithEvaluationProxy:
             previous_state = torch.load(checkpoint_path, map_location=device)
             self.agent = previous_state.agent
             self.agent.q_function.to(device)
-            self.n_steps = previous_state.n_steps
-            self.n_new_problems = previous_state.n_new_problems
-            self.cumulative_reward = previous_state.cumulative_reward
-            self.n_checkpoints = previous_state.n_checkpoints
+            if not restart_count:
+                self.n_steps = previous_state.n_steps
+                self.n_new_problems = previous_state.n_new_problems
+                self.cumulative_reward = previous_state.cumulative_reward
+                self.stored_solutions = previous_state.stored_solutions
+                self.n_checkpoints = previous_state.n_checkpoints
+                self.subrun_index = previous_state.subrun_index
 
     def generate_new(self, domain=None, seed=None):
         self.n_new_problems += 1
@@ -150,11 +166,13 @@ class EnvironmentWithEvaluationProxy:
 
         self.environment.test()
         evaluator = SuccessRatePolicyEvaluator(self.environment, self.eval_config)
-        results = evaluator.evaluate(self.agent.get_q_function(), show_progress=True)
+        results = evaluator.evaluate(self.agent.get_q_function(), stored_solutions=self.stored_solutions)
         self.environment.train()
         results['n_steps'] = self.n_steps
         results['experiment_id'] = self.experiment_id
         results['run_index'] = self.run_index
+        if self.subrun_index is not None:
+            results['subrun_index'] = self.subrun_index
         results['name'] = name
         results['domain'] = domain
         results['problems_seen'] = self.n_new_problems
@@ -185,7 +203,8 @@ class EnvironmentWithEvaluationProxy:
 
         torch.save(self.agent.q_function,
                    os.path.join(self.checkpoint_dir,
-                                f'{self.n_checkpoints}.pt'))
+                                f'{self.n_checkpoints}.pt' if self.subrun_index is None
+                                else f'{self.subrun_index}-{self.n_checkpoints}.pt'))
 
         self.n_checkpoints += 1
 
@@ -195,7 +214,7 @@ class EnvironmentWithEvaluationProxy:
 
 
     def evaluate_agent(self):
-        if self.n_checkpoints == 0:  # False when loading an existing training run.
+        if self.n_checkpoints == 0 and self.subrun_index == 0:  # False when loading an existing training run or in middle of learn/abstract
             self.evaluate()
         while True:
             try:

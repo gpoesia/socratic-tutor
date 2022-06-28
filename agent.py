@@ -6,6 +6,7 @@ import collections
 import copy
 from dataclasses import dataclass
 import time
+from datetime import datetime
 import itertools
 import random
 import json
@@ -28,12 +29,16 @@ from evaluation import EnvironmentWithEvaluationProxy, evaluate_policy, evaluate
 from q_function import QFunction, InverseLength, RandomQFunction, RubiksGreedyHeuristic
 
 import steps
+import compress
 
 import tqdm
 # import time
 
 SUCCESS_STATE = State(['success'], [], 1.0)
-
+AXIOMS = {
+             "equations-ct": ["refl", "comm", "assoc", "dist", "sub_comm", "eval", "add0", "sub0", "mul1", "div1",
+                              "div_self", "sub_self", "subsub", "mul0", "zero_div", "add", "sub", "mul", "div"]
+         }
 
 class LearningAgent:
     '''Algorithm that guides learning via interaction with the enviroment.
@@ -81,11 +86,13 @@ class NCE(LearningAgent):
         replay_buffer_size = config.get('replay_buffer_size', 10**6)
         self.examples = collections.deque(maxlen=replay_buffer_size) if 'optimize_every' in config else collections.deque()
 
-        ex_sol_path = config.get('example_solutions')
+        ex_sol = config.get('example_solutions')
         self.example_solutions = None
-        if ex_sol_path is not None:
-            with open(ex_sol_path, 'rb') as f:
+        if isinstance(ex_sol, str):
+            with open(ex_sol, 'rb') as f:
                 self.example_solutions = pickle.load(f)  # tuple of Solution objects
+        elif isinstance(ex_sol, (tuple, list)) and all(isinstance(sol, steps.Solution) for sol in ex_sol):
+            self.example_solutions = ex_sol
 
         self.training_problems_solved = 0
         self.training_acc_moving_average = 0.0
@@ -864,7 +871,7 @@ class BehavioralCloning(LearningAgent):
             self.optimizer.step()
 
 
-def run_agent_experiment(config, device):
+def run_agent_experiment(config, device, resume):
     experiment_id = config['experiment_id']
     domain = config['domain']
     agent_name = config['agent']['name']
@@ -877,7 +884,8 @@ def run_agent_experiment(config, device):
                config=config,
                entity='conpole2',
                project=config.get('wandb_project', 'test'),
-               reinit=True)
+               reinit=True,
+               resume=resume)
 
     env = Environment.from_config(config)
     print("AXIOMS AND ABSTRACTIONS:", env.abstractions)
@@ -887,6 +895,75 @@ def run_agent_experiment(config, device):
     eval_env = EnvironmentWithEvaluationProxy(experiment_id, run_index, agent_name, domain,
                                               agent, env, config['eval_environment'])
     eval_env.evaluate_agent()
+
+
+def learn_abstract(config, device, resume):
+    experiment_id = config['experiment_id']
+    domain = config['domain']
+    agent_name = config['agent']['name']
+    run_index = config.get('run_index', 0)
+    assert 'compression' in config and 'iterations' in config
+
+    run_id = "{}-{}-{}{}".format(experiment_id, agent_name, domain, run_index)
+
+    wandb.init(id=run_id,
+               name=run_id,
+               config=config,
+               entity='conpole2',
+               project=config.get('wandb_project', 'test'),
+               reinit=True,
+               resume=resume)
+
+    restart_count = False
+    subrun_index = 0
+    while True:
+        # LEARNING
+        env = Environment.from_config(config)
+        q_fn = QFunction.new(config['agent']['q_function'], device)
+        agent = LearningAgent.new(q_fn, config['agent'])
+        assert 'num_store_sol' in config['eval_environment']
+        config['eval_environment']['eval_config']['seed'] = random.randint(200_000_000, 300_000_000)
+        config['eval_environment']['restart_count'] = restart_count
+        eval_env = EnvironmentWithEvaluationProxy(experiment_id, run_index, agent_name, domain,
+                                                  agent, env, config['eval_environment'], subrun_index)
+        subrun_index = eval_env.subrun_index
+        begin_time = datetime.now()
+        print(f"ITERATION {subrun_index} TRAINING BEGINS AT {begin_time}")
+        print("AXIOMS AND ABSTRACTIONS:", env.abstractions)
+        print(f"USING {0 if agent.example_solutions is None else len(agent.example_solutions)} EXAMPLE SOLUTIONS")
+        eval_env.evaluate_agent()
+        end_time = datetime.now()
+        print(f"ITERATION {subrun_index} TRAINING COMPLETE AT {end_time}; TOTAL TRAINING TIME {end_time-begin_time}")
+        if subrun_index >= config['iterations'] - 1:
+            break
+
+        # ABSTRACTING
+        raw_solutions = eval_env.stored_solutions
+        solutions = []
+        # Convert to format for abstraction algo
+        for raw_sol in raw_solutions:
+            states = raw_sol.facts
+            actions = []
+            action = raw_sol.parent_action
+            while action is not None:
+                actions.append(steps.Step(action.action, action.next_state.facts[-2:]))
+                action = action.state.parent_action
+            solutions.append(steps.Solution(states, reversed(actions)))
+        
+        begin_time = datetime.now()
+        print(f"ITERATION {subrun_index} ABSTRACTING BEGINS AT {begin_time}")
+        print(f"USING {len(solutions)} SOLUTIONS")
+        compressor = compress.IAPHolistic(solutions, AXIOMS[domain], config['compression'])
+        num_iter, num_abs_sol = config['compression'].get('iter', 1), config['compression'].get('num_abs_sol')
+        abs_sols, abs_ax = compressor.iter_abstract(num_iter, True, num_abs_sol)
+        end_time = datetime.now()
+        print(f"ITERATION {subrun_index} ABSTRACTING COMPLETE AT {end_time}; TOTAL ABSTRACTING TIME {end_time-begin_time}")
+
+        config['abstractions'] = {'abs_ax': abs_ax}
+        config['agent']['example_solutions'] = abs_sols
+
+        restart_count = True
+        subrun_index += 1
 
 
 def run_batch_experiment(config, range_to_run):
@@ -973,6 +1050,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser("Train RL agents to solve symbolic domains")
     parser.add_argument('--config', help='Path to config file, or inline JSON.', required=True)
     parser.add_argument('--learn', help='Put an agent to learn from the environment', action='store_true')
+    parser.add_argument('--learn-abstract', help='Automatically loop between learning and abstracting', action='store_true')
     parser.add_argument('--experiment', help='Run a batch of experiments with multiple agents and environments',
                         action='store_true')
     parser.add_argument('--eval', help='Evaluate a learned policy', action='store_true')
@@ -983,6 +1061,7 @@ if __name__ == '__main__':
                         help='Range of experiments to run. Format: 2-5 means range [2, 5).'
                         'Used to split experiments across multiple machines. Default: all')
     parser.add_argument('--gpu', type=int, default=None, help='Which GPU to use.')
+    parser.add_argument('--resume', help='Resume a run that crashed.', action='store_true')
 
     opt = parser.parse_args()
 
@@ -1010,7 +1089,9 @@ if __name__ == '__main__':
     logging.info('Running in debug mode.')
 
     if opt.learn:
-        run_agent_experiment(config, device)
+        run_agent_experiment(config, device, opt.resume)
+    elif opt.learn_abstract:
+        learn_abstract(config, device, opt.resume)
     elif opt.eval:
         evaluate_policy(config, device, config.get('verbose', False))
     elif opt.eval_checkpoints:
