@@ -94,6 +94,7 @@ class NCE(LearningAgent):
         elif isinstance(ex_sol, (tuple, list)) and all(isinstance(sol, steps.Solution) for sol in ex_sol):
             self.example_solutions = ex_sol
 
+        self.training_problems_explored = 0
         self.training_problems_solved = 0
         self.training_acc_moving_average = 0.0
 
@@ -144,7 +145,9 @@ class NCE(LearningAgent):
         ex_sol_left = True if self.example_solutions else False
 
         wrapper = tqdm.tqdm if self.optimize_every is None else lambda x: x
-        for i in wrapper(range(len(self.example_solutions)) if self.example_solutions and environment.max_steps is None else itertools.count()):
+        for i in wrapper(range(self.training_problems_explored, len(self.example_solutions)) 
+                if self.example_solutions and environment.max_steps is None 
+                else itertools.count(start=self.training_problems_explored)):
             if ex_sol_left:
                 ex_solution = self.example_solutions[i]
                 first_state = State([ex_solution.states[0]], [''], 0.0)
@@ -156,6 +159,7 @@ class NCE(LearningAgent):
             else:
                 problem = environment.generate_new()
                 solution = self.beam_search(problem, environment)
+            self.training_problems_explored += 1
 
             if solution is not None:
                 # print(i, self.get_q_function().name(), solution.facts)
@@ -1072,6 +1076,7 @@ if __name__ == '__main__':
         config = json.load(open(opt.config))
 
     device = torch.device('cpu') if opt.gpu is None else torch.device(opt.gpu)
+    torch.cuda.empty_cache()
 
     # configure logging.
     FORMAT = '%(asctime)-15s %(message)s'
