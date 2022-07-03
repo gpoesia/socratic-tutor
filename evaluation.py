@@ -79,7 +79,7 @@ class EndOfLearning(Exception):
 class EnvironmentWithEvaluationProxy:
     '''Wrapper around the environment that triggers an evaluation every K calls'''
     def __init__(self, experiment_id: str, run_index: int, agent_name: str, domain: str,
-                 agent, environment: Environment, config: dict = {}, subrun_index=None):
+            agent, environment: Environment, config: dict = {}, subrun_index=None, try_load_ckpt=True):
 
         self.experiment_id = experiment_id
         self.run_index = run_index
@@ -113,7 +113,8 @@ class EnvironmentWithEvaluationProxy:
         num_store_sol = config.get('num_store_sol')
         self.stored_solutions = None if num_store_sol is None else collections.deque(maxlen=num_store_sol)
 
-        self.load_checkpoint(config.get('restart_count', False))
+        if try_load_ckpt:
+            self.load_checkpoint(config.get('restart_count', False))
 
     def load_checkpoint(self, restart_count=False):
         'Loads an existing training checkpoint, if available.'
@@ -123,9 +124,26 @@ class EnvironmentWithEvaluationProxy:
             print('Training checkpoint exists - restoring...')
             device = self.agent.q_function.device
             previous_state = torch.load(checkpoint_path, map_location=device)
+            # for fixing abstraction bug
+            # temp_config = {
+            #         'environment_backend': 'Rust',
+            #         'abstractions': {
+            #             'abs_ax': [("refl"), ("comm"), ("assoc"), ("dist"), ("sub_comm"), ("eval"), ("add0"), ("sub0"), ("mul1"), ("div1"), ("div_self"), ("sub_self"), ("subsub"), ("mul0"), ("zero_div"), ("add"), ("sub"), ("mul"), ("div"), ("assoc~eval:_1"), ("eval~mul1:1_"), ("eval~eval:0_"), ("div~assoc:$_0.0"), ("comm~assoc:0_"), ("eval~mul1:1_0"), ("eval~assoc:1_0"), ("eval~eval:0.1_1"), ("{div~assoc:$_0.0}~{eval~mul1:1_}:_1"), ("div~assoc~eval~mul1:$_0.0~_1~1_"), ("{eval~mul1:1_}~eval:0_1"), ("{eval~eval:0_}~{eval~mul1:1_}:1_0.1"), ("{div~assoc:$_0.0}~{eval~eval:0_}:0_1.0"), ("eval~eval~eval~mul1:0_~1_0.1~1_"), ("eval~mul1~eval:1_~0_1"), ("{eval~eval:0.1_1}~{div~assoc:$_0.0}:0.1_$")]
+            #         },
+            #         'domain': 'equations-ct'
+            # }
+            # env = Environment.from_config(temp_config)
+            # self.environment = env
+            # end fixing absraction bug (to be removed later)
+            ex_sols = previous_state.agent.example_solutions
             self.agent = previous_state.agent
             self.agent.q_function.to(device)
-            if not restart_count:
+            if restart_count:
+                self.agent.training_problems_explored = 0
+                self.agent.training_problems_solved = 0
+                self.agent.training_acc_moving_average = 0.0
+                self.agent.example_solutions = ex_sols
+            else:
                 self.n_steps = previous_state.n_steps
                 self.n_new_problems = previous_state.n_new_problems
                 self.cumulative_reward = previous_state.cumulative_reward

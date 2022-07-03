@@ -1,7 +1,8 @@
 {
-  "experiment_id": "test",
+  "experiment_id": "original",
   "domain": "equations-ct",
   "environment_backend": "Rust",
+  "wandb_project": "original",
   "agent": {
     "type": "NCE",
     "name": "ConPoLe",

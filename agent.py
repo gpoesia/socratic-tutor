@@ -1,6 +1,7 @@
 # Implementation of Reinforcement Learning agents that interact with the
 # educational domain environment implemented in Racket.
 
+import os
 import argparse
 import collections
 import copy
@@ -146,13 +147,13 @@ class NCE(LearningAgent):
 
         wrapper = tqdm.tqdm if self.optimize_every is None else lambda x: x
         for i in wrapper(range(self.training_problems_explored, len(self.example_solutions)) 
-                if self.example_solutions and environment.max_steps is None 
-                else itertools.count(start=self.training_problems_explored)):
+                         if self.example_solutions and environment.max_steps is None 
+                         else itertools.count(start=self.training_problems_explored)):
             if ex_sol_left:
                 ex_solution = self.example_solutions[i]
                 first_state = State([ex_solution.states[0]], [''], 0.0)
                 solution = self.beam_search(first_state, environment, ex_solution)
-                if i == len(self.example_solutions) - 1:
+                if i >= len(self.example_solutions) - 1:
                     ex_sol_left = False
                     if environment.max_steps is None:
                         raise EndOfLearning()
@@ -920,21 +921,72 @@ def learn_abstract(config, device, resume):
 
     restart_count = False
     subrun_index = 0
+    abs_ax = AXIOMS[domain]
     while True:
         # LEARNING
-        env = Environment.from_config(config)
-        q_fn = QFunction.new(config['agent']['q_function'], device)
-        agent = LearningAgent.new(q_fn, config['agent'])
-        assert 'num_store_sol' in config['eval_environment']
-        config['eval_environment']['eval_config']['seed'] = random.randint(200_000_000, 300_000_000)
-        config['eval_environment']['restart_count'] = restart_count
-        eval_env = EnvironmentWithEvaluationProxy(experiment_id, run_index, agent_name, domain,
-                                                  agent, env, config['eval_environment'], subrun_index)
-        subrun_index = eval_env.subrun_index
+        try:
+            env = Environment.from_config(config)
+            q_fn = QFunction.new(config['agent']['q_function'], device)
+            agent = LearningAgent.new(q_fn, config['agent'])
+            assert 'num_store_sol' in config['eval_environment']
+            config['eval_environment']['eval_config']['seed'] = random.randint(200_000_000, 300_000_000)
+            config['eval_environment']['restart_count'] = restart_count
+            eval_env = EnvironmentWithEvaluationProxy(experiment_id, run_index, agent_name, domain,
+                                                      agent, env, config['eval_environment'], subrun_index)
+            subrun_index = eval_env.subrun_index
+        except RuntimeError:
+            # manually reconstruct ckpt if it's broken (e.g. b/c device ran out of memory)
+            temp_config = {
+                    'environment_backend': 'Rust',
+                    'abstractions': {
+                        'abs_ax': [("refl"), ("comm"), ("assoc"), ("dist"), ("sub_comm"), ("eval"), ("add0"), ("sub0"), ("mul1"), ("div1"), ("div_self"), ("sub_self"), ("subsub"), ("mul0"), ("zero_div"), ("add"), ("sub"), ("mul"), ("div"), ("assoc~eval:_1"), ("eval~mul1:1_"), ("eval~eval:0_"), ("div~assoc:$_0.0"), ("comm~assoc:0_"), ("eval~mul1:1_0"), ("eval~assoc:1_0"), ("eval~eval:0.1_1")]
+                    },
+                    'domain': 'equations-ct'
+            }
+            q_fn_path = "output/loop_1m/ConPoLe/equations-ct/run0/checkpoints/1-21.pt"
+            device = torch.device(0)
+            env = Environment.from_config(temp_config)
+            q_fn = torch.load(q_fn_path, map_location=device)
+            q_fn.to(device)
+            agent_config = {
+                "type": "NCE",
+                "name": "ConPoLe",
+                "n_future_states": 1,
+                "replay_buffer_size": 100000,
+                "max_depth": 30,
+                "beam_size": 10,
+                "initial_depth": 30,
+                "depth_step": 0,
+                "optimize_every": 16,
+                "n_gradient_steps": 128,
+                "keep_optimizer": True,
+                "step_every": 10000,
+	        "epsilon": 0.2,
+                "q_function": {
+                    "type": "Bilinear",
+                    "char_emb_dim": 64,
+                    "hidden_dim": 256,
+                    "mlp": True,
+                    "lstm_layers": 2
+                }
+            }
+            agent = LearningAgent.new(q_fn, agent_config)
+            agent.bootstrapping = False
+            assert 'num_store_sol' in config['eval_environment']
+            config['eval_environment']['eval_config']['seed'] = random.randint(200_000_000, 300_000_000)
+            config['eval_environment']['restart_count'] = restart_count
+            eval_env = EnvironmentWithEvaluationProxy(experiment_id, run_index, agent_name, domain,
+                                                      agent, env, config['eval_environment'], subrun_index, try_load_ckpt=False)
+            eval_env.n_steps = 2200003
+            eval_env.n_new_problems = 23317
+            eval_env.cumulative_reward = 8137
+            eval_env.n_checkpoints = 22
+            eval_env.subrun_index = 1
+            subrun_index = eval_env.subrun_index
         begin_time = datetime.now()
         print(f"ITERATION {subrun_index} TRAINING BEGINS AT {begin_time}")
-        print("AXIOMS AND ABSTRACTIONS:", env.abstractions)
-        print(f"USING {0 if agent.example_solutions is None else len(agent.example_solutions)} EXAMPLE SOLUTIONS")
+        print("AXIOMS AND ABSTRACTIONS:", eval_env.environment.abstractions)
+        print(f"USING {0 if eval_env.agent.example_solutions is None else len(eval_env.agent.example_solutions)} EXAMPLE SOLUTIONS")
         eval_env.evaluate_agent()
         end_time = datetime.now()
         print(f"ITERATION {subrun_index} TRAINING COMPLETE AT {end_time}; TOTAL TRAINING TIME {end_time-begin_time}")
@@ -957,7 +1009,7 @@ def learn_abstract(config, device, resume):
         begin_time = datetime.now()
         print(f"ITERATION {subrun_index} ABSTRACTING BEGINS AT {begin_time}")
         print(f"USING {len(solutions)} SOLUTIONS")
-        compressor = compress.IAPHolistic(solutions, AXIOMS[domain], config['compression'])
+        compressor = compress.IAPHolistic(solutions, abs_ax, config['compression'])
         num_iter, num_abs_sol = config['compression'].get('iter', 1), config['compression'].get('num_abs_sol')
         abs_sols, abs_ax = compressor.iter_abstract(num_iter, True, num_abs_sol)
         end_time = datetime.now()
