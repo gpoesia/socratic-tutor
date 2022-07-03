@@ -93,6 +93,7 @@ class EnvironmentWithEvaluationProxy:
         self.eval_config = config['eval_config']
         self.agent = agent
         self.max_steps = config.get('max_steps')
+        self.success_thres = config.get('success_thres')
         self.print_every = config.get('print_every', 100)
 
         self.results: list = []
@@ -229,6 +230,9 @@ class EnvironmentWithEvaluationProxy:
         torch.save(self,
                    os.path.join(self.checkpoint_dir,
                                 'training-state.pt'))
+
+        if self.success_thres is not None and results['success_rate'] >= self.success_thres:
+            raise EndOfLearning()
 
 
     def evaluate_agent(self):

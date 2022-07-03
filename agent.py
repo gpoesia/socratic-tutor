@@ -934,6 +934,8 @@ def learn_abstract(config, device, resume):
             eval_env = EnvironmentWithEvaluationProxy(experiment_id, run_index, agent_name, domain,
                                                       agent, env, config['eval_environment'], subrun_index)
             subrun_index = eval_env.subrun_index
+            eval_env.max_steps = config['eval_environment']['max_steps_list'][subrun_index]
+            eval_env.success_thres = config['eval_environment']['success_thres_list'][subrun_index]
         except RuntimeError:
             # manually reconstruct ckpt if it's broken (e.g. b/c device ran out of memory)
             temp_config = {
