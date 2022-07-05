@@ -179,7 +179,7 @@ class EnvironmentWithEvaluationProxy:
 
         return reward_and_actions
 
-    def evaluate(self):
+    def evaluate(self, final=False):
         print('Evaluating...')
         name, domain = self.agent_name, self.environment.default_domain
 
@@ -231,7 +231,7 @@ class EnvironmentWithEvaluationProxy:
                    os.path.join(self.checkpoint_dir,
                                 'training-state.pt'))
 
-        if self.success_thres is not None and results['success_rate'] >= self.success_thres:
+        if not final and (self.success_thres is not None and results['success_rate'] >= self.success_thres):
             raise EndOfLearning()
 
 
@@ -245,7 +245,7 @@ class EnvironmentWithEvaluationProxy:
                 print('Learning budget ended. Doing last learning round (if agent wants to)')
                 self.agent.learn_from_experience(self)
                 print('Running final evaluation...')
-                self.evaluate()
+                self.evaluate(True)
                 break
             except Exception as e:
                 traceback.print_exc(e)
