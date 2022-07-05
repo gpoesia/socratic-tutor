@@ -136,7 +136,7 @@ class EnvironmentWithEvaluationProxy:
             # env = Environment.from_config(temp_config)
             # self.environment = env
             # end fixing absraction bug (to be removed later)
-            ex_sols = previous_state.agent.example_solutions
+            ex_sols = self.agent.example_solutions
             self.agent = previous_state.agent
             self.agent.q_function.to(device)
             if restart_count:
