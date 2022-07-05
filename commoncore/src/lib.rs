@@ -24,6 +24,7 @@ thread_local!{
     pub static DOMAINS: RefCell<HashMap<String, Arc<dyn Domain>>> = {
         let mut map : HashMap<String, Arc<dyn Domain>>  = HashMap::new();
         map.insert(String::from("equations-ct"), Arc::new(Equations::new_from_cognitive_tutor()));
+        map.insert(String::from("equations-hard"), Arc::new(Equations::new_from_hard_set()));
         map.insert(String::from("fractions"), Arc::new(Fractions::new(4, 4)));
         map.insert(String::from("ternary-addition"), Arc::new(TernaryAddition::new(15)));
         map.insert(String::from("ternary-addition-small"), Arc::new(TernaryAddition::new(8)));

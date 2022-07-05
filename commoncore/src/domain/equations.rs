@@ -351,6 +351,10 @@ impl Equations {
         Self::new(include_str!("templates/equations-ct.txt"))
     }
 
+    pub fn new_from_hard_set() -> Equations {
+        Self::new(include_str!("templates/equations-hard.txt"))
+    }
+
     pub fn generate_eq_term(&self, seed: u64) -> SizedTerm {
         let mut rng = super::new_rng(seed);
         let i = rng.gen_range(0..self.templates.len());
