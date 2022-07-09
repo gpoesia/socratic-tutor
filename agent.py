@@ -143,7 +143,7 @@ class NCE(LearningAgent):
         return 'NCE'
 
     def learn_from_environment(self, environment):
-        ex_sol_left = True if self.example_solutions else False
+        ex_sol_left = True if self.example_solutions and self.training_problems_explored < len(self.example_solutions) else False
 
         wrapper = tqdm.tqdm if self.optimize_every is None else lambda x: x
         for i in wrapper(range(self.training_problems_explored, len(self.example_solutions)) 
@@ -231,7 +231,9 @@ class NCE(LearningAgent):
                         found = True
                         break
                 if not found:
-                    raise Exception("Example solution cannot be carried out")
+                    print("Example solution cannot be carried out")
+                    print(f"Looking for next state {n_state} but options are {next_states}")
+                    print("Will try to continue silently")
 
             # Get top next states for next beam (if no example solution given)
             else:
@@ -1011,6 +1013,7 @@ def learn_abstract(config, device, resume):
         begin_time = datetime.now()
         print(f"ITERATION {subrun_index} ABSTRACTING BEGINS AT {begin_time}")
         print(f"USING {len(solutions)} SOLUTIONS")
+        abs_ax = eval_env.environment.abstractions
         compressor = compress.IAPHolistic(solutions, abs_ax, config['compression'])
         num_iter, num_abs_sol = config['compression'].get('iter', 1), config['compression'].get('num_abs_sol')
         abs_sols, abs_ax = compressor.iter_abstract(num_iter, True, num_abs_sol)

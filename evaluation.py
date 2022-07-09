@@ -17,6 +17,8 @@ import wandb
 from tqdm import tqdm
 import numpy as np
 
+from abstractions import AxSeqTreePos
+
 
 class SuccessRatePolicyEvaluator:
     """Evaluates the policy derived from a Q function by its success rate at solving
@@ -129,7 +131,7 @@ class EnvironmentWithEvaluationProxy:
             # temp_config = {
             #         'environment_backend': 'Rust',
             #         'abstractions': {
-            #             'abs_ax': [("refl"), ("comm"), ("assoc"), ("dist"), ("sub_comm"), ("eval"), ("add0"), ("sub0"), ("mul1"), ("div1"), ("div_self"), ("sub_self"), ("subsub"), ("mul0"), ("zero_div"), ("add"), ("sub"), ("mul"), ("div"), ("assoc~eval:_1"), ("eval~mul1:1_"), ("eval~eval:0_"), ("div~assoc:$_0.0"), ("comm~assoc:0_"), ("eval~mul1:1_0"), ("eval~assoc:1_0"), ("eval~eval:0.1_1"), ("{div~assoc:$_0.0}~{eval~mul1:1_}:_1"), ("div~assoc~eval~mul1:$_0.0~_1~1_"), ("{eval~mul1:1_}~eval:0_1"), ("{eval~eval:0_}~{eval~mul1:1_}:1_0.1"), ("{div~assoc:$_0.0}~{eval~eval:0_}:0_1.0"), ("eval~eval~eval~mul1:0_~1_0.1~1_"), ("eval~mul1~eval:1_~0_1"), ("{eval~eval:0.1_1}~{div~assoc:$_0.0}:0.1_$")]
+            #             'abs_ax': [AxSeqTreePos("refl"), AxSeqTreePos("comm"), AxSeqTreePos("assoc"), AxSeqTreePos("dist"), AxSeqTreePos("sub_comm"), AxSeqTreePos("eval"), AxSeqTreePos("add0"), AxSeqTreePos("sub0"), AxSeqTreePos("mul1"), AxSeqTreePos("div1"), AxSeqTreePos("div_self"), AxSeqTreePos("sub_self"), AxSeqTreePos("subsub"), AxSeqTreePos("mul0"), AxSeqTreePos("zero_div"), AxSeqTreePos("add"), AxSeqTreePos("sub"), AxSeqTreePos("mul"), AxSeqTreePos("div"), AxSeqTreePos("assoc~eval:_1"), AxSeqTreePos("comm~assoc:0_"), AxSeqTreePos("eval~mul1:1_"), AxSeqTreePos("eval~eval:0_"), AxSeqTreePos("div~assoc:$_0.0"), AxSeqTreePos("mul1~eval:0_1"), AxSeqTreePos("eval~add0:1_"), AxSeqTreePos("comm~div:0.0_$"), AxSeqTreePos("{comm~div:0.0_$}~{assoc~eval:_1}:$_0.0"), AxSeqTreePos("comm~div~assoc~eval:0.0_$~$_0.0~_1"), AxSeqTreePos("{comm~assoc:0_}~{eval~mul1:1_}:_1"), AxSeqTreePos("comm~assoc~eval~mul1:0_~_1~1_"), AxSeqTreePos("assoc~{comm~assoc:0_}:_0"), AxSeqTreePos("{eval~mul1:1_}~{eval~eval:0_}:0_1.0"), AxSeqTreePos("{comm~assoc:0_}~div_self:_1"), AxSeqTreePos("{assoc~eval:_1}~{mul1~eval:0_1}:1_")]
             #         },
             #         'domain': 'equations-ct'
             # }
@@ -151,6 +153,7 @@ class EnvironmentWithEvaluationProxy:
                 self.stored_solutions = previous_state.stored_solutions
                 self.n_checkpoints = previous_state.n_checkpoints
                 self.subrun_index = previous_state.subrun_index
+                self.environment = previous_state.environment
 
     def generate_new(self, domain=None, seed=None):
         self.n_new_problems += 1
@@ -236,7 +239,7 @@ class EnvironmentWithEvaluationProxy:
 
 
     def evaluate_agent(self):
-        if self.n_checkpoints == 0 and self.subrun_index == 0:  # False when loading an existing training run or in middle of learn/abstract
+        if self.n_checkpoints == 0:  # False when loading an existing training run
             self.evaluate()
         while True:
             try:
