@@ -38,6 +38,8 @@ import tqdm
 SUCCESS_STATE = State(['success'], [], 1.0)
 AXIOMS = {
              "equations-ct": ["refl", "comm", "assoc", "dist", "sub_comm", "eval", "add0", "sub0", "mul1", "div1",
+                              "div_self", "sub_self", "subsub", "mul0", "zero_div", "add", "sub", "mul", "div"],
+             "equations-hard": ["refl", "comm", "assoc", "dist", "sub_comm", "eval", "add0", "sub0", "mul1", "div1",
                               "div_self", "sub_self", "subsub", "mul0", "zero_div", "add", "sub", "mul", "div"]
          }
 
@@ -923,7 +925,6 @@ def learn_abstract(config, device, resume):
 
     restart_count = False
     subrun_index = 0
-    abs_ax = AXIOMS[domain]
     while True:
         # LEARNING
         try:
@@ -1014,6 +1015,8 @@ def learn_abstract(config, device, resume):
         print(f"ITERATION {subrun_index} ABSTRACTING BEGINS AT {begin_time}")
         print(f"USING {len(solutions)} SOLUTIONS")
         abs_ax = eval_env.environment.abstractions
+        if abs_ax is None:
+            abs_ax = AXIOMS[domain]
         compressor = compress.IAPHolistic(solutions, abs_ax, config['compression'])
         num_iter, num_abs_sol = config['compression'].get('iter', 1), config['compression'].get('num_abs_sol')
         abs_sols, abs_ax = compressor.iter_abstract(num_iter, True, num_abs_sol)
