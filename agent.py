@@ -932,7 +932,7 @@ def learn_abstract(config, device, resume):
             q_fn = QFunction.new(config['agent']['q_function'], device)
             agent = LearningAgent.new(q_fn, config['agent'])
             assert 'num_store_sol' in config['eval_environment']
-            config['eval_environment']['eval_config']['seed'] = random.randint(200_000_000, 300_000_000)
+            # config['eval_environment']['eval_config']['seed'] = random.randint(200_000_000, 300_000_000)
             config['eval_environment']['restart_count'] = restart_count
             eval_env = EnvironmentWithEvaluationProxy(experiment_id, run_index, agent_name, domain,
                                                       agent, env, config['eval_environment'], subrun_index)
