@@ -90,13 +90,23 @@ struct SizedTerm {
 }
 
 impl SizedTerm {
-    fn collect_children(&self, v: &mut Vec<SizedTerm>) {
+    fn collect_children(&self, v: &mut Vec<SizedTerm>, index: &String, child_indices: &mut Vec<String>) {
         v.push(self.clone());
+        child_indices.push(index.clone());
 
         match self.t.borrow() {
-            Fraction(t1, t2) => { t1.collect_children(v); t2.collect_children(v); }
-            FractionOperation(_, t1, t2) => { t1.collect_children(v); t2.collect_children(v); }
-            NumberOperation(_, t1, t2) => { t1.collect_children(v); t2.collect_children(v); }
+            Fraction(t1, t2) => {
+                t1.collect_children(v, &(index.clone() + ".0"), child_indices);
+                t2.collect_children(v, &(index.clone() + ".1"), child_indices);
+            },
+            FractionOperation(_, t1, t2) => {
+                t1.collect_children(v, &(index.clone() + ".0"), child_indices);
+                t2.collect_children(v, &(index.clone() + ".1"), child_indices);
+            },
+            NumberOperation(_, t1, t2) => {
+                t1.collect_children(v, &(index.clone() + ".0"), child_indices);
+                t2.collect_children(v, &(index.clone() + ".1"), child_indices);
+            },
             _ => (),
         }
     }
@@ -366,8 +376,9 @@ impl super::Domain for Fractions {
         let mut actions = Vec::new();
 
         let mut children = Vec::new();
+        let mut indexes = Vec::new();
         let rct = Rc::new(t);
-        rct.collect_children(&mut children);
+        rct.collect_children(&mut children, &String::new(), &mut indexes);
 
         for local_rewrite_tactic in &[a_factorize,
                                       a_eval,
@@ -378,7 +389,7 @@ impl super::Domain for Fractions {
                                       a_merge_fracs,
                                       ] {
             for (i, st) in children.iter().enumerate() {
-                for (nt, fd, hd) in local_rewrite_tactic(st, i, &self) {
+                for (nt, fd, hd) in local_rewrite_tactic(st, &indexes[i], &self) {
                     let next_state = rct.replace_at_index(i, &nt);
                     actions.push((next_state, fd, hd));
                 }
@@ -392,7 +403,7 @@ impl super::Domain for Fractions {
 }
 
 // Tactics
-fn a_factorize(st: &SizedTerm, index: usize, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
+fn a_factorize(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
     if let Number(n) = st.t.borrow() {
         let mut v = Vec::new();
 
@@ -417,7 +428,7 @@ fn a_factorize(st: &SizedTerm, index: usize, _f: &Fractions) -> Vec<(SizedTerm, 
     vec![]
 }
 
-fn a_eval(st: &SizedTerm, index: usize, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
+fn a_eval(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
     if let NumberOperation(op, a, b) = st.t.borrow() {
         if let (Number(n1), Number(n2)) = (a.t.borrow(), b.t.borrow()) {
             return vec![(SizedTerm::new(Number(op.evaluate(n1, n2)), 1),
@@ -428,7 +439,7 @@ fn a_eval(st: &SizedTerm, index: usize, _f: &Fractions) -> Vec<(SizedTerm, Strin
     vec![]
 }
 
-fn a_cancel(st: &SizedTerm, index: usize, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
+fn a_cancel(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
     let mut v: Vec<(SizedTerm, String, String)>  = Vec::new();
 
     if let Fraction(num, den) = st.t.borrow() {
@@ -519,7 +530,7 @@ fn a_cancel(st: &SizedTerm, index: usize, _f: &Fractions) -> Vec<(SizedTerm, Str
     v
 }
 
-fn a_mul_frac(st: &SizedTerm, index: usize, f: &Fractions) -> Vec<(SizedTerm, String, String)> {
+fn a_mul_frac(st: &SizedTerm, index: &String, f: &Fractions) -> Vec<(SizedTerm, String, String)> {
     let mut v: Vec<(SizedTerm, String, String)>  = Vec::new();
 
     if let Fraction(num, den) = st.t.borrow() {
@@ -543,7 +554,7 @@ fn a_mul_frac(st: &SizedTerm, index: usize, f: &Fractions) -> Vec<(SizedTerm, St
     v
 }
 
-fn a_simpl_div_1(st: &SizedTerm, index: usize, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
+fn a_simpl_div_1(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
     if let Fraction(num, den) = st.t.borrow() {
         if let Number(1) = den.t.borrow() {
             return vec![(SizedTerm::clone(num),
@@ -554,7 +565,7 @@ fn a_simpl_div_1(st: &SizedTerm, index: usize, _f: &Fractions) -> Vec<(SizedTerm
     vec![]
 }
 
-fn a_make_frac(st: &SizedTerm, index: usize, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
+fn a_make_frac(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
     let mut v = Vec::new();
     if let FractionOperation(op, a, b) = st.t.borrow() {
         if let Number(n) = a.t.borrow() {
@@ -565,7 +576,7 @@ fn a_make_frac(st: &SizedTerm, index: usize, _f: &Fractions) -> Vec<(SizedTerm, 
                                           Fraction(Rc::clone(a),
                                                    Rc::new(SizedTerm::new_unsized(Number(1)))))),
                                       Rc::clone(b))),
-                format!("mfrac {}, {}", index + 1, n),
+                format!("mfrac {}, {}", index, n),
                 format!("Rewrite {} as a fraction.", n)));
         }
 
@@ -577,14 +588,14 @@ fn a_make_frac(st: &SizedTerm, index: usize, _f: &Fractions) -> Vec<(SizedTerm, 
                                       Rc::new(SizedTerm::new_unsized(
                                           Fraction(Rc::clone(b),
                                                    Rc::new(SizedTerm::new_unsized(Number(1)))))))),
-                format!("mfrac {}, {}", index + 1 + a.size, n),
+                format!("mfrac {}, {}", index /* + 1 + a.size */, n),
                 format!("Rewrite {} as a fraction.", n)));
         }
     }
     v
 }
 
-fn a_merge_fracs(st: &SizedTerm, index: usize, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
+fn a_merge_fracs(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
     if let FractionOperation(op, a, b) = st.t.borrow() {
         if let (Fraction(a_num, a_den), Fraction(b_num, b_den)) = (a.t.borrow(), b.t.borrow()) {
             if *op == Times {
