@@ -23,7 +23,13 @@ pub trait Domain {
 
     fn generate(&self, seed: u64) -> State;
 
+    // Applies all domain axioms to the state, returning all successors.
     fn step(&self, state: State) -> Option<Vec<Action>>;
+
+    // Applies a single axiom to a state, returning all successors that axiom can lead to.
+    fn apply(&self, _state: State, _axiom: &str) -> Option<Vec<Action>> {
+        panic!("Not implemented for this domain.")
+    }
 }
 
 fn new_rng(seed: u64) -> Pcg64 {

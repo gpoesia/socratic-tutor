@@ -41,6 +41,16 @@ impl Operator {
         }).to_string()
     }
 
+    fn from_name(s: &str) -> Option<Operator> {
+        match s {
+            "add" => Some(Operator::Add),
+            "sub" => Some(Operator::Sub),
+            "mul" => Some(Operator::Times),
+            "div" => Some(Operator::Div),
+            _ => None,
+        }
+    }
+
     fn is_commutative(&self) -> bool {
         match self {
             Add | Times => true,
@@ -376,6 +386,66 @@ impl super::Domain for Equations {
 
     fn generate(&self, seed: u64) -> State {
         self.generate_eq_term(seed).to_string()
+    }
+
+    fn apply(&self, state: State, axiom: &str) -> Option<Vec<Action>> {
+        let t = SizedTerm::from_str(&state).unwrap();
+        if t.is_solved() {
+            return None;
+        }
+
+        if t.size > MAX_SIZE || state.len() > MAX_LEN {
+            return Some(Vec::new());
+        }
+
+        let mut actions = Vec::new();
+
+        let mut children = Vec::new();
+        let mut indexes = Vec::new();
+
+        if axiom == "refl" {
+            actions.extend(a_reflexivity(&t));
+        } else {
+            let rct = Rc::new(t);
+            rct.collect_children(&mut children, &String::new(), &mut indexes);
+
+            if let Some(op) = Operator::from_name(axiom) {
+                let mut seen_before = HashSet::new();
+
+                for st in children.iter() {
+                    if is_valid_op_both_sides_term(st.t.borrow()) {
+                        let (next_state, fd, hd) = a_op_both_sides(Rc::clone(&rct), op, st);
+                        if seen_before.insert(fd.clone()) {
+                            actions.push((next_state, fd, hd));
+                        }
+                    }
+                }
+            } else {
+                let local_rewrite_tactic : Option<fn(&SizedTerm, &String) ->
+                                                  Option<(SizedTerm, String, String)>> = match axiom {
+                    "comm" | "sub_comm" => Some(a_commutativity),
+                    "assoc" => Some(a_associativity),
+                    "dist" => Some(a_distributivity),
+                    "eval" => Some(a_eval),
+                    "add0" | "sub0" | "mul1" | "div1" => Some(a_identity_ops),
+                    "div_self" | "sub_self" | "subsub" | "mul0" | "zero_div" => Some(a_cancel_ops),
+                    _ => None,
+                };
+
+                if let Some(local_rewrite_tactic) = local_rewrite_tactic {
+                    for (i, st) in children.iter().enumerate() {
+                        if let Some((nt, fd, hd)) = local_rewrite_tactic(st, &indexes[i]) {
+                            let next_state = rct.replace_at_index(i, &nt);
+                            actions.push((next_state, fd, hd));
+                        }
+                    }
+                }
+            }
+        }
+
+        Some(actions.into_iter().map(|(t, fd, hd)| Action { next_state: t.to_string(),
+                                                            formal_description: fd,
+                                                            human_description: hd }).collect())
     }
 
     fn step(&self, state: State) -> Option<Vec<Action>> {
