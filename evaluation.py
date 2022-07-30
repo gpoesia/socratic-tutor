@@ -18,6 +18,7 @@ from tqdm import tqdm
 import numpy as np
 
 from abstractions import AxSeqTreePos
+import abs_util
 
 
 class SuccessRatePolicyEvaluator:
@@ -113,9 +114,6 @@ class EnvironmentWithEvaluationProxy:
         self.results_path = os.path.join(output_root, 'results.pkl')
         self.checkpoint_dir = checkpoint_dir
 
-        num_store_sol = config.get('num_store_sol')
-        self.stored_solutions = None if num_store_sol is None else collections.deque(maxlen=num_store_sol)
-
         if try_load_ckpt:
             self.load_checkpoint(config.get('restart_count', False))
 
@@ -139,6 +137,7 @@ class EnvironmentWithEvaluationProxy:
             # self.environment = env
             # end fixing absraction bug (to be removed later)
             ex_sols = self.agent.example_solutions
+            stored_sols = self.agent.stored_solutions  # should be empty deque
             self.agent = previous_state.agent
             self.agent.q_function.to(device)
             if restart_count:
@@ -146,11 +145,11 @@ class EnvironmentWithEvaluationProxy:
                 self.agent.training_problems_solved = 0
                 self.agent.training_acc_moving_average = 0.0
                 self.agent.example_solutions = ex_sols
+                self.agent.stored_solutions = stored_sols
             else:
                 self.n_steps = previous_state.n_steps
                 self.n_new_problems = previous_state.n_new_problems
                 self.cumulative_reward = previous_state.cumulative_reward
-                self.stored_solutions = previous_state.stored_solutions
                 self.n_checkpoints = previous_state.n_checkpoints
                 self.subrun_index = previous_state.subrun_index
                 self.environment = previous_state.environment
@@ -188,7 +187,7 @@ class EnvironmentWithEvaluationProxy:
 
         self.environment.test()
         evaluator = SuccessRatePolicyEvaluator(self.environment, self.eval_config)
-        results = evaluator.evaluate(self.agent.get_q_function(), stored_solutions=self.stored_solutions)
+        results = evaluator.evaluate(self.agent.get_q_function())
         self.environment.train()
         results['n_steps'] = self.n_steps
         results['experiment_id'] = self.experiment_id
@@ -223,16 +222,20 @@ class EnvironmentWithEvaluationProxy:
         with open(self.results_path, 'wb') as f:
             pickle.dump(existing_results, f)
 
+        print("Saving Q-function...")
         torch.save(self.agent.q_function,
                    os.path.join(self.checkpoint_dir,
                                 f'{self.n_checkpoints}.pt' if self.subrun_index is None
                                 else f'{self.subrun_index}-{self.n_checkpoints}.pt'))
+        print("Saving Q-function completed.")
 
         self.n_checkpoints += 1
 
+        print("Saving checkpoint...")
         torch.save(self,
                    os.path.join(self.checkpoint_dir,
                                 'training-state.pt'))
+        print("Saving checkpoint completed.")
 
         if not final and (self.success_thres is not None and results['success_rate'] >= self.success_thres):
             raise EndOfLearning()

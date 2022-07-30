@@ -93,9 +93,12 @@ class NCE(LearningAgent):
         self.example_solutions = None
         if isinstance(ex_sol, str):
             with open(ex_sol, 'rb') as f:
-                self.example_solutions = pickle.load(f)  # tuple of Solution objects
+                self.example_solutions = pickle.load(f)  # tuple of Solution objects to learn from
         elif isinstance(ex_sol, (tuple, list)) and all(isinstance(sol, steps.Solution) for sol in ex_sol):
             self.example_solutions = ex_sol
+
+        num_store_sol = config.get('num_store_sol')
+        self.stored_solutions = None if num_store_sol is None else collections.deque(maxlen=num_store_sol)  # for discovering abstractions
 
         self.training_problems_explored = 0
         self.training_problems_solved = 0
@@ -217,6 +220,8 @@ class NCE(LearningAgent):
                     solution = s
 
             if solution is not None:
+                if ex_solution is None and self.stored_solutions is not None:
+                    self.stored_solutions.append(solution)
                 break
             
             # Get next state if given example solution
@@ -930,8 +935,8 @@ def learn_abstract(config, device, resume):
         try:
             env = Environment.from_config(config)
             q_fn = QFunction.new(config['agent']['q_function'], device)
+            assert 'num_store_sol' in config['agent']
             agent = LearningAgent.new(q_fn, config['agent'])
-            assert 'num_store_sol' in config['eval_environment']
             # config['eval_environment']['eval_config']['seed'] = random.randint(200_000_000, 300_000_000)
             config['eval_environment']['restart_count'] = restart_count
             eval_env = EnvironmentWithEvaluationProxy(experiment_id, run_index, agent_name, domain,
@@ -941,6 +946,7 @@ def learn_abstract(config, device, resume):
             eval_env.success_thres = config['eval_environment']['success_thres_list'][subrun_index]
         except RuntimeError:
             # manually reconstruct ckpt if it's broken (e.g. b/c device ran out of memory)
+            print("CHECKPOINT BROKEN... MANUAL RECONSTRUCTION OF CHECKPOINT")
             temp_config = {
                     'environment_backend': 'Rust',
                     'abstractions': {
@@ -999,7 +1005,7 @@ def learn_abstract(config, device, resume):
             break
 
         # ABSTRACTING
-        raw_solutions = eval_env.stored_solutions
+        raw_solutions = eval_env.agent.stored_solutions
         solutions = []
         # Convert to format for abstraction algo
         for raw_sol in raw_solutions:
@@ -1025,6 +1031,12 @@ def learn_abstract(config, device, resume):
 
         config['abstractions'] = {'abs_ax': abs_ax}
         config['agent']['example_solutions'] = abs_sols
+        abs_ax_path = os.path.join(eval_env.checkpoint_dir, f'A{subrun_index}.pkl')
+        with open(abs_ax_path, 'wb') as f:
+            pickle.dump(abs_ax, f)
+        abs_sols_path = os.path.join(eval_env.checkpoint_dir, f'AS{subrun_index}.pkl')
+        with open(abs_sols_path, 'wb') as f:
+            pickle.dump(abs_sols, f)
 
         restart_count = True
         subrun_index += 1
