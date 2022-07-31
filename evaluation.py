@@ -131,7 +131,7 @@ class EnvironmentWithEvaluationProxy:
             # temp_config = {
             #         'environment_backend': 'Rust',
             #         'abstractions': {
-            #             'abs_ax': [AxSeqTreePos("refl"), AxSeqTreePos("comm"), AxSeqTreePos("assoc"), AxSeqTreePos("dist"), AxSeqTreePos("sub_comm"), AxSeqTreePos("eval"), AxSeqTreePos("add0"), AxSeqTreePos("sub0"), AxSeqTreePos("mul1"), AxSeqTreePos("div1"), AxSeqTreePos("div_self"), AxSeqTreePos("sub_self"), AxSeqTreePos("subsub"), AxSeqTreePos("mul0"), AxSeqTreePos("zero_div"), AxSeqTreePos("add"), AxSeqTreePos("sub"), AxSeqTreePos("mul"), AxSeqTreePos("div"), AxSeqTreePos("assoc~eval:_1"), AxSeqTreePos("comm~assoc:0_"), AxSeqTreePos("eval~mul1:1_"), AxSeqTreePos("eval~eval:0_"), AxSeqTreePos("div~assoc:$_0.0"), AxSeqTreePos("mul1~eval:0_1"), AxSeqTreePos("eval~add0:1_"), AxSeqTreePos("comm~div:0.0_$"), AxSeqTreePos("{comm~div:0.0_$}~{assoc~eval:_1}:$_0.0"), AxSeqTreePos("comm~div~assoc~eval:0.0_$~$_0.0~_1"), AxSeqTreePos("{comm~assoc:0_}~{eval~mul1:1_}:_1"), AxSeqTreePos("comm~assoc~eval~mul1:0_~_1~1_"), AxSeqTreePos("assoc~{comm~assoc:0_}:_0"), AxSeqTreePos("{eval~mul1:1_}~{eval~eval:0_}:0_1.0"), AxSeqTreePos("{comm~assoc:0_}~div_self:_1"), AxSeqTreePos("{assoc~eval:_1}~{mul1~eval:0_1}:1_")]
+            #             'abs_ax': [AxSeqTreePos("refl"), AxSeqTreePos("comm"), AxSeqTreePos("assoc"), AxSeqTreePos("dist"), AxSeqTreePos("sub_comm"), AxSeqTreePos("eval"), AxSeqTreePos("add0"), AxSeqTreePos("sub0"), AxSeqTreePos("mul1"), AxSeqTreePos("div1"), AxSeqTreePos("div_self"), AxSeqTreePos("sub_self"), AxSeqTreePos("subsub"), AxSeqTreePos("mul0"), AxSeqTreePos("zero_div"), AxSeqTreePos("add"), AxSeqTreePos("sub"), AxSeqTreePos("mul"), AxSeqTreePos("div"), AxSeqTreePos("assoc~eval:_1"), AxSeqTreePos("comm~assoc:0_"), AxSeqTreePos("eval~mul1:1_"), AxSeqTreePos("eval~eval:0_"), AxSeqTreePos("div~assoc:$_0.0"), AxSeqTreePos("mul1~eval:0_1"), AxSeqTreePos("eval~add0:1_"), AxSeqTreePos("comm~div:0.0_$"), AxSeqTreePos("{comm~div:0.0_$}~{assoc~eval:_1}:$_0.0"), AxSeqTreePos("comm~div~assoc~eval:0.0_$~$_0.0~_1"), AxSeqTreePos("{comm~assoc:0_}~{eval~mul1:1_}:_1"), AxSeqTreePos("comm~assoc~eval~mul1:0_~_1~1_"), AxSeqTreePos("assoc~{comm~assoc:0_}:_0"), AxSeqTreePos("{eval~mul1:1_}~{eval~eval:0_}:0_1.0"), AxSeqTreePos("{comm~assoc:0_}~div_self:_1"), AxSeqTreePos("{assoc~eval:_1}~{mul1~eval:0_1}:1_"), AxSeqTreePos("{comm~div~assoc~eval:0.0_$~$_0.0~_1}~{mul1~eval:0_1}:1_"), AxSeqTreePos("comm~div~assoc~eval~mul1~eval:0.0_$~$_0.0~_1~1_~0_1"), AxSeqTreePos("{comm~div~assoc~eval:0.0_$~$_0.0~_1}~mul1:1_"), AxSeqTreePos("comm~div~assoc~eval~mul1:0.0_$~$_0.0~_1~1_"), AxSeqTreePos("sub~{comm~assoc:0_}:$_0.0.0"), AxSeqTreePos("{eval~eval:0_}~{comm~div~assoc~eval:0.0_$~$_0.0~_1}:1_0"), AxSeqTreePos("eval~eval~comm~div~assoc~eval:0_~1_0~0.0_$~$_0.0~_1"), AxSeqTreePos("sub~comm~assoc:$_0.0.0~0_")]
             #         },
             #         'domain': 'equations-ct'
             # }
@@ -139,6 +139,7 @@ class EnvironmentWithEvaluationProxy:
             # self.environment = env
             # end fixing absraction bug (to be removed later)
             ex_sols = self.agent.example_solutions
+            new_max_negatives = self.agent.max_negatives
             self.agent = previous_state.agent
             self.agent.q_function.to(device)
             if restart_count:
@@ -154,6 +155,7 @@ class EnvironmentWithEvaluationProxy:
                 self.n_checkpoints = previous_state.n_checkpoints
                 self.subrun_index = previous_state.subrun_index
                 self.environment = previous_state.environment
+                self.agent.max_negatives = new_max_negatives
 
     def generate_new(self, domain=None, seed=None):
         self.n_new_problems += 1

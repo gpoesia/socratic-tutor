@@ -133,6 +133,7 @@ class NCE(LearningAgent):
         self.keep_optimizer = config.get('keep_optimizer', True)
         # Knob: how many future states to use as examples.
         self.n_future_states = config.get('n_future_states', 1)
+        self.max_negatives = config.get('max_negatives', float('inf'))
         self.learning_rate = config.get('lr', 1e-4)
         self.reset_optimizer()
 
@@ -332,7 +333,10 @@ class NCE(LearningAgent):
                 env.evaluate()
 
             e = random.choice(self.examples)
-            all_actions = [e.positive] + e.negatives
+            if self.max_negatives >= len(e.negatives):
+                all_actions = [e.positive] + e.negatives
+            else:
+                all_actions = [e.positive] + random.sample(e.negatives, self.max_negatives)
 
             self.optimizer.zero_grad()
             f_pred = self.q_function(all_actions)
@@ -936,6 +940,7 @@ def learn_abstract(config, device, resume):
             config['eval_environment']['restart_count'] = restart_count
             eval_env = EnvironmentWithEvaluationProxy(experiment_id, run_index, agent_name, domain,
                                                       agent, env, config['eval_environment'], subrun_index)
+            print("MAX NEGATIVES:", eval_env.agent.max_negatives)
             subrun_index = eval_env.subrun_index
             eval_env.max_steps = config['eval_environment']['max_steps_list'][subrun_index]
             eval_env.success_thres = config['eval_environment']['success_thres_list'][subrun_index]
@@ -1157,6 +1162,8 @@ if __name__ == '__main__':
         run_agent_experiment(config, device, opt.resume)
     elif opt.learn_abstract:
         learn_abstract(config, device, opt.resume)
+        # import cProfile
+        # cProfile.run('learn_abstract(config, device, opt.resume)', 'prostats')
     elif opt.eval:
         evaluate_policy(config, device, config.get('verbose', False))
     elif opt.eval_checkpoints:
