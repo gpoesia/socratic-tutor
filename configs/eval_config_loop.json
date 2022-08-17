@@ -1,0 +1,13 @@
+{
+  "model_path": "output/loop_1m/ConPoLe/equations-ct/run4/checkpoints/4-0.pt",
+  "domain": "equations-ct",
+  "environment_backend": "Rust",
+  "abstractions": {
+    "abs_ax": ["refl", "comm", "assoc", "dist", "sub_comm", "eval", "add0", "sub0", "mul1", "div1", "div_self", "sub_self", "subsub", "mul0", "zero_div", "add", "sub", "mul", "div", "assoc~eval:_1", "comm~assoc:0_", "eval~mul1:1_", "eval~eval:0_", "div~assoc:$_0.0", "mul1~eval:0_1", "eval~add0:1_", "comm~div:0.0_$", "{comm~div:0.0_$}~{assoc~eval:_1}:$_0.0", "comm~div~assoc~eval:0.0_$~$_0.0~_1", "{comm~assoc:0_}~{eval~mul1:1_}:_1", "comm~assoc~eval~mul1:0_~_1~1_", "assoc~{comm~assoc:0_}:_0", "{eval~mul1:1_}~{eval~eval:0_}:0_1.0", "{comm~assoc:0_}~div_self:_1", "{assoc~eval:_1}~{mul1~eval:0_1}:1_", "{comm~div~assoc~eval:0.0_$~$_0.0~_1}~{mul1~eval:0_1}:1_", "comm~div~assoc~eval~mul1~eval:0.0_$~$_0.0~_1~1_~0_1", "{comm~div~assoc~eval:0.0_$~$_0.0~_1}~mul1:1_", "comm~div~assoc~eval~mul1:0.0_$~$_0.0~_1~1_", "sub~{comm~assoc:0_}:$_0.0.0", "{eval~eval:0_}~{comm~div~assoc~eval:0.0_$~$_0.0~_1}:1_0", "eval~eval~comm~div~assoc~eval:0_~1_0~0.0_$~$_0.0~_1", "sub~comm~assoc:$_0.0.0~0_"]
+  },
+  "eval_config": {
+    "max_steps": 30,
+    "n_problems": 20,
+    "save_sols": "eval_output/loop-buggy-20.pkl"
+  }
+}

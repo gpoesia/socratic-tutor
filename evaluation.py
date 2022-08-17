@@ -18,6 +18,7 @@ from tqdm import tqdm
 import numpy as np
 
 from abstractions import AxSeqTreePos
+import abs_util
 
 
 class SuccessRatePolicyEvaluator:
@@ -113,9 +114,6 @@ class EnvironmentWithEvaluationProxy:
         self.results_path = os.path.join(output_root, 'results.pkl')
         self.checkpoint_dir = checkpoint_dir
 
-        num_store_sol = config.get('num_store_sol')
-        self.stored_solutions = None if num_store_sol is None else collections.deque(maxlen=num_store_sol)
-
         if try_load_ckpt:
             self.load_checkpoint(config.get('restart_count', False))
 
@@ -131,7 +129,7 @@ class EnvironmentWithEvaluationProxy:
             # temp_config = {
             #         'environment_backend': 'Rust',
             #         'abstractions': {
-            #             'abs_ax': [AxSeqTreePos("refl"), AxSeqTreePos("comm"), AxSeqTreePos("assoc"), AxSeqTreePos("dist"), AxSeqTreePos("sub_comm"), AxSeqTreePos("eval"), AxSeqTreePos("add0"), AxSeqTreePos("sub0"), AxSeqTreePos("mul1"), AxSeqTreePos("div1"), AxSeqTreePos("div_self"), AxSeqTreePos("sub_self"), AxSeqTreePos("subsub"), AxSeqTreePos("mul0"), AxSeqTreePos("zero_div"), AxSeqTreePos("add"), AxSeqTreePos("sub"), AxSeqTreePos("mul"), AxSeqTreePos("div"), AxSeqTreePos("assoc~eval:_1"), AxSeqTreePos("comm~assoc:0_"), AxSeqTreePos("eval~mul1:1_"), AxSeqTreePos("eval~eval:0_"), AxSeqTreePos("div~assoc:$_0.0"), AxSeqTreePos("mul1~eval:0_1"), AxSeqTreePos("eval~add0:1_"), AxSeqTreePos("comm~div:0.0_$"), AxSeqTreePos("{comm~div:0.0_$}~{assoc~eval:_1}:$_0.0"), AxSeqTreePos("comm~div~assoc~eval:0.0_$~$_0.0~_1"), AxSeqTreePos("{comm~assoc:0_}~{eval~mul1:1_}:_1"), AxSeqTreePos("comm~assoc~eval~mul1:0_~_1~1_"), AxSeqTreePos("assoc~{comm~assoc:0_}:_0"), AxSeqTreePos("{eval~mul1:1_}~{eval~eval:0_}:0_1.0"), AxSeqTreePos("{comm~assoc:0_}~div_self:_1"), AxSeqTreePos("{assoc~eval:_1}~{mul1~eval:0_1}:1_")]
+            #             'abs_ax': [AxSeqTreePos("refl"), AxSeqTreePos("comm"), AxSeqTreePos("assoc"), AxSeqTreePos("dist"), AxSeqTreePos("sub_comm"), AxSeqTreePos("eval"), AxSeqTreePos("add0"), AxSeqTreePos("sub0"), AxSeqTreePos("mul1"), AxSeqTreePos("div1"), AxSeqTreePos("div_self"), AxSeqTreePos("sub_self"), AxSeqTreePos("subsub"), AxSeqTreePos("mul0"), AxSeqTreePos("zero_div"), AxSeqTreePos("add"), AxSeqTreePos("sub"), AxSeqTreePos("mul"), AxSeqTreePos("div"), AxSeqTreePos("assoc~eval:_1"), AxSeqTreePos("comm~assoc:0_"), AxSeqTreePos("eval~mul1:1_"), AxSeqTreePos("eval~eval:0_"), AxSeqTreePos("div~assoc:$_0.0"), AxSeqTreePos("mul1~eval:0_1"), AxSeqTreePos("eval~add0:1_"), AxSeqTreePos("comm~div:0.0_$"), AxSeqTreePos("{comm~div:0.0_$}~{assoc~eval:_1}:$_0.0"), AxSeqTreePos("comm~div~assoc~eval:0.0_$~$_0.0~_1"), AxSeqTreePos("{comm~assoc:0_}~{eval~mul1:1_}:_1"), AxSeqTreePos("comm~assoc~eval~mul1:0_~_1~1_"), AxSeqTreePos("assoc~{comm~assoc:0_}:_0"), AxSeqTreePos("{eval~mul1:1_}~{eval~eval:0_}:0_1.0"), AxSeqTreePos("{comm~assoc:0_}~div_self:_1"), AxSeqTreePos("{assoc~eval:_1}~{mul1~eval:0_1}:1_"), AxSeqTreePos("{comm~div~assoc~eval:0.0_$~$_0.0~_1}~{mul1~eval:0_1}:1_"), AxSeqTreePos("comm~div~assoc~eval~mul1~eval:0.0_$~$_0.0~_1~1_~0_1"), AxSeqTreePos("{comm~div~assoc~eval:0.0_$~$_0.0~_1}~mul1:1_"), AxSeqTreePos("comm~div~assoc~eval~mul1:0.0_$~$_0.0~_1~1_"), AxSeqTreePos("sub~{comm~assoc:0_}:$_0.0.0"), AxSeqTreePos("{eval~eval:0_}~{comm~div~assoc~eval:0.0_$~$_0.0~_1}:1_0"), AxSeqTreePos("eval~eval~comm~div~assoc~eval:0_~1_0~0.0_$~$_0.0~_1"), AxSeqTreePos("sub~comm~assoc:$_0.0.0~0_")]
             #         },
             #         'domain': 'equations-ct'
             # }
@@ -139,6 +137,8 @@ class EnvironmentWithEvaluationProxy:
             # self.environment = env
             # end fixing absraction bug (to be removed later)
             ex_sols = self.agent.example_solutions
+            new_max_negatives = self.agent.max_negatives
+            stored_sols = self.agent.stored_solutions  # should be empty deque
             self.agent = previous_state.agent
             self.agent.q_function.to(device)
             if restart_count:
@@ -146,14 +146,15 @@ class EnvironmentWithEvaluationProxy:
                 self.agent.training_problems_solved = 0
                 self.agent.training_acc_moving_average = 0.0
                 self.agent.example_solutions = ex_sols
+                self.agent.stored_solutions = stored_sols
             else:
                 self.n_steps = previous_state.n_steps
                 self.n_new_problems = previous_state.n_new_problems
                 self.cumulative_reward = previous_state.cumulative_reward
-                self.stored_solutions = previous_state.stored_solutions
                 self.n_checkpoints = previous_state.n_checkpoints
                 self.subrun_index = previous_state.subrun_index
                 self.environment = previous_state.environment
+                self.agent.max_negatives = new_max_negatives
 
     def generate_new(self, domain=None, seed=None):
         self.n_new_problems += 1
@@ -188,7 +189,7 @@ class EnvironmentWithEvaluationProxy:
 
         self.environment.test()
         evaluator = SuccessRatePolicyEvaluator(self.environment, self.eval_config)
-        results = evaluator.evaluate(self.agent.get_q_function(), stored_solutions=self.stored_solutions)
+        results = evaluator.evaluate(self.agent.get_q_function())
         self.environment.train()
         results['n_steps'] = self.n_steps
         results['experiment_id'] = self.experiment_id
@@ -223,16 +224,20 @@ class EnvironmentWithEvaluationProxy:
         with open(self.results_path, 'wb') as f:
             pickle.dump(existing_results, f)
 
+        print("Saving Q-function...")
         torch.save(self.agent.q_function,
                    os.path.join(self.checkpoint_dir,
                                 f'{self.n_checkpoints}.pt' if self.subrun_index is None
                                 else f'{self.subrun_index}-{self.n_checkpoints}.pt'))
+        print("Saving Q-function completed.")
 
         self.n_checkpoints += 1
 
+        print("Saving checkpoint...")
         torch.save(self,
                    os.path.join(self.checkpoint_dir,
                                 'training-state.pt'))
+        print("Saving checkpoint completed.")
 
         if not final and (self.success_thres is not None and results['success_rate'] >= self.success_thres):
             raise EndOfLearning()
