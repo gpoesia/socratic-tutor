@@ -1017,7 +1017,7 @@ def learn_abstract(config, device, resume):
         abs_ax = eval_env.environment.abstractions
         if abs_ax is None:
             abs_ax = AXIOMS[domain]
-        compressor = compress.IAPHolistic(solutions, abs_ax, config['compression'])
+        compressor = compress.IAPHeuristic(solutions, abs_ax, config['compression'])
         num_iter, num_abs_sol = config['compression'].get('iter', 1), config['compression'].get('num_abs_sol')
         abs_sols, abs_ax = compressor.iter_abstract(num_iter, True, num_abs_sol)
         end_time = datetime.now()

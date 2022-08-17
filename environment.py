@@ -191,7 +191,7 @@ class RustEnvironment(Environment):
 
         # abstraction completed
         if prev_ax.is_term:
-            yield (state, cur_steps.display_compressed(), "ABSTRACTION")
+            yield (state, cur_steps.display_compressed(prev_ax.value), "ABSTRACTION")
 
         # continuing abstractions
         next_ax = prev_ax.children
