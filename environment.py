@@ -10,8 +10,8 @@ import torch
 import numpy as np
 
 import abs_util
-from steps import *
-from abstractions import *
+from steps import Step, Solution
+from abstractions import Rule, Axiom, ABS_TYPES
 
 try:
     import commoncore
@@ -148,28 +148,27 @@ class RustEnvironment(Environment):
             raise RuntimeError('Could not load commoncore.so')
         self.default_domain = default_domain
         self.next_seed = random_initial_seed()
-        self.abstractions = None
+        self.rules = None
         if abs_config is not None:
-            if abs_config.get('path') is not None:
+            self.AbsType = ABS_TYPES[abs_config['abs_type']]
+            if abs_config.get('abs_ax') is not None:
+                self.rules = abs_config['abs_ax']
+                if isinstance(self.rules[0], str):
+                    assert all(isinstance(rule_str, str) for rule_str in self.rules)
+                    self.rules = [Rule.from_string(rule_str, self.AbsType) for rule_str in self.rules]
+            elif abs_config.get('path') is not None:
                 if abs_config['path'][-4:] == '.pkl':
                     with open(abs_config['path'], 'rb') as f:
-                        self.abstractions = pickle.load(f)
-                    for i in range(len(self.abstractions)):
-                        if isinstance(self.abstractions[i], str):
-                            self.abstractions[i] = Abstraction.new(abs_config, self.abstractions[i])
+                        self.rules = pickle.load(f)
                 elif abs_config['path'][-5:] == '.json':
                     with open(abs_config['path'], 'r') as f:
-                        abstractions = json.load(f)['axioms']
-                    # self.abstractions = [(abs_str,) if '~' not in abs_str else Abstraction.new(abs_config, abs_str) for abs_str in abstractions]
-                    self.abstractions = [Abstraction.new(abs_config, abs_str) for abs_str in abstractions]
-            elif abs_config.get('abs_ax') is not None:
-                assert all(isinstance(ab, (Abstraction, str)) for ab in abs_config['abs_ax'])
-                self.abstractions = abs_config['abs_ax']
-                for i in range(len(self.abstractions)):
-                    if isinstance(self.abstractions[i], str):
-                        self.abstractions[i] = Abstraction.new(abs_config, self.abstractions[i])
-            self.abstract_trie = abs_util.make_abs_trie(self.abstractions)
-            self.abs_class = self.abstractions[0].__class__
+                        rules = json.load(f)['axioms']
+                    assert all(isinstance(rule_str, str) for rule_str in rules)
+                    self.rules = [Rule.from_string(rule_str, self.AbsType) for rule_str in rules]
+                else:
+                    raise Exception("Invalid file extension")
+            assert all(isinstance(rule, (Axiom, self.AbsType)) for rule in self.rules)
+            self.rule_trie = abs_util.make_rule_trie(self.rules)
 
     def generate_new(self, domain=None, seed=None):
         domain = domain or self.default_domain
@@ -185,7 +184,7 @@ class RustEnvironment(Environment):
         Generator generating all ways to apply axioms/abstractions to state
         """
         if prev_ax is None:
-            prev_ax = self.abstract_trie
+            prev_ax = self.rule_trie
         if cur_steps is None:
             cur_steps = Solution([state], [])
 
@@ -200,8 +199,8 @@ class RustEnvironment(Environment):
             if actions is not None:
                 next_steps = []
                 for next_state, formal_desc, _ in actions:
-                    next_step = Step(formal_desc)
-                    abs_elt = self.abs_class.get_abs_elt(next_step, cur_steps)
+                    next_step = Step.from_string(formal_desc, self.AbsType)
+                    abs_elt = self.AbsType.get_abs_elt(next_step, cur_steps)
                     if abs_elt in next_ax:
                         next_steps.append((next_state, next_step, abs_elt))
                 if next_steps:
@@ -230,7 +229,7 @@ class RustEnvironment(Environment):
 
         try:
             # list of [(next_state (as str), formal_desc, human_desc) for each possible next state] for each current state
-            if self.abstractions is None:
+            if self.rules is None:
                 next_states = commoncore.step(domain, [s.facts[-1] for s in states])
             else:
                 next_states = [self.apply_abs(s.facts[-1], domain) for s in states]

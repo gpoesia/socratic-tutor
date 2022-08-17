@@ -31,6 +31,7 @@ from q_function import QFunction, InverseLength, RandomQFunction, RubiksGreedyHe
 
 import steps
 import compress
+from abstractions import Axiom, ABS_TYPES
 
 import tqdm
 # import time
@@ -921,6 +922,7 @@ def learn_abstract(config, device, resume):
     agent_name = config['agent']['name']
     run_index = config.get('run_index', 0)
     assert 'compression' in config and 'iterations' in config
+    AbsType = ABS_TYPES[config['compression']['abs_type']]
 
     run_id = "{}-{}-{}{}".format(experiment_id, agent_name, domain, run_index)
 
@@ -947,8 +949,10 @@ def learn_abstract(config, device, resume):
                                                       agent, env, config['eval_environment'], subrun_index)
             print("MAX NEGATIVES:", eval_env.agent.max_negatives)
             subrun_index = eval_env.subrun_index
-            eval_env.max_steps = config['eval_environment']['max_steps_list'][subrun_index]
-            eval_env.success_thres = config['eval_environment']['success_thres_list'][subrun_index]
+            if 'max_steps_list' in config['eval_environment']:
+                eval_env.max_steps = config['eval_environment']['max_steps_list'][subrun_index]
+            if 'success_thres_list' in config['eval_environment']:
+                eval_env.success_thres = config['eval_environment']['success_thres_list'][subrun_index]
         except RuntimeError:
             # manually reconstruct ckpt if it's broken (e.g. b/c device ran out of memory)
             print("CHECKPOINT BROKEN... MANUAL RECONSTRUCTION OF CHECKPOINT")
@@ -1001,7 +1005,7 @@ def learn_abstract(config, device, resume):
             subrun_index = eval_env.subrun_index
         begin_time = datetime.now()
         print(f"ITERATION {subrun_index} TRAINING BEGINS AT {begin_time}")
-        print("AXIOMS AND ABSTRACTIONS:", eval_env.environment.abstractions)
+        print("AXIOMS AND ABSTRACTIONS:", eval_env.environment.rules)
         print(f"USING {0 if eval_env.agent.example_solutions is None else len(eval_env.agent.example_solutions)} EXAMPLE SOLUTIONS")
         eval_env.evaluate_agent()
         end_time = datetime.now()
@@ -1018,23 +1022,23 @@ def learn_abstract(config, device, resume):
             actions = []
             action = raw_sol.parent_action
             while action is not None:
-                actions.append(steps.Step(action.action, action.next_state.facts[-2:]))
+                actions.append(steps.Step.from_string(action.action, AbsType, action.next_state.facts[-2:]))
                 action = action.state.parent_action
-            solutions.append(steps.Solution(states, reversed(actions)))
+            solutions.append(steps.Solution(states, list(reversed(actions))))
         
         begin_time = datetime.now()
         print(f"ITERATION {subrun_index} ABSTRACTING BEGINS AT {begin_time}")
         print(f"USING {len(solutions)} SOLUTIONS")
-        abs_ax = eval_env.environment.abstractions
+        abs_ax = eval_env.environment.rules
         if abs_ax is None:
-            abs_ax = AXIOMS[domain]
+            abs_ax = [Axiom(ax_str, AbsType) for ax_str in AXIOMS[domain]]
         compressor = compress.IAPHeuristic(solutions, abs_ax, config['compression'])
         num_iter, num_abs_sol = config['compression'].get('iter', 1), config['compression'].get('num_abs_sol')
         abs_sols, abs_ax = compressor.iter_abstract(num_iter, True, num_abs_sol)
         end_time = datetime.now()
         print(f"ITERATION {subrun_index} ABSTRACTING COMPLETE AT {end_time}; TOTAL ABSTRACTING TIME {end_time-begin_time}")
 
-        config['abstractions'] = {'abs_ax': abs_ax}
+        config['abstractions'] = {'abs_ax': abs_ax, 'abs_type': config['compression']['abs_type']}
         config['agent']['example_solutions'] = abs_sols
         abs_ax_path = os.path.join(eval_env.checkpoint_dir, f'A{subrun_index}.pkl')
         with open(abs_ax_path, 'wb') as f:
