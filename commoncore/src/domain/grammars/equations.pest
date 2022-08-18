@@ -14,7 +14,7 @@ expr_l2 = _{ prod_or_div | expr_l3 }
 prod_or_div = { expr_l3 ~ prod_div_op ~ expr_l2 }
 prod_div_op = { "*" | "/" }
 
-varcoeff = { (number | neg_number | int_frac) ~ expr_l4 }
+varcoeff = { (number | neg_number | int_frac) ~ variable }
 
 expr_l3 = _{ !(varcoeff | int_frac) ~ (number | neg_number)
            | !(varcoeff) ~ int_frac

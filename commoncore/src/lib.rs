@@ -69,6 +69,25 @@ fn step(domain: String, states: Vec<String>) -> PyResult<Vec<Option<Vec<(String,
     })
 }
 
+/// Like step, but only apply the given axiom.
+#[pyfunction]
+fn apply(domain: String, states: Vec<String>, axiom: String) -> PyResult<Vec<Option<Vec<(String, String, String)>>>> {
+    DOMAINS.with(|domains| {
+        if let Some(d) = domains.borrow().get(domain.as_str()) {
+            let mut result = Vec::with_capacity(states.len());
+            for s in states.iter() {
+                result.push(d.apply(s.clone(), &axiom).map(|v| v.iter().map(|a| (a.next_state.clone(),
+                                                                                 a.formal_description.clone(),
+                                                                                 a.human_description.clone())).collect()));
+            }
+            Ok(result)
+        } else {
+            Err(PyValueError::new_err(format!("Invalid domain.")))
+        }
+    })
+}
+
+
 #[pyfunction]
 fn new_equations_domain_from_templates(domain: String, templates: String) -> PyResult<bool> {
     DOMAINS.with(|domains| {
@@ -82,6 +101,7 @@ fn new_equations_domain_from_templates(domain: String, templates: String) -> PyR
 fn commoncore(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generate, m)?)?;
     m.add_function(wrap_pyfunction!(step, m)?)?;
+    m.add_function(wrap_pyfunction!(apply, m)?)?;
     m.add_function(wrap_pyfunction!(new_equations_domain_from_templates, m)?)?;
 
     Ok(())
