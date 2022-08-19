@@ -179,7 +179,7 @@ class RustEnvironment(Environment):
         return State([problem], [''], 0.0)
 
 
-    def apply_abs_helper(self, state, domain, prev_ax=None, cur_steps=None):
+    def apply_abs_helper(self, state, domain, top_level=True, prev_ax=None, cur_steps=None):
         """
         Generator generating all ways to apply axioms/abstractions to state
         """
@@ -195,24 +195,40 @@ class RustEnvironment(Environment):
         # continuing abstractions
         next_ax = prev_ax.children
         if next_ax:
-            actions = commoncore.step(domain, [state])[0]
-            if actions is not None:
+            if top_level:
+                actions = commoncore.step(domain, [state])[0]
+            else:
+                actions = []
+                for abs_elt in next_ax:
+                    axiom = self.AbsType.get_ax_from_abs_elt(abs_elt)
+                    new_actions = commoncore.apply(domain, [state], axiom.name)[0]
+                    actions.append(new_actions)
+            if actions:
                 next_steps = []
-                for next_state, formal_desc, _ in actions:
-                    next_step = Step.from_string(formal_desc, self.AbsType)
-                    abs_elt = self.AbsType.get_abs_elt(next_step, cur_steps)
-                    if abs_elt in next_ax:
-                        next_steps.append((next_state, next_step, abs_elt))
+                if top_level:
+                    for next_state, formal_desc, _ in actions:
+                        next_step = Step.from_string(formal_desc, self.AbsType)
+                        try_abs_elt = self.AbsType.get_abs_elt(next_step, cur_steps)
+                        if try_abs_elt in next_ax:
+                            next_steps.append((next_state, next_step, try_abs_elt))
+                else:
+                    for action_list, abs_elt in zip(actions, next_ax):
+                        if action_list:
+                            for next_state, formal_desc, _ in action_list:
+                                next_step = Step.from_string(formal_desc, self.AbsType)
+                                try_abs_elt = self.AbsType.get_abs_elt(next_step, cur_steps)
+                                if try_abs_elt == abs_elt:
+                                    next_steps.append((next_state, next_step, try_abs_elt))
                 if next_steps:
                     for i in range(len(next_steps) - 1 + prev_ax.is_term):
                         next_state, next_step, abs_elt = next_steps[i]
                         new_steps = Solution(cur_steps.states + [next_state], cur_steps.actions + [next_step])
-                        yield from self.apply_abs_helper(next_state, domain, next_ax[abs_elt], new_steps)
+                        yield from self.apply_abs_helper(next_state, domain, False, next_ax[abs_elt], new_steps)
                     if not prev_ax.is_term:
                         next_state, next_step, abs_elt = next_steps[-1]
                         cur_steps.states.append(next_state)
                         cur_steps.actions.append(next_step)
-                        yield from self.apply_abs_helper(next_state, domain, next_ax[abs_elt], cur_steps)
+                        yield from self.apply_abs_helper(next_state, domain, False, next_ax[abs_elt], cur_steps)
 
 
     def apply_abs(self, state, domain):
