@@ -38,11 +38,13 @@ import tqdm
 
 SUCCESS_STATE = State(['success'], [], 1.0)
 AXIOMS = {
-             "equations-ct": ["refl", "comm", "assoc", "dist", "sub_comm", "eval", "add0", "sub0", "mul1", "div1",
-                              "div_self", "sub_self", "subsub", "mul0", "zero_div", "add", "sub", "mul", "div"],
-             "equations-hard": ["refl", "comm", "assoc", "dist", "sub_comm", "eval", "add0", "sub0", "mul1", "div1",
-                              "div_self", "sub_self", "subsub", "mul0", "zero_div", "add", "sub", "mul", "div"]
-         }
+    "equations-ct": ["refl", "comm", "assoc", "dist", "sub_comm", "eval", "add0", "sub0", "mul1", "div1",
+                     "div_self", "sub_self", "subsub", "mul0", "zero_div", "add", "sub", "mul", "div"],
+    "equations-hard": ["refl", "comm", "assoc", "dist", "sub_comm", "eval", "add0", "sub0", "mul1", "div1",
+                       "div_self", "sub_self", "subsub", "mul0", "zero_div", "add", "sub", "mul", "div"],
+    "fractions": ["mul", "combine", "mfrac", "simpl1", "scale", "cancel", "eval", "factorize"],
+    "fractions-hard": ["mul", "combine", "mfrac", "simpl1", "scale", "cancel", "eval", "factorize"]
+}
 
 class LearningAgent:
     '''Algorithm that guides learning via interaction with the enviroment.

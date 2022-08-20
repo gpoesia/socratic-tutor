@@ -432,7 +432,12 @@ if __name__ == '__main__':
 
     if opt.rust:
         assert COMMONCORE_AVAILABLE, "Could not find commoncore.so"
-        env: Environment = RustEnvironment(opt.domain, {"path": opt.abstract, "tree_idx": True})
+        if opt.abstract:
+            path, abs_type = opt.abstract.split(',')
+            abs_config = {"path": path, "abs_type": abs_type}
+        else:
+            abs_config = None
+        env: Environment = RustEnvironment(opt.domain, abs_config)
     else:
         assert opt.racket_url, 'Need a URL to use the Racket environment: either pass --racket-url or --rust'
         env = RacketEnvironment(opt.racket_url, opt.domain)
