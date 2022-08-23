@@ -14,13 +14,13 @@
         "beam_size": 15,
         "initial_depth": 15,
         "depth_step": 1,
-        "optimize_every": 10,
+        "optimize_every": 100,
         "n_gradient_steps": 256,
         "keep_optimizer": true,
         "step_every": 10000,
 	"epsilon": 0.13,
 	"bootstrap_from": "InverseLength",
-	"n_bootstrap_problems": 10,
+	"n_bootstrap_problems": 100,
 	"learning_rate": 5e-06,
         "q_function": {
             "type": "Bilinear",
@@ -45,6 +45,7 @@
     "compression": {
         "abs_type": "tree_rel_pos",
 	"compressor": "iap_dtrie",
+	"top": 8,
 	"num_abs_sol": 1000
     }
 }
