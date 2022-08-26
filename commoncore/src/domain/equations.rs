@@ -177,6 +177,31 @@ impl SizedTerm {
         }
     }
 
+    fn find_child_by_path(&self, path: &str, index: usize) -> Option<(&SizedTerm, usize)> {
+        if path.len() == 0 {
+            return Some((&self, index));
+        }
+
+        match self.t.borrow() {
+            Equality(t1, t2) => {
+                if path.starts_with(".0") {
+                    t1.find_child_by_path(&path[2..], index + 1)
+                } else {
+                    t2.find_child_by_path(&path[2..], index + 1 + t1.size)
+                }
+            },
+            BinaryOperation(_op, t1, t2) => {
+                if path.starts_with(".0") {
+                    t1.find_child_by_path(&path[2..], index + 1)
+                } else {
+                    t2.find_child_by_path(&path[2..], index + 1 + t1.size)
+                }
+            },
+            UnaryMinus(t) => t.find_child_by_path(&path[2..], index + 1),
+            _ => None
+        }
+    }
+
     fn new(t: Term, size: usize) -> SizedTerm {
         SizedTerm { t: Rc::new(t), size: size }
     }
@@ -234,59 +259,65 @@ impl FromStr for SizedTerm {
         fn parse_value(pair: Pair<Rule>) -> SizedTerm {
             let rule = pair.as_rule();
             let s = pair.as_str();
-            let sub : Vec<Pair<Rule>> = pair.into_inner().collect();
+            let mut sub = pair.into_inner();
 
             match rule {
                 Rule::equality => {
-                    let t1 = Rc::new(parse_value(sub[0].clone()));
-                    let t2 = Rc::new(parse_value(sub[1].clone()));
+
+                    let t1 = Rc::new(parse_value(sub.next().unwrap()));
+                    let t2 = Rc::new(parse_value(sub.next().unwrap()));
                     let s = 1 + t1.size + t2.size;
                     SizedTerm::new(Equality(t1, t2), s)
                 }
 
                 Rule::any_number => SizedTerm::new(AnyNumber, 1),
 
-                Rule::number | Rule::neg_number => {
+                Rule::number => {
                     SizedTerm::new(Number(Rational32::new(s.parse::<i32>().unwrap(), 1)), 1)
                 }
 
-                Rule::neg_var => {
-                    let st = Rc::new(SizedTerm::new(Variable(sub[0].as_str().to_string()), 1));
-                    SizedTerm::new(UnaryMinus(st), 2)
+                Rule::neg_expr => {
+                    sub.next();
+                    let st = Rc::new(parse_value(sub.next().unwrap()));
+                    let st_size = st.size;
+                    SizedTerm::new(UnaryMinus(st), 1 + st_size)
                 }
 
                 Rule::int_frac => {
                     SizedTerm::new(
-                        Number(Rational32::new(sub[0].as_str().parse::<i32>().unwrap(),
-                                               sub[1].as_str().parse::<i32>().unwrap())), 1)
+                        Number(Rational32::new(sub.next().unwrap().as_str().parse::<i32>().unwrap(),
+                                               sub.next().unwrap().as_str().parse::<i32>().unwrap())), 1)
                 }
 
                 Rule::variable => SizedTerm::new(Variable(s.to_string()), 1),
-                Rule::sum_or_sub | Rule::prod_or_div => {
-                    let t1 = Rc::new(parse_value(sub[0].clone()));
-                    let t2 = Rc::new(parse_value(sub[2].clone()));
-                    let s = t1.size + t2.size + 1;
-                    let op = Operator::from_str(sub[1].as_str()).unwrap();
-                    SizedTerm::new(BinaryOperation(op, t1, t2), s)
+                Rule::paren_op => {
+                    let t1 = parse_value(sub.next().unwrap().clone());
+                    if let Some(op) = sub.next() {
+                        let op = Operator::from_str(op.as_str()).unwrap();
+                        let t2 = Rc::new(parse_value(sub.next().unwrap().clone()));
+                        let s = t1.size + t2.size + 1;
+                        SizedTerm::new(BinaryOperation(op, Rc::new(t1), t2), s)
+                    } else {
+                        t1
+                    }
                 }
 
                 Rule::varcoeff => {
-                    let t1 = Rc::new(parse_value(sub[0].clone()));
-                    let t2 = Rc::new(parse_value(sub[1].clone()));
-                    let s = t1.size + t2.size + 1;
-                    SizedTerm::new(BinaryOperation(Times, t1, t2), s)
+                    let first = parse_value(sub.next().unwrap());
+                    if let Some(second) = sub.next() {
+                        let var = Rc::new(parse_value(second));
+                        let first_size = first.size;
+                        let var_size = var.size;
+                        SizedTerm::new(BinaryOperation(Times, Rc::new(first), var),
+                                       first_size + var_size + 1)
+                    } else {
+                        first
+                    }
                 }
 
                 Rule::term
-                | Rule::predicate
                 | Rule::expr
-                | Rule::expr_l1
-                | Rule::expr_l2
-                | Rule::expr_l3
-                | Rule::expr_l4
-                | Rule::sub_sum_op
-                | Rule::prod_div_op
-                | Rule::paren_expr
+                | Rule::op
                 | Rule::WHITESPACE
                 | Rule::EOI => unreachable!(),
             }
@@ -388,7 +419,7 @@ impl super::Domain for Equations {
         self.generate_eq_term(seed).to_string()
     }
 
-    fn apply(&self, state: State, axiom: &str) -> Option<Vec<Action>> {
+    fn apply(&self, state: State, axiom: &str, path: &Option<String>) -> Option<Vec<Action>> {
         let t = SizedTerm::from_str(&state).unwrap();
         if t.is_solved() {
             return None;
@@ -421,7 +452,7 @@ impl super::Domain for Equations {
                     }
                 }
             } else {
-                let local_rewrite_tactic : Option<fn(&SizedTerm, &String) ->
+                let local_rewrite_tactic : Option<fn(&SizedTerm, &str) ->
                                                   Option<(SizedTerm, String, String)>> = match axiom {
                     "comm" | "sub_comm" => Some(a_commutativity),
                     "assoc" => Some(a_associativity),
@@ -433,10 +464,19 @@ impl super::Domain for Equations {
                 };
 
                 if let Some(local_rewrite_tactic) = local_rewrite_tactic {
-                    for (i, st) in children.iter().enumerate() {
-                        if let Some((nt, fd, hd)) = local_rewrite_tactic(st, &indexes[i]) {
-                            let next_state = rct.replace_at_index(i, &nt);
-                            actions.push((next_state, fd, hd));
+                    if let Some(path) = path {
+                        if let Some((st, idx)) = rct.find_child_by_path(path, 0) {
+                             if let Some((nt, fd, hd)) = local_rewrite_tactic(st, path) {
+                                let next_state = rct.replace_at_index(idx, &nt);
+                                actions.push((next_state, fd, hd));
+                            }
+                        }
+                    } else {
+                        for (i, st) in children.iter().enumerate() {
+                            if let Some((nt, fd, hd)) = local_rewrite_tactic(st, &indexes[i]) {
+                                let next_state = rct.replace_at_index(i, &nt);
+                                actions.push((next_state, fd, hd));
+                            }
                         }
                     }
                 }
@@ -543,7 +583,7 @@ fn a_op_both_sides(rct: Rc<SizedTerm>, op: Operator, st: &SizedTerm) -> (SizedTe
     unreachable!()
 }
 
-fn a_commutativity(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, String)> {
+fn a_commutativity(t: &SizedTerm, i: &str) -> Option<(SizedTerm, String, String)> {
     if let BinaryOperation(op, t1, t2) = t.t.borrow() {
         if op.is_commutative() {
             return Some((SizedTerm::new(BinaryOperation(*op, Rc::clone(t2), Rc::clone(t1)), t.size),
@@ -580,7 +620,7 @@ fn a_commutativity(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, Stri
     None
 }
 
-fn a_associativity(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, String)> {
+fn a_associativity(t: &SizedTerm, i: &str) -> Option<(SizedTerm, String, String)> {
     if let BinaryOperation(op1, t1, t2) = t.t.borrow() {
         // t1 op1 (t3 op2 t4) => (t1 op1 t3) op2 t4
         if let BinaryOperation(op2, t3, t4) = t2.t.borrow() {
@@ -612,7 +652,7 @@ fn a_associativity(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, Stri
     None
 }
 
-fn a_distributivity(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, String)> {
+fn a_distributivity(t: &SizedTerm, i: &str) -> Option<(SizedTerm, String, String)> {
     if let BinaryOperation(op1, t1, t2) = t.t.borrow() {
         if let BinaryOperation(op2, t3, t4) = t2.t.borrow() {
             // Forward direction: 5*(x + 2) => 5x + 5*2
@@ -670,7 +710,7 @@ fn a_distributivity(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, Str
     None
 }
 
-fn a_eval(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, String)> {
+fn a_eval(t: &SizedTerm, i: &str) -> Option<(SizedTerm, String, String)> {
     if let BinaryOperation(op, t1, t2) = t.t.borrow() {
         if let (Number(n1), Number(n2)) = (t1.t.borrow(), t2.t.borrow()) {
             if *op != Div || !n2.is_integer() || n2.to_integer() != 0 {
@@ -683,7 +723,7 @@ fn a_eval(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, String)> {
     None
 }
 
-fn a_identity_ops(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, String)> {
+fn a_identity_ops(t: &SizedTerm, i: &str) -> Option<(SizedTerm, String, String)> {
     if let BinaryOperation(Add, t1, t2) = t.t.borrow() {
         if let Number(n2) = t2.t.borrow() {
             if *n2.numer() == 0 {
@@ -739,7 +779,7 @@ fn a_identity_ops(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, Strin
 }
 
 
-fn a_cancel_ops(t: &SizedTerm, i: &String) -> Option<(SizedTerm, String, String)> {
+fn a_cancel_ops(t: &SizedTerm, i: &str) -> Option<(SizedTerm, String, String)> {
     if let BinaryOperation(Div, t1, t2) = t.t.borrow() {
         if t1 == t2 {
             return Some((SizedTerm::new(Number(Rational32::from_integer(1)), 1),
@@ -826,8 +866,8 @@ mod tests {
 
     #[test]
     fn test_generate() {
-        for i in 1..1000 {
-            let eq = super::Equations::new_from_cognitive_tutor();
+        let eq = super::Equations::new_from_cognitive_tutor();
+        for i in 1..100000 {
             println!("{}", eq.generate(i));
         }
     }
@@ -835,7 +875,7 @@ mod tests {
     #[test]
     fn test_step() {
         let eq = super::Equations::new_from_cognitive_tutor();
-        for s in &["x + 3 = (1 - 2) - 3"] {
+        for s in &["(x + 3) = ((1 - 2) - 3)"] {
             println!("Stepping {}", s);
             eq.step(s.to_string());
         }
