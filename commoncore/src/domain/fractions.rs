@@ -400,10 +400,55 @@ impl super::Domain for Fractions {
                                                             formal_description: fd,
                                                             human_description: hd }).collect())
     }
+
+    fn apply(&self, state: State, axiom: &str, _path: &Option<String>) -> Option<Vec<Action>> {
+        let t = SizedTerm::from_str(&state).unwrap();
+
+        if t.is_solved() {
+            return None;
+        }
+
+        if t.size > MAX_SIZE {
+            return Some(Vec::new());
+        }
+
+        let mut actions = Vec::new();
+
+        let mut children = Vec::new();
+        let mut indexes = Vec::new();
+        let rct = Rc::new(t);
+        rct.collect_children(&mut children, &String::new(), &mut indexes);
+
+        let local_rewrite_tactic : Option<fn(&SizedTerm, &str, &Fractions) ->
+                                          Vec<(SizedTerm, String, String)>> = match axiom {
+                    "factorize" => Some(a_factorize),
+                    "eval" => Some(a_eval),
+                    "cancel" => Some(a_cancel),
+                    "scale" => Some(a_mul_frac),
+                    "simpl1" => Some(a_simpl_div_1),
+                    "mfrac" => Some(a_make_frac),
+                    "mul" | "combine" => Some(a_merge_fracs),
+                    _ => None,
+                };
+
+
+        if let Some(local_rewrite_tactic) = local_rewrite_tactic {
+            for (i, st) in children.iter().enumerate() {
+                for (nt, fd, hd) in local_rewrite_tactic(st, &indexes[i], &self) {
+                    let next_state = rct.replace_at_index(i, &nt);
+                    actions.push((next_state, fd, hd));
+                }
+            }
+        }
+
+        Some(actions.into_iter().map(|(t, fd, hd)| Action { next_state: t.to_string(),
+                                                            formal_description: fd,
+                                                            human_description: hd }).collect())
+    }
 }
 
 // Tactics
-fn a_factorize(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
+fn a_factorize(st: &SizedTerm, index: &str, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
     if let Number(n) = st.t.borrow() {
         let mut v = Vec::new();
 
@@ -428,7 +473,7 @@ fn a_factorize(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm
     vec![]
 }
 
-fn a_eval(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
+fn a_eval(st: &SizedTerm, index: &str, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
     if let NumberOperation(op, a, b) = st.t.borrow() {
         if let (Number(n1), Number(n2)) = (a.t.borrow(), b.t.borrow()) {
             return vec![(SizedTerm::new(Number(op.evaluate(n1, n2)), 1),
@@ -439,7 +484,7 @@ fn a_eval(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm, Str
     vec![]
 }
 
-fn a_cancel(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
+fn a_cancel(st: &SizedTerm, index: &str, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
     let mut v: Vec<(SizedTerm, String, String)>  = Vec::new();
 
     if let Fraction(num, den) = st.t.borrow() {
@@ -530,7 +575,7 @@ fn a_cancel(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm, S
     v
 }
 
-fn a_mul_frac(st: &SizedTerm, index: &String, f: &Fractions) -> Vec<(SizedTerm, String, String)> {
+fn a_mul_frac(st: &SizedTerm, index: &str, f: &Fractions) -> Vec<(SizedTerm, String, String)> {
     let mut v: Vec<(SizedTerm, String, String)>  = Vec::new();
 
     if let Fraction(num, den) = st.t.borrow() {
@@ -554,7 +599,7 @@ fn a_mul_frac(st: &SizedTerm, index: &String, f: &Fractions) -> Vec<(SizedTerm, 
     v
 }
 
-fn a_simpl_div_1(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
+fn a_simpl_div_1(st: &SizedTerm, index: &str, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
     if let Fraction(num, den) = st.t.borrow() {
         if let Number(1) = den.t.borrow() {
             return vec![(SizedTerm::clone(num),
@@ -565,7 +610,7 @@ fn a_simpl_div_1(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTe
     vec![]
 }
 
-fn a_make_frac(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
+fn a_make_frac(st: &SizedTerm, index: &str, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
     let mut v = Vec::new();
     if let FractionOperation(op, a, b) = st.t.borrow() {
         if let Number(n) = a.t.borrow() {
@@ -595,7 +640,7 @@ fn a_make_frac(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm
     v
 }
 
-fn a_merge_fracs(st: &SizedTerm, index: &String, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
+fn a_merge_fracs(st: &SizedTerm, index: &str, _f: &Fractions) -> Vec<(SizedTerm, String, String)> {
     if let FractionOperation(op, a, b) = st.t.borrow() {
         if let (Fraction(a_num, a_den), Fraction(b_num, b_den)) = (a.t.borrow(), b.t.borrow()) {
             if *op == Times {
