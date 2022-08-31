@@ -25,3 +25,10 @@ def register(superclass):
 def now():
     'The current time as string, to be printed in log messages.'
     return datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+
+
+def batched(l: list, batch_size: int):
+    i = 0
+    while i < len(l):
+        yield l[i:i+batch_size]
+        i += batch_size

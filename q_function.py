@@ -1,7 +1,7 @@
 import math
 
 from environment import Environment, State, Action
-from util import register
+from util import register, batched
 from encoding import CharEncoding
 
 import torch
@@ -262,19 +262,24 @@ class Bilinear(QFunction):
         return q_values.sum(dim=1)
 
     def embed_states(self, states):
-        N, H = len(states), self.hidden_dim
         states = [s.facts[-1] for s in states]
-        state_seq, _ = self.vocab.embed_batch(states, self.device)
-        state_seq = state_seq.transpose(0, 1)
-        _, (state_hn, state_cn) = self.encoder(state_seq)
-        state_embedding = (state_hn
-                           .view(self.lstm_layers, 2, N, self.hidden_dim)[-1]
-                           .permute((1, 2, 0)).reshape(N, 2*H))
-        if hasattr(self, 'mlp'):
-            state_embedding = self.emb_mlp1(state_embedding).relu()
-            state_embedding = self.emb_mlp2(state_embedding)
+        embeddings = []
 
-        return state_embedding
+        for b in batched(states, 128):
+            N, H = len(b), self.hidden_dim
+            state_seq, _ = self.vocab.embed_batch(b, self.device)
+            state_seq = state_seq.transpose(0, 1)
+            _, (state_hn, state_cn) = self.encoder(state_seq)
+            state_embedding = (state_hn
+                               .view(self.lstm_layers, 2, N, self.hidden_dim)[-1]
+                               .permute((1, 2, 0)).reshape(N, 2*H))
+            if hasattr(self, 'mlp'):
+                state_embedding = self.emb_mlp1(state_embedding).relu()
+                state_embedding = self.emb_mlp2(state_embedding)
+
+            embeddings.append(state_embedding)
+
+        return torch.cat(embeddings, dim=0)
 
     def name(self):
         return 'Bilinear'
