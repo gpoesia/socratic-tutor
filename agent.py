@@ -909,7 +909,6 @@ def run_agent_experiment(config, device, resume):
                resume=resume)
 
     env = Environment.from_config(config)
-    print("AXIOMS AND ABSTRACTIONS:", env.abstractions)
     q_fn = QFunction.new(config['agent']['q_function'], device)
     agent = LearningAgent.new(q_fn, config['agent'])
 
@@ -1081,7 +1080,7 @@ def run_batch_experiment(config, range_to_run):
 
                 for run_index in range(n_runs):
                     if agent_index < range_to_run[0] or agent_index >= range_to_run[1]:
-                        print(f'Run {run_index} not in range - skipping')
+                        print(f'Run {agent_index} not in range - skipping')
                         agent_index += 1
                         continue
 
@@ -1107,10 +1106,19 @@ def run_batch_experiment(config, range_to_run):
                         'wandb_project': config.get('wandb_project')
                     }
 
+                    has_abstractions = agent.get('compression') is not None
+
+                    if has_abstractions:
+                        run_config['compression'] = agent['compression']
+                        run_config['iterations'] = agent['iterations']
+                        command = 'learn-abstract'
+                    else:
+                        command = 'learn'
+
                     print('Running agent with config', json.dumps(run_config))
 
                     agent_process = subprocess.Popen(
-                        ['python3', 'agent.py', '--learn', '--config', json.dumps(run_config)]
+                        ['python3', 'agent.py', f'--{command}', '--config', json.dumps(run_config)]
                         + (['--gpu', str(gpus[agent_index % len(gpus)])] if gpus else []),
                         stderr=subprocess.DEVNULL)
                     run_processes.append(agent_process)

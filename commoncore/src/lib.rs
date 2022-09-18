@@ -71,14 +71,15 @@ fn step(domain: String, states: Vec<String>) -> PyResult<Vec<Option<Vec<(String,
 
 /// Like step, but only apply the given axiom.
 #[pyfunction]
-fn apply(domain: String, states: Vec<String>, axiom: String) -> PyResult<Vec<Option<Vec<(String, String, String)>>>> {
+fn apply(domain: String, states: Vec<String>, axiom: String, path: Option<String>) -> PyResult<Vec<Option<Vec<(String, String, String)>>>> {
     DOMAINS.with(|domains| {
         if let Some(d) = domains.borrow().get(domain.as_str()) {
             let mut result = Vec::with_capacity(states.len());
             for s in states.iter() {
-                result.push(d.apply(s.clone(), &axiom).map(|v| v.iter().map(|a| (a.next_state.clone(),
-                                                                                 a.formal_description.clone(),
-                                                                                 a.human_description.clone())).collect()));
+                result.push(d.apply(s.clone(), &axiom, &path)
+                            .map(|v| v.iter().map(|a| (a.next_state.clone(),
+                                                       a.formal_description.clone(),
+                                                       a.human_description.clone())).collect()));
             }
             Ok(result)
         } else {

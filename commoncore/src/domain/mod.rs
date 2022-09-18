@@ -27,7 +27,7 @@ pub trait Domain {
     fn step(&self, state: State) -> Option<Vec<Action>>;
 
     // Applies a single axiom to a state, returning all successors that axiom can lead to.
-    fn apply(&self, _state: State, _axiom: &str) -> Option<Vec<Action>> {
+    fn apply(&self, _state: State, _axiom: &str, _path: &Option<String>) -> Option<Vec<Action>> {
         panic!("Not implemented for this domain.")
     }
 }
