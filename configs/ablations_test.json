@@ -1,0 +1,125 @@
+{
+    "experiment_id": "ablate-equations-test",
+
+    "domains": ["equations-ct"],
+    "n_runs": 3,
+
+    "environment_backend": "Rust",
+    "wandb_project": "ablations-test",
+
+    "gpus": [0,1,2,3,4,5,6,7,8],
+
+    "agents": [
+        {
+            "type": "NCE",
+            "name": "ConPoLe+FixAbs",
+            "n_future_states": 1,
+            "replay_buffer_size": 10000,
+            "max_depth": 30,
+            "beam_size": 10,
+            "initial_depth": 10,
+            "depth_step": 1,
+            "optimize_every": 16,
+            "n_gradient_steps": 256,
+            "keep_optimizer": true,
+            "step_every": 10000,
+            "epsilon": 0.05,
+            "bootstrap_from": "InverseLength",
+            "n_bootstrap_problems": 100,
+            "learning_rate": 5e-06,
+            "q_function": {
+                "type": "Bilinear",
+                "char_emb_dim": 64,
+                "hidden_dim": 256,
+                "mlp": true,
+                "lstm_layers": 2
+            },
+            "num_store_sol": 10000,
+            "compression": {
+                "abs_type": "tree_rel_pos",
+                "compressor": "iap_logn",
+		"top": 8,
+                "num_abs_sol": 1000
+            },
+            "iterations": 4
+        },
+        {
+            "type": "NCE",
+            "name": "ConPoLe+RandAbs",
+            "n_future_states": 1,
+            "replay_buffer_size": 10000,
+            "max_depth": 30,
+            "beam_size": 10,
+            "initial_depth": 10,
+            "depth_step": 1,
+            "optimize_every": 16,
+            "n_gradient_steps": 256,
+            "keep_optimizer": true,
+            "step_every": 10000,
+            "epsilon": 0.05,
+            "bootstrap_from": "InverseLength",
+            "n_bootstrap_problems": 100,
+            "learning_rate": 5e-06,
+            "q_function": {
+                "type": "Bilinear",
+                "char_emb_dim": 64,
+                "hidden_dim": 256,
+                "mlp": true,
+                "lstm_layers": 2
+            },
+            "num_store_sol": 10000,
+            "compression": {
+                "abs_type": "tree_rel_pos",
+                "compressor": "iap_rand",
+		"thres": 0.01,
+                "num_abs_sol": 1000
+            },
+            "iterations": 4
+        },
+        {
+            "type": "NCE",
+            "name": "ConPoLe+PairAbs",
+            "n_future_states": 1,
+            "replay_buffer_size": 10000,
+            "max_depth": 30,
+            "beam_size": 15,
+            "initial_depth": 15,
+            "depth_step": 1,
+            "optimize_every": 10,
+            "n_gradient_steps": 256,
+            "keep_optimizer": true,
+            "step_every": 10000,
+            "epsilon": 0.13,
+            "bootstrap_from": "InverseLength",
+            "n_bootstrap_problems": 100,
+            "learning_rate": 5e-06,
+            "q_function": {
+                "type": "Bilinear",
+                "char_emb_dim": 64,
+                "hidden_dim": 256,
+                "mlp": true,
+                "lstm_layers": 2
+            },
+            "num_store_sol": 10000,
+            "compression": {
+                "abs_type": "tree_rel_pos",
+                "compressor": "iap_logn",
+		"max_abs_len": 2,
+                "num_abs_sol": 1000
+            },
+            "iterations": 4
+        }
+    ],
+    "eval_environment": {
+        "evaluate_every": 100000,
+        "eval_config": {
+            "max_steps": 30,
+            "n_problems": 200,
+            "save_sols": true
+        },
+        "output_root": "output",
+        "max_steps_list": [2500000, 2500000, 2500000, 2500000],
+        "max_steps": 10000000,
+        "print_every": 10000
+    }
+}
