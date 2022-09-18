@@ -9,6 +9,7 @@ pip install -r requirements.txt
 Make sure to also clone the `mathematical-abstractions` submodule while cloning this repository:
 ```
 git clone -b abstract git@github.com:uranium11010/socratic-tutor
+cd mathematical-abstractions/
 git submodule init mathematical-abstractions/
 git submodule update mathematical-abstractions/
 ```
