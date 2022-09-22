@@ -26,6 +26,7 @@ thread_local!{
         map.insert(String::from("equations-ct"), Arc::new(Equations::new_from_cognitive_tutor()));
         map.insert(String::from("equations-hard"), Arc::new(Equations::new_from_hard_set()));
         map.insert(String::from("fractions"), Arc::new(Fractions::new(4, 4)));
+        map.insert(String::from("fractions-hard"), Arc::new(Fractions::new(5, 6)));
         map.insert(String::from("ternary-addition"), Arc::new(TernaryAddition::new(15)));
         map.insert(String::from("ternary-addition-small"), Arc::new(TernaryAddition::new(8)));
         map.insert(String::from("multiplication"), Arc::new(Multiplication {}));
