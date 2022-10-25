@@ -17,8 +17,18 @@ import wandb
 from tqdm import tqdm
 import numpy as np
 
-# from abstractions import AxSeqTreeRelPos
-import abs_util
+from steps import Solution, Step
+
+
+def _state_to_sol(state):
+    states = state.facts
+    actions = []
+    action = state.parent_action
+    while action is not None:
+        actions.append(Step.from_string(action.action))
+        action = action.state.parent_action
+    actions = actions[::-1]
+    return Solution(states, actions)
 
 
 class SuccessRatePolicyEvaluator:
@@ -49,7 +59,7 @@ class SuccessRatePolicyEvaluator:
                 if stored_solutions is not None:
                     stored_solutions.append(success_sol)
                 if self.save_sols:
-                    saved_sols.append(success_sol)
+                    saved_sols.append(_state_to_sol(success_sol))  # save as Solution object
             else:
                 failures.append((i, problem))
                 if self.save_sols:
