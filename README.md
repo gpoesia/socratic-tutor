@@ -193,7 +193,7 @@ Here's an example config file that fine-tunes a pretrained model with 1000 abstr
 }
 ```
 
-The folder [config/](config) contains several configuration files. They all use the `--learn` option. In other words, to run a training session with, for example, `abs_config.json`, run the following command:
+The folder [configs/](configs) contains several configuration files. They all use the `--learn` option. In other words, to run a training session with, for example, `abs_config.json`, run the following command:
 ```
 python agent.py --learn --config configs/abs_config.json --gpu 0
 ```
