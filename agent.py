@@ -30,7 +30,7 @@ from evaluation import EnvironmentWithEvaluationProxy, evaluate_policy, evaluate
 from q_function import QFunction, InverseLength, RandomQFunction, RubiksGreedyHeuristic
 
 import steps
-import compress
+from compress import COMPRESSORS
 from abstractions import Axiom, ABS_TYPES
 
 import tqdm
@@ -1033,7 +1033,7 @@ def learn_abstract(config, device, resume):
         abs_ax = eval_env.environment.rules
         if abs_ax is None:
             abs_ax = [Axiom(ax_str, AbsType) for ax_str in AXIOMS[domain]]
-        compressor = compress.IAPHeuristic(solutions, abs_ax, config['compression'])
+        compressor = COMPRESSORS[config['compression']['compressor']](solutions, abs_ax, config['compression'])
         num_iter, num_abs_sol = config['compression'].get('iter', 1), config['compression'].get('num_abs_sol')
         abs_sols, abs_ax = compressor.iter_abstract(num_iter, True, num_abs_sol)
         end_time = datetime.now()

@@ -9,6 +9,7 @@ pip install -r requirements.txt
 Make sure to also clone the `mathematical-abstractions` submodule while cloning this repository:
 ```
 git clone -b abstract git@github.com:uranium11010/socratic-tutor
+cd socratic-tutor/
 git submodule init mathematical-abstractions/
 git submodule update mathematical-abstractions/
 ```
@@ -192,7 +193,7 @@ Here's an example config file that fine-tunes a pretrained model with 1000 abstr
 }
 ```
 
-The folder [config/](config) contains several configuration files. They all use the `--learn` option. In other words, to run a training session with, for example, `abs_config.json`, run the following command:
+The folder [configs/](configs) contains several configuration files. They all use the `--learn` option. In other words, to run a training session with, for example, `abs_config.json`, run the following command:
 ```
 python agent.py --learn --config configs/abs_config.json --gpu 0
 ```
